@@ -10,6 +10,14 @@ Builds are installed with `~/.local/share/light/tools/install-NN.sh`. Lane brief
 
 ## 2026-11-06
 
+### Search moves into the title row; one filter icon (build 101)
+- **Asked:** "when scrolling down, remove the exercises label and move the search bar in" and "always just have the icons". The owner picked one filter icon, on Exercises, the add-exercise picker and History, and Apple's own search placement over a custom row.
+- **Decided:**
+  - Exercises and History use iOS's `.toolbarPrincipal` search placement (iOS 26+, via `titleRowSearchable`). Search sits under the title at the top and takes over the title row once scrolled. While it's up there, iOS hides the filter and + buttons; scrolling up or tapping the status bar brings them back.
+  - The two labeled filter buttons became one filter icon next to + (Muscle, Equipment, and Clear Filters when a filter is on). When a filter is on, the icon fills blue, removable chips ("Chest ×") show at the top of the list, and the search box names the filter ("Search Chest"), so a filter is visible even while scrolled.
+  - **My call:** the add-exercise picker keeps its pinned search under the title. In that sheet, iOS also hid Cancel and Add once search moved up. The picker still gets the filter icon (in its bottom bar), the chips and the prompt.
+- **Roll back:** `git revert` this entry's commit. It touches only ExerciseMuscleGroupsView, AddExercisesSheet, HistoryView, SwiftUISupport and DESIGN_SYSTEM.
+
 ### Previous Sessions rows use the exercise page's set chips (build 100)
 - **Found in the overnight sweep at Extra Large text:** a past workout's exercise page listed each earlier session as one comma-joined line ("115 lb × 4, 120 lb × 5, …") limited to two lines. It broke mid-set ("× 8" alone on a line) and cut off long sessions.
 - **Decided:** those rows now show the same wrapping set chips ("115×4") as the exercise page's History, through one shared `ExerciseSetChip`. Record sets get the record tint and warm-ups the warm-up tint, as there. The date, the session total and the note line are unchanged. VoiceOver reads each row as one sentence.

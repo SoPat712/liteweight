@@ -718,8 +718,14 @@ as Workout, Repeat with Blank Sets and View Details. Save as Workout opens an is
 editor; Cancel preserves the source and Create saves a new copy.
 
 ### 15.5 Exercises (`Iron/UI/Exercises/*`)
-- **Library** (`ExerciseMuscleGroupsView`): `.searchable`, two independent filter menus (muscle
-  and equipment), and a **recency-first** order. Every exercise you have done, imported Hevy
+- **Library** (`ExerciseMuscleGroupsView`): search sits under the title and moves into the
+  bar's title row once scrolled on iOS 26+ (`titleRowSearchable`, also used by History);
+  earlier systems keep the pinned drawer. iOS hides the trailing bar buttons while search is
+  up there. The add-exercise picker keeps the pinned drawer, because there iOS would also
+  hide Cancel and Add. One filter icon next to + holds Muscle and Equipment pickers, plus
+  Clear Filters when a filter is on; in the picker the icon sits in the bottom bar. Active
+  filters show as removable chips at the top of the list and in the search prompt. The
+  library uses a **recency-first** order. Every exercise you have done, imported Hevy
   history included, comes first, newest first; the rest keep their existing order. Search
   results follow the same rule. This is implemented by `ExerciseStore.orderedByRecency` and
   `lastPerformedDates`. Row names use `.headline`; muscle and equipment labels are neutral

@@ -110,7 +110,7 @@ struct HistoryView: View {
         .modifier(HistoryScrollClearance())
         .navigationTitle("History")
         .modifier(HistoryTitleDisplayMode())
-        .searchable(text: $searchText, placement: .navigationBarDrawer(displayMode: .always), prompt: "Search Workouts")
+        .titleRowSearchable(text: $searchText, prompt: "Search Workouts")
         .task { historyStore.observe(in: managedObjectContext) }
     }
 

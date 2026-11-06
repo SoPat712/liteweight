@@ -323,6 +323,21 @@ struct AddExercisesSheet: View {
         }
     }
 
+    @ViewBuilder
+    private var activeFilterSection: some View {
+        let section = Section {
+            ExerciseActiveFilterChips(muscleGroup: $selectedMuscleGroup, equipment: $selectedEquipment)
+                .listRowBackground(Color.clear)
+                .listRowSeparator(.hidden)
+        }
+
+        if #available(iOS 17, *) {
+            section.listSectionSpacing(0)
+        } else {
+            section
+        }
+    }
+
     var body: some View {
         let listing = catalogSearch.listing(for: search, showingAll: showingAllExercises)
         let matches = listing.exercises
@@ -330,6 +345,9 @@ struct AddExercisesSheet: View {
             && !listing.recent.isEmpty
         ExercisePickerNavigation {
             List {
+                if selectedMuscleGroup != nil || selectedEquipment != nil {
+                    activeFilterSection
+                }
                 if catalogSearch.catalog == nil {
                     EmptyView()
                 } else if matches.isEmpty && catalogSearch.isSearching(search) {
@@ -365,7 +383,10 @@ struct AddExercisesSheet: View {
             .modifier(ExercisePickerListMargins())
             .navigationTitle(title)
             .navigationBarTitleDisplayMode(.inline)
-            .searchable(text: $search, placement: .navigationBarDrawer(displayMode: .always), prompt: "Search exercises")
+            // Pinned drawer, not the title row: in this sheet iOS hides Cancel and Add once search moves up.
+            .searchable(text: $search, placement: .navigationBarDrawer(displayMode: .always),
+                        prompt: Text(ExerciseFilterText.searchPrompt(muscleGroup: selectedMuscleGroup,
+                                                                     equipment: selectedEquipment)))
             .keepsToolbarWhileSearching()
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
@@ -377,33 +398,11 @@ struct AddExercisesSheet: View {
                         .disabled(exerciseSelectorSelection.isEmpty)
                 }
                 ToolbarItemGroup(placement: .bottomBar) {
-                    Menu {
-                        Picker("Muscle", selection: $selectedMuscleGroup) {
-                            Text("All Muscles").tag(String?.none)
-                            ForEach(catalogSearch.catalog?.muscleGroups ?? [], id: \.self) { group in
-                                Text(group.capitalized).tag(String?.some(group))
-                            }
-                        }
-                    } label: {
-                        Image(systemName: "figure.arms.open")
-                            .foregroundStyle(selectedMuscleGroup == nil ? IronTheme.primaryText : IronTheme.accent)
-                    }
-                    .accessibilityLabel("Filter by muscle group")
-                    .accessibilityValue(selectedMuscleGroup?.capitalized ?? "All muscles")
-
-                    Menu {
-                        Picker("Equipment", selection: $selectedEquipment) {
-                            Text("All Equipment").tag(String?.none)
-                            ForEach(catalogSearch.catalog?.equipment ?? [], id: \.self) { item in
-                                Text(item.equipmentTitle).tag(String?.some(item))
-                            }
-                        }
-                    } label: {
-                        Image(systemName: "dumbbell")
-                            .foregroundStyle(selectedEquipment == nil ? IronTheme.primaryText : IronTheme.accent)
-                    }
-                    .accessibilityLabel("Filter by equipment")
-                    .accessibilityValue(selectedEquipment?.equipmentTitle ?? "All equipment")
+                    ExerciseFilterMenu(
+                        muscleGroup: $selectedMuscleGroup,
+                        equipment: $selectedEquipment,
+                        muscleGroups: catalogSearch.catalog?.muscleGroups ?? [],
+                        equipmentOptions: catalogSearch.catalog?.equipment ?? [])
 
                     Spacer()
 

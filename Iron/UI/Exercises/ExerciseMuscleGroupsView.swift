@@ -11,8 +11,116 @@ import UIKit
 import Combine
 import WorkoutDataKit
 
-struct ExerciseMuscleGroupsView : View {
+enum ExerciseFilterText {
+    static func names(muscleGroup: String?, equipment: String?) -> [String] {
+        [muscleGroup?.capitalized, equipment?.equipmentTitle].compactMap { $0 }
+    }
+
+    static func searchPrompt(muscleGroup: String?, equipment: String?) -> String {
+        let names = names(muscleGroup: muscleGroup, equipment: equipment)
+        return names.isEmpty ? "Search exercises" : "Search " + names.joined(separator: " · ")
+    }
+}
+
+struct ExerciseFilterMenu: View {
+    @Binding var muscleGroup: String?
+    @Binding var equipment: String?
+    let muscleGroups: [String]
+    let equipmentOptions: [String]
+
+    private var isActive: Bool {
+        muscleGroup != nil || equipment != nil
+    }
+
+    var body: some View {
+        Menu {
+            Picker("Muscle", selection: $muscleGroup) {
+                Text("All Muscles").tag(String?.none)
+                ForEach(muscleGroups, id: \.self) { group in
+                    Text(group.capitalized).tag(String?.some(group))
+                }
+            }
+            .pickerStyle(.menu)
+
+            Picker("Equipment", selection: $equipment) {
+                Text("All Equipment").tag(String?.none)
+                ForEach(equipmentOptions, id: \.self) { item in
+                    Text(item.equipmentTitle).tag(String?.some(item))
+                }
+            }
+            .pickerStyle(.menu)
+
+            if isActive {
+                Divider()
+                Button {
+                    muscleGroup = nil
+                    equipment = nil
+                } label: {
+                    Label("Clear Filters", systemImage: "xmark.circle")
+                }
+            }
+        } label: {
+            Image(systemName: isActive ? "line.3.horizontal.decrease.circle.fill" : "line.3.horizontal.decrease")
+                .foregroundStyle(isActive ? IronTheme.accent : IronTheme.primaryText)
+        }
+        .accessibilityLabel("Filters")
+        .accessibilityValue(isActive
+                            ? ExerciseFilterText.names(muscleGroup: muscleGroup, equipment: equipment).joined(separator: ", ")
+                            : "None")
+    }
+}
+
+struct ExerciseActiveFilterChips: View {
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+    @Binding var muscleGroup: String?
+    @Binding var equipment: String?
+
+    var body: some View {
+        if muscleGroup != nil || equipment != nil {
+            Group {
+                if dynamicTypeSize.isAccessibilitySize {
+                    VStack(alignment: .leading, spacing: 8) {
+                        chips
+                    }
+                } else {
+                    HStack(spacing: 8) {
+                        chips
+                    }
+                }
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+        }
+    }
+
+    @ViewBuilder
+    private var chips: some View {
+        if let muscleGroup {
+            chip(muscleGroup.capitalized) { self.muscleGroup = nil }
+        }
+        if let equipment {
+            chip(equipment.equipmentTitle) { self.equipment = nil }
+        }
+    }
+
+    private func chip(_ name: String, remove: @escaping () -> Void) -> some View {
+        Button(action: remove) {
+            HStack(spacing: 5) {
+                Text(name)
+                Image(systemName: "xmark")
+                    .font(.caption2.weight(.semibold))
+            }
+            .font(.subheadline)
+        }
+        .buttonStyle(.bordered)
+        .buttonBorderShape(.capsule)
+        .controlSize(.small)
+        .tint(IronTheme.accent)
+        .frame(minHeight: IronTheme.controlHeight)
+        .accessibilityLabel("Remove \(name) filter")
+    }
+}
+
+struct ExerciseMuscleGroupsView : View {
     @EnvironmentObject var exerciseStore: ExerciseStore
 
     @State private var search = ""
@@ -48,7 +156,12 @@ struct ExerciseMuscleGroupsView : View {
         }
         .navigationTitle("Exercises")
         .toolbar {
-            ToolbarItem(placement: .navigationBarTrailing) {
+            ToolbarItemGroup(placement: .navigationBarTrailing) {
+                ExerciseFilterMenu(
+                    muscleGroup: $selectedMuscleGroup,
+                    equipment: $selectedEquipment,
+                    muscleGroups: catalogSearch.catalog?.muscleGroups ?? [],
+                    equipmentOptions: catalogSearch.catalog?.equipment ?? [])
                 Button {
                     showingCreateExercise = true
                 } label: {
@@ -57,7 +170,8 @@ struct ExerciseMuscleGroupsView : View {
                 .accessibilityLabel("Create Exercise")
             }
         }
-        .searchable(text: $search, placement: .navigationBarDrawer(displayMode: .always), prompt: "Search exercises")
+        .titleRowSearchable(text: $search, prompt: ExerciseFilterText.searchPrompt(
+            muscleGroup: selectedMuscleGroup, equipment: selectedEquipment))
         .textInputAutocapitalization(.never)
         .autocorrectionDisabled()
         .sheet(isPresented: $showingCreateExercise) {
@@ -93,7 +207,9 @@ struct ExerciseMuscleGroupsView : View {
         let results = catalogSearch.listing(for: search, showingAll: true).exercises
         return List {
             if search.isEmpty {
-                filterRow
+                if hasActiveFilter {
+                    filterRow
+                }
                 if let candidates {
                     if candidates.exercises.isEmpty {
                         emptyExerciseState
@@ -120,9 +236,11 @@ struct ExerciseMuscleGroupsView : View {
                 } header: {
                     // A separate, headerless filter section reserved a large gap
                     // before search results. Keep the filters in this header instead.
-                    filterControls
-                        .textCase(nil)
-                        .padding(.bottom, 8)
+                    if hasActiveFilter {
+                        ExerciseActiveFilterChips(muscleGroup: $selectedMuscleGroup, equipment: $selectedEquipment)
+                            .textCase(nil)
+                            .padding(.bottom, 8)
+                    }
                 }
             }
 
@@ -186,7 +304,7 @@ struct ExerciseMuscleGroupsView : View {
     @ViewBuilder
     private var filterRow: some View {
         let section = Section {
-            filterControls
+            ExerciseActiveFilterChips(muscleGroup: $selectedMuscleGroup, equipment: $selectedEquipment)
                 .listRowBackground(Color.clear)
                 .listRowSeparator(.hidden)
         }
@@ -198,73 +316,6 @@ struct ExerciseMuscleGroupsView : View {
         } else {
             section
         }
-    }
-
-    private var filterControls: some View {
-        Group {
-            if dynamicTypeSize.isAccessibilitySize {
-                VStack(alignment: .leading, spacing: 8) {
-                    muscleFilterMenu
-                    equipmentFilterMenu
-                }
-            } else {
-                HStack(spacing: 8) {
-                    muscleFilterMenu
-                    equipmentFilterMenu
-                }
-            }
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
-    }
-
-    private var muscleFilterMenu: some View {
-        Menu {
-            Picker("Muscle", selection: $selectedMuscleGroup) {
-                Text("All Muscles").tag(String?.none)
-                ForEach(catalogSearch.catalog?.muscleGroups ?? [], id: \.self) { group in
-                    Text(group.capitalized).tag(String?.some(group))
-                }
-            }
-        } label: {
-            filterLabel(selectedMuscleGroup?.capitalized ?? "All Muscles")
-        }
-        .buttonStyle(.bordered)
-        .buttonBorderShape(.capsule)
-        .controlSize(.small)
-        .tint(selectedMuscleGroup == nil ? IronTheme.secondaryText : IronTheme.accent)
-        .frame(minHeight: IronTheme.controlHeight)
-        .accessibilityLabel("Filter by muscle group")
-        .accessibilityValue(selectedMuscleGroup?.capitalized ?? "All muscles")
-    }
-
-    private var equipmentFilterMenu: some View {
-        Menu {
-            Picker("Equipment", selection: $selectedEquipment) {
-                Text("All Equipment").tag(String?.none)
-                ForEach(catalogSearch.catalog?.equipment ?? [], id: \.self) { item in
-                    Text(item.equipmentTitle).tag(String?.some(item))
-                }
-            }
-        } label: {
-            filterLabel(selectedEquipment?.equipmentTitle ?? "All Equipment")
-        }
-        .buttonStyle(.bordered)
-        .buttonBorderShape(.capsule)
-        .controlSize(.small)
-        .tint(selectedEquipment == nil ? IronTheme.secondaryText : IronTheme.accent)
-        .frame(minHeight: IronTheme.controlHeight)
-        .accessibilityLabel("Filter by equipment")
-        .accessibilityValue(selectedEquipment?.equipmentTitle ?? "All equipment")
-    }
-
-    private func filterLabel(_ title: String) -> some View {
-        HStack(spacing: 6) {
-            Text(title)
-            Image(systemName: "chevron.down")
-                .font(.caption.weight(.semibold))
-        }
-        .font(.subheadline)
-        .fixedSize(horizontal: false, vertical: true)
     }
 
     @ViewBuilder

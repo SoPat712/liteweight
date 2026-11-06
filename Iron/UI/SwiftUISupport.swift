@@ -14,6 +14,27 @@ import WorkoutDataKit
 
 // Palette and motion live in IronStyle; metric fonts live in IronMetricFont.
 
+/// Search sits under the large title and moves into the bar's title row once the list scrolls (iOS 26+).
+/// Earlier systems keep the pinned drawer.
+struct TitleRowSearchModifier: ViewModifier {
+    @Binding var text: String
+    let prompt: String
+
+    @ViewBuilder func body(content: Content) -> some View {
+        if #available(iOS 26, *) {
+            content.searchable(text: $text, placement: .toolbarPrincipal, prompt: Text(prompt))
+        } else {
+            content.searchable(text: $text, placement: .navigationBarDrawer(displayMode: .always), prompt: Text(prompt))
+        }
+    }
+}
+
+extension View {
+    func titleRowSearchable(text: Binding<String>, prompt: String) -> some View {
+        modifier(TitleRowSearchModifier(text: text, prompt: prompt))
+    }
+}
+
 /// Flips the binding once a List has scrolled past its first row of the given height (iOS 18+; no-op before).
 struct ListHeaderScrollTitleModifier: ViewModifier {
     let headerHeight: CGFloat
