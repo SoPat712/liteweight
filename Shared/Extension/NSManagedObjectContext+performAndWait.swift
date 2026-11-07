@@ -1,6 +1,6 @@
 //
 //  NSManagedObjectContext+performAndWait.swift
-//  Iron
+//  liteweight
 //
 //  Created by Karim Abou Zeid on 27.03.20.
 //  Copyright © 2020 Karim Abou Zeid Software. All rights reserved.

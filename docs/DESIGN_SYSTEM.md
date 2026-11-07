@@ -1,6 +1,6 @@
-# Iron Design System
+# liteweight Design System
 
-This is the single source of truth for how Iron looks, moves, sounds and reads.
+This is the single source of truth for how liteweight looks, moves, sounds and reads.
 It is written for engineers **and coding agents**. If you are handed a screenshot of
 an unthemed or off-brand screen, follow [§16 Theming a screen from a
 screenshot](#16-theming-a-screen-from-a-screenshot) and you should be able to bring
@@ -8,7 +8,7 @@ it on-system without asking anyone.
 
 Pending, approved-but-unbuilt work lives in [`DESIGN_BACKLOG.md`](DESIGN_BACKLOG.md).
 Visual references live on the design canvas
-(<https://claude.ai/artifact/XwxfzWTFvH2PNZWqMRpihv>, pages "Round 3 · Iron blue",
+(<https://claude.ai/artifact/XwxfzWTFvH2PNZWqMRpihv>, pages "Round 3 · liteweight blue",
 "Round 4 · Live workout", "Round 5 · Exercises"). When this document and a canvas
 board disagree, **this document wins**; when this document is silent, match the
 board.
@@ -38,27 +38,27 @@ Contents
 
 ## 1. Identity
 
-**"If Apple made a strength-training app."** Iron should be indistinguishable in
+**"If Apple made a strength-training app."** liteweight should be indistinguishable in
 quality from Fitness, Health or Activity, while being clearly its own app. It is
 *not* Hevy with Liquid Glass on top. Hevy is only a reference for logging density.
 
-What makes Iron recognisably Iron:
+What makes liteweight recognisably liteweight:
 
 | Signature | What it means in practice |
 | --- | --- |
-| **Iron blue** | One accent, `systemBlue`. It means action, workouts, selection and *completed sets*. |
+| **liteweight blue** | One accent, `systemBlue`. It means action, workouts, selection and *completed sets*. |
 | **One color per metric** | Sets = orange, Volume = green, Time = cyan, Effort = pink, Records = yellow, Body = purple. A number's color tells you what it measures, on every screen. |
 | **Bold fixed-width numerals** | Every number is SF Pro **bold** (or semibold in dense rows) with `.monospacedDigit()`. Never SF Rounded: the owner rejected it as cartoonish. |
 | **Things fill** | Completing a set sweeps a fill across the row left to right. Rest drains a ring. Effort fills rising bars. Progress fills, it doesn't tick. |
 | **Rest lives inside the exercise** | The rest timer appears under the set that started it, not in a modal. |
-| **Native chrome** | System navigation bars, tab bar, sheets, lists, toggles and pickers. Iron never repaints system chrome. |
+| **Native chrome** | System navigation bars, tab bar, sheets, lists, toggles and pickers. liteweight never repaints system chrome. |
 
 ## 2. Principles
 
-1. **Native first.** Reach for the SwiftUI control before an Iron-specific one. A custom control
+1. **Native first.** Reach for the SwiftUI control before an liteweight-specific one. A custom control
    must beat the native one for a measurable reason. Today that means the set row, the rest
    strip and ruler, the effort graph, the session strip and the muscle-map tooltip.
-2. **Semantic colors only.** Use `IronTheme` roles, which map to adaptive UIKit colors. Never
+2. **Semantic colors only.** Use `LiteweightTheme` roles, which map to adaptive UIKit colors. Never
    hard-code a hex value, `Color.black`, `.white` or `.gray` for chrome.
 3. **The system owns chrome.** Never set `toolbarBackground`, `presentationBackground`,
    `scrollContentBackground(.hidden)` with a custom fill, or a custom modal corner radius.
@@ -74,15 +74,15 @@ What makes Iron recognisably Iron:
 
 ## 3. Color
 
-All roles live in `Shared/UI/SwiftUI/IronStyle.swift` (`IronPalette` → `IronTheme`).
-Screens use **only** `IronTheme.*` and a few system colors named below.
+All roles live in `Shared/UI/SwiftUI/LiteweightStyle.swift` (`LiteweightPalette` → `LiteweightTheme`).
+Screens use **only** `LiteweightTheme.*` and a few system colors named below.
 
 ### 3.1 Core roles
 
 The hex values below are what the system color resolves to. They are listed so you can match
 screenshots and canvas boards; never write them in code.
 
-| `IronTheme` role | System color | Light | Dark | Means |
+| `LiteweightTheme` role | System color | Light | Dark | Means |
 | --- | --- | --- | --- | --- |
 | `accent` | `systemBlue` | `#007AFF` | `#0A84FF` | Actions, selection, workouts, **completed sets**, primary chart series |
 | `accentSoft` | systemBlue @ 0.12 | — | — | Soft accent chips, icon wells, selected pills |
@@ -137,7 +137,7 @@ screenshots and canvas boards; never write them in code.
 
 The owner likes the current blue fill on normal completed sets. **Do not change it.** Set-type
 fills must be *softer* than the blue, never saturated slabs with white text. Use
-`IronTheme.setFill(for:)` once it exists (backlog B4).
+`LiteweightTheme.setFill(for:)` once it exists (backlog B4).
 
 ### 3.4 Muscle map colors
 
@@ -149,18 +149,18 @@ BodyViewStyle(
     defaultFillColor: Color(.tertiaryLabel).opacity(0.35),
     strokeColor: Color(.separator),
     strokeWidth: 0.5,
-    selectionColor: IronTheme.accent,
-    selectionStrokeColor: IronTheme.accent,
+    selectionColor: LiteweightTheme.accent,
+    selectionStrokeColor: LiteweightTheme.accent,
     selectionStrokeWidth: 1,
     headColor: Color(.tertiaryLabel).opacity(0.45),
     hairColor: Color(.quaternaryLabel)
 )
-// primary muscles:   .highlight(primary,   color: IronTheme.accent)
-// secondary muscles: .highlight(secondary, color: IronTheme.accent, opacity: 0.42)
+// primary muscles:   .highlight(primary,   color: LiteweightTheme.accent)
+// secondary muscles: .highlight(secondary, color: LiteweightTheme.accent, opacity: 0.42)
 ```
 
 Always render front and back side by side (`gender: .male`, `side: .front` / `.back`). Map
-catalog muscle names with `ironMapMuscle(_:)` (`Iron/UI/SwiftUISupport.swift`). Never write a
+catalog muscle names with `liteweightMapMuscle(_:)` (`liteweight/UI/SwiftUISupport.swift`). Never write a
 second mapping table.
 
 ## 4. Typography
@@ -172,7 +172,7 @@ default "Large" content size.
 | --- | --- | --- |
 | `.largeTitle.bold()` | 34 bold | Root tab titles (Home, History, Workout, Exercises, Settings) |
 | `.title.bold()` | 28 bold | Hero headers (finish screen workout name, exercise detail title) |
-| `.title2` | 22 | Big standalone numbers (`ironMetric(.title2)`) |
+| `.title2` | 22 | Big standalone numbers (`liteweightMetric(.title2)`) |
 | `.title3.weight(.semibold)` | 20 semibold | Card titles inside screens ("Session", "How hard was it?", "Target") |
 | `.headline` | 17 semibold | Row titles, inline navigation titles, exercise names in the logger |
 | `.body` | 17 | Body copy, list rows |
@@ -187,31 +187,31 @@ default "Large" content size.
 Every metric number (weights, reps, volume, durations, timers, counts, RPE and percentages) uses:
 
 ```swift
-Text("185").font(.ironMetric(.title2))                    // bold, fixed-width digits
-Text("8").font(.ironMetric(.body, weight: .semibold))     // dense rows
+Text("185").font(.liteweightMetric(.title2))                    // bold, fixed-width digits
+Text("8").font(.liteweightMetric(.body, weight: .semibold))     // dense rows
 ```
 
-`Font.ironMetric(_:weight:)` = `.system(style).weight(weight).monospacedDigit()`. Default weight
+`Font.liteweightMetric(_:weight:)` = `.system(style).weight(weight).monospacedDigit()`. Default weight
 is `.bold`.
 
 | Context | Style |
 | --- | --- |
-| Hero metric (exercise headline 1RM, finish grid values) | `ironMetric(.largeTitle)` or `.title` |
-| Card metric values (Home week numbers, summary columns) | `ironMetric(.title2)` |
-| Rest countdown in the rest strip | `ironMetric(.title3)` in `metricTime` |
-| Focused-set weight and reps | `ironMetric(.largeTitle)` (≈34 pt) |
-| Compact set row values | `ironMetric(.title3, weight: .bold)` |
-| Inline metric lines ("1h 02m · 14 sets · 9,860 lb") | `ironMetric(.subheadline, weight: .semibold)` |
-| Badges ("RPE 8", "2 PRs") | `ironMetric(.caption, weight: .bold)` |
+| Hero metric (exercise headline 1RM, finish grid values) | `liteweightMetric(.largeTitle)` or `.title` |
+| Card metric values (Home week numbers, summary columns) | `liteweightMetric(.title2)` |
+| Rest countdown in the rest strip | `liteweightMetric(.title3)` in `metricTime` |
+| Focused-set weight and reps | `liteweightMetric(.largeTitle)` (≈34 pt) |
+| Compact set row values | `liteweightMetric(.title3, weight: .bold)` |
+| Inline metric lines ("1h 02m · 14 sets · 9,860 lb") | `liteweightMetric(.subheadline, weight: .semibold)` |
+| Badges ("RPE 8", "2 PRs") | `liteweightMetric(.caption, weight: .bold)` |
 
 - **Units** sit after the number in a smaller style (`.footnote`/`.caption`, semibold) in
   `secondaryText`, baseline-aligned: `HStack(alignment: .firstTextBaseline, spacing: 2)`.
-- Use `IronMetricValue` for number/unit readouts and `IronWorkoutMetricLine` for inline
+- Use `LiteweightMetricValue` for number/unit readouts and `LiteweightWorkoutMetricLine` for inline
   workout summaries. Home, History, Workout and logger must share these roles rather than
   choosing local weights and unit treatments. Data-row names use `.headline`; normal form
   labels and body copy remain `.body`. Native section headers keep the system hierarchy.
 - Values that change animate with `.contentTransition(.numericText())` (countdowns use
-  `.numericText(countsDown: true)`), driven by `IronMotion.snappy`.
+  `.numericText(countsDown: true)`), driven by `LiteweightMotion.snappy`.
 - Never use `design: .rounded` for anything.
 
 ### 4.2 Text color hierarchy
@@ -223,7 +223,7 @@ which take their metric color.
 
 ## 5. Layout, spacing and shape
 
-### 5.1 Tokens (`IronTheme`)
+### 5.1 Tokens (`LiteweightTheme`)
 
 | Token | Value | Use |
 | --- | ---: | --- |
@@ -271,12 +271,12 @@ Minimum 44 × 44 pt, always. A visually smaller glyph gets a padded `contentShap
 | --- | --- |
 | Screen background | System (`List`, `Form`, `NavigationStack`); never painted |
 | Grouped content | `List` `.insetGrouped` sections. One section holds related rows; never wrap each row in its own card, never nest cards |
-| Custom card | `IronTheme.surface` fill, `heroCornerRadius`, used only when the content cannot be rows (charts, the muscle map, the logger's exercise card) |
-| Floating chrome | Liquid Glass: `.ironLiquidGlassPill(tint:)` (capsule) or `.ironLiquidGlassSurface(cornerRadius:tint:)`; on iOS 26 it is `glassEffect(.regular.tint().interactive())`, with an `.ultraThinMaterial` + hairline fallback |
-| Buttons floating over content | `.ironGlassButtonStyle()` (secondary) and `.ironProminentGlassButtonStyle()` (the one primary action) |
+| Custom card | `LiteweightTheme.surface` fill, `heroCornerRadius`, used only when the content cannot be rows (charts, the muscle map, the logger's exercise card) |
+| Floating chrome | Liquid Glass: `.liteweightLiquidGlassPill(tint:)` (capsule) or `.liteweightLiquidGlassSurface(cornerRadius:tint:)`; on iOS 26 it is `glassEffect(.regular.tint().interactive())`, with an `.ultraThinMaterial` + hairline fallback |
+| Buttons floating over content | `.liteweightGlassButtonStyle()` (secondary) and `.liteweightProminentGlassButtonStyle()` (the one primary action) |
 
 **Glass is allowed only on:** the active-workout tab accessory, the logger's collapsed summary
-pill, floating action buttons (Add Exercises), the LightToast result capsule, Watch toolbar
+pill, floating action buttons (Add Exercises), the LiteweightToast result capsule, Watch toolbar
 vitals and action buttons, and tooltips (material).
 Glass never sits on glass. Glass never replaces a List section.
 
@@ -315,33 +315,33 @@ checkmark). Gate both on Reduce Motion.
 
 Before building anything custom, check this list. File paths are relative to the repo root.
 
-### 8.1 Tokens: `Shared/UI/SwiftUI/IronStyle.swift`
-`IronPalette`, `IronTheme`, `IronMotion`. `Font.ironMetric` lives in the lightweight sibling
-`IronMetricFont.swift`, shared by app, widget and Siri UI targets. This file is shared with the widget
+### 8.1 Tokens: `Shared/UI/SwiftUI/LiteweightStyle.swift`
+`LiteweightPalette`, `LiteweightTheme`, `LiteweightMotion`. `Font.liteweightMetric` lives in the lightweight sibling
+`LiteweightMetricFont.swift`, shared by app, widget and Siri UI targets. This file is shared with the widget
 extension, so keep it free of app-only imports.
 
-### 8.2 Glass helpers: `Iron/UI/SwiftUISupport.swift`
-`ironLiquidGlassPill(tint:)`, `ironLiquidGlassSurface(cornerRadius:tint:)`,
-`ironGlassButtonStyle()`, `ironProminentGlassButtonStyle()`.
+### 8.2 Glass helpers: `liteweight/UI/SwiftUISupport.swift`
+`liteweightLiquidGlassPill(tint:)`, `liteweightLiquidGlassSurface(cornerRadius:tint:)`,
+`liteweightGlassButtonStyle()`, `liteweightProminentGlassButtonStyle()`.
 
-`IronMetricValue(value:unit:style:weight:unitStyle:tint:)` and
-`IronWorkoutMetricLine(duration:sets:volume:unit:)` also live here. The former defaults to a
+`LiteweightMetricValue(value:unit:style:weight:unitStyle:tint:)` and
+`LiteweightWorkoutMetricLine(duration:sets:volume:unit:)` also live here. The former defaults to a
 bold title2 value with a secondary semibold footnote unit; dense data rows use body semibold.
 The latter fixes the inline summary at subheadline semibold, with caption units. Both wrap
 instead of shrinking whole rows at accessibility sizes.
 
-### 8.3 `ironSetCompletion(isComplete:feedbackEnabled:)`
+### 8.3 `liteweightSetCompletion(isComplete:feedbackEnabled:)`
 Leading-anchored fill sweep behind a row: `scaleEffect(x:)` from 0 to 1 at opacity 0.24 using
-`IronMotion.collapse`, then after 420 ms it fades to 0.12. It fires the `.success` haptic.
+`LiteweightMotion.collapse`, then after 420 ms it fades to 0.12. It fires the `.success` haptic.
 Existing completed rows appear already settled and do not replay. Reduce Motion uses a fade and
 keeps the haptic. Apply it to the row content inside its inset; it adds no geometry. Backlog B4
 adds a set-type tint parameter.
 
-### 8.4 `ironStaggeredEntrance(index:)`
-Opacity 0 → 1 and y +8 → 0 with `IronMotion.snappy`, delayed 40 ms × index. Plays **once**.
+### 8.4 `liteweightStaggeredEntrance(index:)`
+Opacity 0 → 1 and y +8 → 0 with `LiteweightMotion.snappy`, delayed 40 ms × index. Plays **once**.
 Never reset it in `onDisappear`, because List prefetching would then hide rows.
 
-### 8.5 `IronRestRing(progress:)`
+### 8.5 `LiteweightRestRing(progress:)`
 Countdown ring. `progress` is the fraction remaining (1 = full). Its track is `tertiaryFill`,
 it draws a 4 pt `metricTime` stroke with round caps, and it starts at 12 o'clock. Callers own
 the timer. Hide it from VoiceOver when the text already announces the time.
@@ -349,7 +349,7 @@ the timer. Hide it from VoiceOver when the text already announces the time.
 ### 8.6 `EffortRatingGraph(rating:allowsUnrated:)`
 One slanted bar per level from 1 to 10, forming a single rising ramp like the Watch's, with wider gaps between `EffortTierPalette` tiers: 1–3 Easy, 4–6 Moderate, 7–8 Hard, 9–10 All Out. Each bar is fully lit in its tier color or fully `solidTrack`, so a rating never cuts through a bar. Numbers sit under the bars, and the readout above shows the number and tier name. Set it by tapping a column or dragging, with a selection haptic per step and an accessibility adjustable action. This is **the** pattern for any 1-to-N intensity input.
 
-### 8.7 `IronSessionStrip`: `Iron/UI/Components/IronSessionStrip.swift`
+### 8.7 `LiteweightSessionStrip`: `liteweight/UI/Components/LiteweightSessionStrip.swift`
 The session, exercise by exercise. Input is `[ExerciseGroup(label:, sets: [Set(kind:
 .warmUp/.normal/.record, completedAt:, duration:, volume:, result:, rpe:)])]`.
 - **Rest summary:** Total Rest, Avg Rest and Longest in `metricTime`.
@@ -363,20 +363,20 @@ are all `accent`, with warm-ups in `tertiaryText` and a W label, and records wit
 `metricRecord` trophy. Orange and yellow bars side by side failed the palette validator, so hue
 no longer carries set type. Accessibility sizes stack each set's values.
 
-### 8.8 Sheets: `Iron/UI/SwiftUISupport.swift`
-`IronUtilitySheet` (titled utility sheet with icon, subtitle and close button),
-`IronConfirmationSheet`, `IronStatusSheet`, `IronDateTimePickerSheet`, `IronDurationPickerSheet`
-/ `IronDurationWheel` (system dual wheel for minutes and seconds). Prefer `.alert` or
+### 8.8 Sheets: `liteweight/UI/SwiftUISupport.swift`
+`LiteweightUtilitySheet` (titled utility sheet with icon, subtitle and close button),
+`LiteweightConfirmationSheet`, `LiteweightStatusSheet`, `LiteweightDateTimePickerSheet`, `LiteweightDurationPickerSheet`
+/ `LiteweightDurationWheel` (system dual wheel for minutes and seconds). Prefer `.alert` or
 `.confirmationDialog` when a one-line explanation is enough.
 
-### 8.8.1 `HevyImportProgressOverlay`: `Iron/Data/Model/HevyCSV.swift`
+### 8.8.1 `HevyImportProgressOverlay`: `liteweight/Data/Model/HevyCSV.swift`
 A blocking progress overlay for long imports. Its phases are reading (files) and saving
 (workouts). Reuse the same pattern (glass card, `ProgressView`, phase text and counts) for any
 operation over about 1 s.
 
-### 8.8.2 `LightToast`: `Iron/UI/Components/LightToast.swift`
+### 8.8.2 `LiteweightToast`: `liteweight/UI/Components/LiteweightToast.swift`
 A short, self-dismissing glass capsule drops from the top for results needing no decision
-(backup made, sync done, status checked). `LightToastCenter` presents one at a time in its own
+(backup made, sync done, status checked). `LiteweightToastCenter` presents one at a time in its own
 non-interactive window above sheets and full-screen covers; touches pass through. It announces
 the result to VoiceOver and respects the haptics preference. Errors needing reading or action
 keep their sheets or alerts.
@@ -384,15 +384,15 @@ keep their sheets or alerts.
 ### 8.9 Muscle map (MuscleMap package)
 `import MuscleMap`, then `BodyView(gender: .male, side:, style:)` with the style from §3.4.
 The approved local package lives at `Packages/MuscleMap` (1.6.4, MIT; provenance in
-`IRON_CHANGES.md`). `MuscleHitTester.muscle(at:in:gender:side:)` exposes the renderer's existing
+`LITEWEIGHT_CHANGES.md`). `MuscleHitTester.muscle(at:in:gender:side:)` exposes the renderer's existing
 hit testing for the app's hold-gated overlay. Do not duplicate the anatomical paths.
 - **Live workout:** a 54 pt tall pair, not interactive (`allowsHitTesting(false)`).
 - **Exercise detail:** a pair about 190 pt tall that is interactive (press-and-hold tooltip,
   §9.8).
-- Map names with `ironMapMuscle(_:)`. Never hand-draw bodies.
+- Map names with `liteweightMapMuscle(_:)`. Never hand-draw bodies.
 
 ### 8.10 Exercise art
-`ExerciseDiagramThumbnail(exercise:size:)` (in `Iron/UI/Exercises/ExercisesView.swift`) draws
+`ExerciseDiagramThumbnail(exercise:size:)` (in `liteweight/UI/Exercises/ExercisesView.swift`) draws
 a circular white canvas with the cached still fitted inside, a hairline ring and a 2 pt shadow.
 Sizes: 42 (logger header), 58 (lists), 60 (detail header). Thumbnails never draw the old
 black-and-white PDF diagrams; `legacy-art.json` gives those exercises the same movement's still.
@@ -413,7 +413,7 @@ The inline exercise history card uses plain buttons routed by ExerciseDetailView
 the List. Never put several automatic NavigationLinks into this single List row: activating
 one can push all sibling destinations. Full history's independent List rows may use links.
 
-### 8.11 Sounds: `Shared/IronSoundPlayer.swift`
+### 8.11 Sounds: `Shared/LiteweightSoundPlayer.swift`
 Covered in §12.
 
 ## 9. Recurring patterns
@@ -421,19 +421,19 @@ Covered in §12.
 ### 9.1 Metric chip (Home week card, finish grid)
 ```
 [32pt circle, metric Container fill, SF Symbol 17pt in metric color]
-<value>  ironMetric(.title2), primary (or metric color in the finish grid)
+<value>  liteweightMetric(.title2), primary (or metric color in the finish grid)
 <label>  .footnote, secondaryText
 ```
 Three per row in a `Grid` or a three-column `LazyVGrid`. Labels never truncate; at
 accessibility sizes they wrap.
 
 ### 9.2 Metric line (History rows, accessory, exercise rows)
-`"1h 02m · 14 sets · 9,860 lb"`: each value in its metric color, `ironMetric(.subheadline,
+`"1h 02m · 14 sets · 9,860 lb"`: each value in its metric color, `liteweightMetric(.subheadline,
 weight: .semibold)`, separated by `" · "` in `secondaryText`. Order is always
 **time → sets → volume**, with effort or records as trailing badges.
 
 ### 9.3 Badges
-A capsule 22–24 pt tall with 8 pt horizontal padding and `ironMetric(.caption, weight: .bold)`:
+A capsule 22–24 pt tall with 8 pt horizontal padding and `liteweightMetric(.caption, weight: .bold)`:
 - PR: `trophy.fill` 11 pt + "2 PRs" in `metricRecord` on `metricRecordContainer`.
 - RPE: "RPE 8" in `metricEffort` on `metricEffortContainer`.
 - Streak: `flame.fill` + "33-week streak" in accent on `accentSoft`.
@@ -446,7 +446,7 @@ gets a trophy and record colors.
 Use the system `Picker(...).pickerStyle(.segmented)` where possible. If you need custom styling
 (the exercise progress card), use a 32 pt capsule track on `tertiaryFill`, a selected segment on
 `systemBackground`/`card3` with a subtle shadow, 13 pt text (semibold when selected), and
-`IronMotion.snappy` with `matchedGeometryEffect` for the thumb. Use four segments at most.
+`LiteweightMotion.snappy` with `matchedGeometryEffect` for the thumb. Use four segments at most.
 
 ### 9.5 Time-range pills
 Five equal 30 pt capsules: **1M · 3M · 6M · 1Y · All**. The selected pill is `accentSoft` with
@@ -471,7 +471,7 @@ A small capsule (30 pt tall, 12 pt horizontal padding) with `.regularMaterial` o
 hairline edge and the shadow `0 6 18 black @ 0.28`. Content is an 8 pt colored dot, the bold
 name and the role in `secondaryText`, as in **"● Chest  Primary"**. A 14 × 7 pointer points at
 the target, and the tooltip sits above the touch point, clamped inside the card.
-- **Appears** with scale 0.92 → 1 plus fade (`IronMotion.snappy`) and a `.selection` haptic
+- **Appears** with scale 0.92 → 1 plus fade (`LiteweightMotion.snappy`) and a `.selection` haptic
   whenever the target changes.
 - **Disappears** on finger lift, or about 2 s after a tap.
 - **Triggers:** touch-and-hold (0.25 s), then drag to scrub between targets. A quick tap shows
@@ -496,11 +496,11 @@ the row or button. For blocking work over about 3 s (imports), use the overlay p
 - **Swift Charts only.** No hand-drawn `Canvas`, `Path` or `GeometryReader` plotting and no
   third-party chart libraries. The session strip and effort graph are deliberate stack-based
   exceptions.
-- **Use `Iron/UI/Components/IronChartKit.swift`** for every chart, so they all read like the
-  Health app. Above the plot, `IronChartHeader` shows an uppercase caption ("Total", "Latest"),
-  the value from `IronChartText.value` in its metric color with a secondary unit, and a date or
-  period line. Values sit on `ironValueAxis` (trailing, `.caption2`, hairline `outline`
-  gridlines, 2–3 ticks). Dates sit on `ironDateAxis` (`.caption2`, a faint dashed guide per label).
+- **Use `liteweight/UI/Components/LiteweightChartKit.swift`** for every chart, so they all read like the
+  Health app. Above the plot, `LiteweightChartHeader` shows an uppercase caption ("Total", "Latest"),
+  the value from `LiteweightChartText.value` in its metric color with a secondary unit, and a date or
+  period line. Values sit on `liteweightValueAxis` (trailing, `.caption2`, hairline `outline`
+  gridlines, 2–3 ticks). Dates sit on `liteweightDateAxis` (`.caption2`, a faint dashed guide per label).
 - **Line charts** (1RM, top weight, body, trends): a 2 pt line with linear interpolation,
   so the line passes through real values, and 5 pt points. No area fill. Body measurements and
   sparklines hug their data instead of starting at zero. The latest PR point is a 9 pt
@@ -508,14 +508,14 @@ the row or button. For blocking work over about 3 s (imports), use the overlay p
 - **Bar charts** (volume, reps, duration): 3–4 pt corners, every bar in the metric color.
   Don't dim older bars to highlight the current period.
 - **Scrubbing:** `chartXSelection`. The selected mark is full color and the others drop to
-  `IronChartEmphasis.dimmed`. `IronChartSelectionRule` marks the selection, and the header above
+  `LiteweightChartEmphasis.dimmed`. `LiteweightChartSelectionRule` marks the selection, and the header above
   the chart switches to the selected value and date. Never float a callout or material box over
   the plot, and never show "drag to inspect" hint text.
 - **Summary cards** (pinned charts): the title in the metric color with the date at the trailing
   edge, the value, and an axis-free sparkline that ends on a dot.
 - **Color series:** one metric per chart, colored by that metric. Never encode meaning with
   hue alone.
-- **First appearance:** bars grow and lines draw in with `IronMotion.snappy`. Changing metric
+- **First appearance:** bars grow and lines draw in with `LiteweightMotion.snappy`. Changing metric
   or range cross-fades the plot and rolls the headline digits.
 - **VoiceOver:** a chart summary label, the selected value and an adjustable action for
   previous and next points.
@@ -524,7 +524,7 @@ the row or button. For blocking work over about 3 s (imports), use the overlay p
 
 ## 11. Motion
 
-Tokens (`IronMotion`, in `IronStyle.swift`):
+Tokens (`LiteweightMotion`, in `LiteweightStyle.swift`):
 
 | Token | Curve | Use |
 | --- | --- | --- |
@@ -533,7 +533,7 @@ Tokens (`IronMotion`, in `IronStyle.swift`):
 | `focusScroll` | cubic (0.16, 1, 0.3, 1), 0.65 s | Guided exercise/superset travel: prompt start, long deceleration, no bounce |
 | `fade` | easeInOut 0.18 s | Non-spatial changes, and the Reduce Motion substitute |
 
-Always write `withAnimation(IronMotion.preferred(.snappy, reduceMotion: reduceMotion))`, reading
+Always write `withAnimation(LiteweightMotion.preferred(.snappy, reduceMotion: reduceMotion))`, reading
 `@Environment(\.accessibilityReduceMotion)`. Reduce Motion swaps spatial motion for a fade; the
 haptics still play.
 Programmatic exercise scrolling uses `focusScroll`; under Reduce Motion it moves directly
@@ -551,7 +551,7 @@ without a spatial animation.
 | Delete set | The row slides out, then collapses (`collapse`) with an opacity plus scale 0.96 transition |
 | Header collapse | The summary is swapped for the glass pill (`collapse`), and labels never squash |
 | Open or minimize the workout | Zoom from the tab accessory (`matchedTransitionSource` plus `.navigationTransition(.zoom)`); fade under Reduce Motion |
-| Finish screen | Metrics rise in staggered (`ironStaggeredEntrance`), session bars grow per exercise, trophies bounce |
+| Finish screen | Metrics rise in staggered (`liteweightStaggeredEntrance`), session bars grow per exercise, trophies bounce |
 | Effort and RPE | Bars fill while dragging, with a selection haptic per step |
 | Charts | Grow on first appearance; cross-fade when the metric or range changes |
 | Tooltip | Scale 0.92 → 1 plus fade (`snappy`) |
@@ -565,7 +565,7 @@ Never delay a dismissal, save or navigation for an animation.
 
 | Event | Feedback |
 | --- | --- |
-| Set completed by the user | `.success` after a successful local save (`ironSetCompletion` owns the visual sweep) |
+| Set completed by the user | `.success` after a successful local save (`liteweightSetCompletion` owns the visual sweep) |
 | Stepper tap, weight/reps drag step, picker step, set-type change, effort and RPE step, ruler notch, tooltip target change, segment change | `.selection` |
 | Rest ±15 s, start, pause/resume, skip/stop, open/close rest ruler | `.selection` |
 | Inline set timer start/stop, undo set completion | `.selection` |
@@ -579,9 +579,9 @@ Watch sync, or Live Activity updates. Respect the workout haptics preference. De
 belongs on a surviving parent view after a successful deletion, so a removed row does not lose
 its trigger. Live Activity extension intents never emit app haptics.
 
-### 12.2 Sounds (`IronSoundPlayer.shared.play(.cue)`)
+### 12.2 Sounds (`LiteweightSoundPlayer.shared.play(.cue)`)
 
-Original procedurally generated `.caf` files live in `Iron/Resources/Sounds/`; regenerate them
+Original procedurally generated `.caf` files live in `liteweight/Resources/Sounds/`; regenerate them
 with `scripts/generate_sounds.py`. The audio session is `.ambient` (it mixes with music and
 respects the silent switch). Players are preloaded at launch.
 
@@ -646,7 +646,7 @@ Each uses `NavigationStack` with a large title. The tab bar minimizes on scroll
 accessory: name plus a metric line (time · volume · sets) on the left, and expand and discard
 buttons on the right.
 
-### 15.2 Home (`Iron/UI/Feed/FeedView.swift`, `Iron/UI/Components/HomeWeekViews.swift`)
+### 15.2 Home (`liteweight/UI/Feed/FeedView.swift`, `liteweight/UI/Components/HomeWeekViews.swift`)
 Board: *Round 3 → Home*, revised 2026-11-02 to read like Fitness and Health, then made
 customizable like Fitness's Edit Summary. Home is a list of cards the user adds, removes and
 reorders in Customize Home (from a week card's ••• menu or the button at the end of Home);
@@ -654,7 +654,7 @@ the weekly set target is set there too. Cards live in `UserDefaults` under `home
 (build 71's `home.weekStyle`, `home.sectionOrder` and `home.hiddenSections` carry over once);
 no Core Data change. Default cards, in order:
 1. Today's date as the navigation subtitle under "Home" (iOS 26 and later). No greeting.
-2. **Week cards** (opaque neutral `IronTheme.surface`; no colored glass haze). Any of the four
+2. **Week cards** (opaque neutral `LiteweightTheme.surface`; no colored glass haze). Any of the four
    can be on Home at once, in any order. The first one is titled "This Week" with the date
    range, carries the Workouts/Sets/Volume row where its style has one, and ends with a
    full-width Resume or Start Workout button (native large `.borderedProminent` capsule).
@@ -680,7 +680,7 @@ no Core Data change. Default cards, in order:
    set, time and volume totals, all its sessions, muscle focus and any logged measurements.
    Workout detail is one level below the recap. The full calendar follows the same rule.
 4. Recent Training rows: the title with the date at the trailing edge, then the shared
-   `IronWorkoutMetricLine` (duration, sets, volume).
+   `LiteweightWorkoutMetricLine` (duration, sets, volume).
 5. **Muscle Focus**: average sets a week per tracked group over the last four weeks, ranked,
    as `metricSets` bars over a shaded target band (default 10–20, set in Customize Home).
    Header "N of 6 groups reach 10 sets a week"; the footer names the lowest group. Every
@@ -693,7 +693,7 @@ no Core Data change. Default cards, in order:
    lists the cards with delete and reorder controls, "Add to Home" lists the rest with a
    `success` plus, then the weekly set target steppers and Restore Default Layout.
 
-### 15.3 History (`Iron/UI/History/HistoryView.swift`)
+### 15.3 History (`liteweight/UI/History/HistoryView.swift`)
 Board: *Round 3 → History*, revised 2026-10-26. A segmented control (Workouts · Insights).
 The cached Exercise Progress index lives in the toolbar's options menu. Workouts are
 grouped by week, with headers showing the count in accent and volume in green. Each row has the
@@ -703,21 +703,21 @@ Chart controls and their chart belong in one continuous grouped row: metric sele
 chart and headline together, and a labelled Period menu below. Never insert a transparent
 segmented-control row between the top and bottom of a grouped card. Apply this to History,
 Body Measurements and saved-workout trends. Large text gets a taller plot with fewer axis
-labels. Use `ironHorizontalChartScrubbing` to keep vertical pans in the List.
+labels. Use `liteweightHorizontalChartScrubbing` to keep vertical pans in the List.
 
 Home, History and calendar summaries read the shared `TrainingHistoryStore` background
 snapshot. Never traverse all workout relationships or search the catalog from a view body.
 Use `ExerciseStore.exercisesByUUID` for catalog lookups. Snapshot refreshes follow history
 saves, day/time-zone changes and app activation; changing a filter does not rescan Core Data.
 
-### 15.4 Workout tab (`Iron/UI/Workout/StartWorkoutView.swift`)
+### 15.4 Workout tab (`liteweight/UI/Workout/StartWorkoutView.swift`)
 Quick Start, Recent Workouts with one-tap Repeat, and Saved Workouts. Recent rows put the title,
 metadata and metric line on the left and a bold text Repeat button, with the compact
 rounded-rectangle border shape, on the right. Tapping the row opens details; holding it opens Save
 as Workout, Repeat with Blank Sets and View Details. Save as Workout opens an isolated, prefilled
 editor; Cancel preserves the source and Create saves a new copy.
 
-### 15.5 Exercises (`Iron/UI/Exercises/*`)
+### 15.5 Exercises (`liteweight/UI/Exercises/*`)
 - **Library** (`ExerciseMuscleGroupsView`): search sits under the title and moves into the
   bar's title row once scrolled on iOS 26+ (`titleRowSearchable`, also used by History);
   earlier systems keep the pinned drawer. iOS hides the trailing bar buttons while search is
@@ -737,7 +737,7 @@ Exercise detail keeps the exercise name in its page header only, with an empty i
 navigation title. Custom progress/target cards use the same outer gutter as native grouped
 sections; do not add a second horizontal List-row inset.
 
-### 15.6 Live workout (`Iron/UI/Workout/CurrentWorkoutView.swift`)
+### 15.6 Live workout (`liteweight/UI/Workout/CurrentWorkoutView.swift`)
 Boards: *Round 3 → Logger B · focused set*, *Round 4 → Live workout* (only the parts the backlog
 adopts).
 
@@ -749,7 +749,7 @@ Top to bottom:
    It belongs to the same `.bar` header surface as the toolbar and expanded metrics. Use fill only:
    no segment outline, separate panel fill or divider rules.
 3. **Session header** (expanded by default, controlled by the user): the watch-sync banner (dot, status text such as
-   "Saved on iPhone · Install Iron on Watch", device glyph, collapse chevron), then a summary row
+   "Saved on iPhone · Install liteweight on Watch", device glyph, collapse chevron), then a summary row
    with **Duration** (`metricTime`, tap to edit), **Volume** (`metricVolume` plus unit),
    **Sets** (`metricSets`) and the **live muscle map** (54 pt front and back, completed sets
    only). Give duration/volume explicit columns with 12 pt gutters; sets use a narrower
@@ -780,7 +780,7 @@ Top to bottom:
      The progress marker, automatic superset scroll and Live Activity use that same target.
      The raised card contains:
      - a header with "Set N" (it opens the set-type menu) and "Last time 200 × 5";
-     - two tiles for weight and reps, each with a huge `ironMetric` TextField and 40 pt −/+
+     - two tiles for weight and reps, each with a huge `liteweightMetric` TextField and 40 pt −/+
        circular steppers (2.5 in either lb or kg; 1 rep);
      - a plate picture and load hint for barbells or saved machine setups, opening the plate
        calculator; eligible machines without a setup show a "Plate Calculator" setup chip.
@@ -802,7 +802,7 @@ Top to bottom:
      Logging accepts the suggestion; merely showing it does not save it.
 7. **After logging a set**, the logger scrolls that set to the top, with the rest strip and the next set under it. Going back to an earlier set scrolls to that set instead. Tapping a weight or reps box selects its value so typing replaces it, and a number stays `secondaryText` only while it still matches what was filled in; a focused or changed number is `primaryText`.
 8. **Rest strip** under the set that started it: a `metricTimeContainer` rounded rectangle with
-   `IronRestRing`, the countdown and "Rest of 2:30", then four 44 pt neutral circular buttons:
+   `LiteweightRestRing`, the countdown and "Rest of 2:30", then four 44 pt neutral circular buttons:
    **−15 · pause/play · +15 · skip**. Tapping the countdown opens the **inline rest-length
    ruler** (backlog B3); the old dial modal is retired.
 9. **Add Exercises:** a prominent glass capsule button, then the bottom actions.
@@ -810,7 +810,7 @@ Top to bottom:
 ### 15.7 Workout complete (finish editor)
 Board: *Round 3 → Workout complete*. Order: header (accent circle icon, name, date range); a
 3 × 2 metrics grid (Duration, Volume, Sets, Exercises, Avg RPE, Records, each value in its metric
-color); **How hard was it?** (`EffortRatingGraph`); `IronSessionStrip`; records list
+color); **How hard was it?** (`EffortRatingGraph`); `LiteweightSessionStrip`; records list
 (hidden when empty); the "Update saved workout" toggle; the Apple Health row (state: will save,
 saved, waiting, imported, or not exported); notes and media; Save and Discard.
 
@@ -827,7 +827,7 @@ icon, name, badge and primary button on Health and Watch pages. Keep one short f
 "Import & Export" holds the Hevy CSV import, backups and exports.
 The "Imported Data" section follows Import: Hevy count/date range, "Replace with New Export…",
 and destructive "Remove Imported Workouts". Both operations confirm the affected count and
-explain that workouts logged in Iron are kept. Replacement chooses one workout CSV first;
+explain that workouts logged in liteweight are kept. Replacement chooses one workout CSV first;
 failure preserves the old history. Measurements have no import-source tag and are kept.
 
 ### 15.9 Watch, widgets and Live Activity
@@ -842,13 +842,13 @@ failure preserves the old history. Measurements have no import-source tag and ar
   updated deadline before returning; the countdown stays visible without replacement fades.
 
 ### 15.10 Apple Health rule (behavior, not visual)
-Only workouts **completed in Iron** (phone or Watch) are exported. Imported workouts (Hevy,
+Only workouts **completed in liteweight** (phone or Watch) are exported. Imported workouts (Hevy,
 `importSource != nil`) are **never** exported. UI copy must say so where relevant.
 
 ## 16. Theming a screen from a screenshot
 
 Use this procedure when you are given a screenshot of a screen that is not on-system (stock
-SwiftUI, legacy Iron, or Hevy-like) and asked to "theme it".
+SwiftUI, legacy liteweight, or Hevy-like) and asked to "theme it".
 
 **Step 1: inventory.** List every element in the screenshot and classify it: navigation chrome,
 section or card, row, number, label, unit, icon, button (primary, secondary or destructive),
@@ -861,15 +861,15 @@ input, chart, badge, empty state, progress.
 | A custom-colored nav bar, tab bar or sheet background | Delete the custom background; let the system render it |
 | Cards with borders or shadows stacked in a ScrollView | A `List(.insetGrouped)` with `Section`s, or one `surface` card (radius 22) when the content is a chart or graphic |
 | Each row in its own card | Rows inside one `Section` |
-| A plain number ("185", "1:30", "12") | `Text(...).font(.ironMetric(<style>))`, in its **metric color** if it measures sets, volume, time, effort, records or body; otherwise primary |
-| A number with its unit in the same font | Split it: number in `ironMetric`, unit `.footnote` `secondaryText`, baseline-aligned |
+| A plain number ("185", "1:30", "12") | `Text(...).font(.liteweightMetric(<style>))`, in its **metric color** if it measures sets, volume, time, effort, records or body; otherwise primary |
+| A number with its unit in the same font | Split it: number in `liteweightMetric`, unit `.footnote` `secondaryText`, baseline-aligned |
 | A row of 2–4 stats | Metric chips (§9.1) or metric columns, with values colored by metric |
 | "1h 2m, 14 sets, 9860 lb" as plain text | The metric line pattern (§9.2) |
 | Green on a "done" thing | Accent blue (completion) unless it is volume or success |
 | Any gray, black or white `Color` literal | The semantic role from §3.1 |
 | Rainbow muscle tags | Neutral tags (`secondarySystemFill` + `secondaryLabel`) |
-| A primary button (filled) | `.ironProminentGlassButtonStyle()` floating over content, or `.borderedProminent` in a list; capsule shape; one per surface |
-| A secondary button | `.bordered` or `.ironGlassButtonStyle()` |
+| A primary button (filled) | `.liteweightProminentGlassButtonStyle()` floating over content, or `.borderedProminent` in a list; capsule shape; one per surface |
+| A secondary button | `.bordered` or `.liteweightGlassButtonStyle()` |
 | A delete button | `Button(role: .destructive)` plus a confirmation dialog |
 | A custom segmented control or tabs | `Picker(.segmented)`, or §9.4 if it needs styling |
 | A custom slider or dial for a discrete scale | `EffortRatingGraph`-style rising bars (intensity) or a ruler (time) |
@@ -880,10 +880,10 @@ input, chart, badge, empty state, progress.
 | A spinner over the whole screen | Inline `ProgressView`, or the import overlay pattern for long work |
 | Hand-drawn body or muscle graphics | MuscleMap `BodyView` with the §3.4 style |
 | A modal popup with a single fact | A tooltip (§9.8) or `.popover` |
-| Rounded font numbers | SF Pro via `ironMetric` |
+| Rounded font numbers | SF Pro via `liteweightMetric` |
 | A corner radius that is not continuous, or random radii | `.continuous`, using 10, 12, 22 or capsule |
-| Animations with ad-hoc durations | `IronMotion` tokens plus `preferred(_:reduceMotion:)` |
-| Beeps | `IronSoundPlayer` cues |
+| Animations with ad-hoc durations | `LiteweightMotion` tokens plus `preferred(_:reduceMotion:)` |
+| Beeps | `LiteweightSoundPlayer` cues |
 
 **Step 3: hierarchy pass.** There is exactly one dominant action per screen. Titles are `.largeTitle`
 at the root and `.headline` inline. Metadata is `secondaryText`. Max two type sizes per row.
@@ -907,17 +907,17 @@ HStack { Text("Volume: 9860 lb").foregroundColor(.green); Text("Sets: 14") }
 
 // After
 HStack(spacing: 0) {
-    metric("Volume", value: "9,860", unit: "lb", tint: IronTheme.metricVolume)
-    metric("Sets", value: "14", unit: nil, tint: IronTheme.metricSets)
+    metric("Volume", value: "9,860", unit: "lb", tint: LiteweightTheme.metricVolume)
+    metric("Sets", value: "14", unit: nil, tint: LiteweightTheme.metricSets)
 }
 func metric(_ label: String, value: String, unit: String?, tint: Color) -> some View {
     VStack(alignment: .leading, spacing: 2) {
         HStack(alignment: .firstTextBaseline, spacing: 2) {
-            Text(value).font(.ironMetric(.title2)).foregroundStyle(tint)
+            Text(value).font(.liteweightMetric(.title2)).foregroundStyle(tint)
                 .contentTransition(.numericText())
-            if let unit { Text(unit).font(.footnote.weight(.semibold)).foregroundStyle(IronTheme.secondaryText) }
+            if let unit { Text(unit).font(.footnote.weight(.semibold)).foregroundStyle(LiteweightTheme.secondaryText) }
         }
-        Text(label).font(.footnote).foregroundStyle(IronTheme.secondaryText)
+        Text(label).font(.footnote).foregroundStyle(LiteweightTheme.secondaryText)
     }
     .frame(maxWidth: .infinity, alignment: .leading)
     .accessibilityElement(children: .combine)
@@ -930,16 +930,16 @@ Do not reintroduce any of these, or an equivalent under a new name.
 
 | Removed | Use instead |
 | --- | --- |
-| `IronCard`, `IronScreenBackground`, `IronModalBackground` | `List`/`Form` with `Section` |
-| `IronSectionTitle` | `Section` header |
-| `IronHairline` | `Divider` |
-| `IronDestinationHeader`, `ironDestinationScreen` | `.navigationTitle` + `ToolbarItem` |
-| `IronMetricTile` | Metric chips inside one aggregate surface |
-| `IronPrimary/Secondary/IconButtonStyle` | `.borderedProminent`, `.bordered`, glass styles |
-| `IronCompact/Choice/UtilityPillButtonStyle` | `Picker`, or `.bordered` + `.capsule` |
-| `IronPopupMenu`, `IronPopupAction` | `Menu`, `swipeActions`, `contextMenu` |
-| `IronEffortCarousel` | `EffortRatingGraph` |
-| `IronDateTimeButton` | `DatePicker` |
+| `LiteweightCard`, `LiteweightScreenBackground`, `LiteweightModalBackground` | `List`/`Form` with `Section` |
+| `LiteweightSectionTitle` | `Section` header |
+| `LiteweightHairline` | `Divider` |
+| `LiteweightDestinationHeader`, `liteweightDestinationScreen` | `.navigationTitle` + `ToolbarItem` |
+| `LiteweightMetricTile` | Metric chips inside one aggregate surface |
+| `LiteweightPrimary/Secondary/IconButtonStyle` | `.borderedProminent`, `.bordered`, glass styles |
+| `LiteweightCompact/Choice/UtilityPillButtonStyle` | `Picker`, or `.bordered` + `.capsule` |
+| `LiteweightPopupMenu`, `LiteweightPopupAction` | `Menu`, `swipeActions`, `contextMenu` |
+| `LiteweightEffortCarousel` | `EffortRatingGraph` |
+| `LiteweightDateTimeButton` | `DatePicker` |
 | `WatchCard`, `WatchActionButtonStyle` | watchOS `List`/`Section`, `.bordered` |
 | The rest-timer radial dial modal | The inline rest-length ruler (backlog B3) |
 | The RPE wheel sheet | Rising RPE bars (backlog B5) |
@@ -952,11 +952,11 @@ and gradients as decoration (gradients are allowed only inside effort bars).
 ## 18. Review checklist
 
 - [ ] Light and dark: no hard-coded colors, and every color maps to a §3 role.
-- [ ] Numbers use `ironMetric`; units are smaller and secondary; no rounded fonts.
+- [ ] Numbers use `liteweightMetric`; units are smaller and secondary; no rounded fonts.
 - [ ] One primary action per surface; 44 pt targets everywhere.
 - [ ] System chrome untouched (no toolbar or presentation backgrounds).
 - [ ] Glass only on floating layers.
-- [ ] Motion uses `IronMotion` plus `preferred`; Reduce Motion falls back to fades.
+- [ ] Motion uses `LiteweightMotion` plus `preferred`; Reduce Motion falls back to fades.
 - [ ] Haptics and sounds match §12.
 - [ ] Dynamic Type at AX sizes, VoiceOver labels and values, adjustable actions.
 - [ ] Vertical scrolling works when a drag starts on any custom control.
@@ -981,7 +981,7 @@ card collapse or custom drag gesture in the logger. Reordering preserves superse
 notes, timers and every set. VoiceOver exposes Move Up/Move Down actions. New sheets keep save
 errors visible and dismiss only after successful persistence.
 
-## 20. Light Live Activities (approved 2026-10-26)
+## 20. liteweight Live Activities (approved 2026-10-26)
 
 The owner selected **Set tile** after reviewing `light-live-activities.html`. Compact surfaces
 show cached exercise artwork and a blue square divided into set cells. Each cell fills as a set
@@ -996,16 +996,16 @@ Compact/minimal views do not show an elapsed or rest stopwatch; expanded views k
 controls available. The expanded iPhone island uses one full-width region below its sensor,
 with safe content margins, artwork/name/set position, tile, and rest controls.
 
-App branding is **Light**. Keep `IronTheme`, project/scheme names and compatibility identifiers
-as implementation names; do not rename persistence keys, app groups, Health export metadata,
-Watch companion IDs or backup formats as part of a display-name change. The owner will supply
-the new icon. Credit the original Iron project and Karim Abou Zeid in README and About.
+App branding is **liteweight**. The final rename (2026-11-07) uses `LiteweightTheme`,
+matching project/scheme names and the owner's new app ID. Data moves by backup and restore;
+pre-rename backups still restore. The owner will supply the new icon. Keep the upstream
+project and Karim Abou Zeid credit in README and About.
 
 
-## 21. Light on Apple Watch: exercise-first (approved 2026-10-26)
+## 21. liteweight on Apple Watch: exercise-first (approved 2026-10-26)
 
 Keep the OLED canvas black with native Watch navigation, lists, sheets and glass controls.
-Watch `IronTheme` resolves the same metric hues without UIKit; `Font.ironMetric` is the shared
+Watch `LiteweightTheme` resolves the same metric hues without UIKit; `Font.liteweightMetric` is the shared
 SF default-design numeric helper. Do not reintroduce rounded typography. Compact fields use
 10 pt continuous corners. Glass is for controls/navigation, not layered content cards.
 
@@ -1062,14 +1062,14 @@ when available. Never use this fallback for inactive sessions or to replace a kn
 These rules come from regressions on the owner's Watch. Every Watch UI change must follow them and **prove** them in its report.
 
 ### 22.0 Approved look first (owner, 2026-10-31; replaces the 2026-10-30 "native first" rule)
-A lane that took "native first" literally removed Log Set, gave vitals their own row and shrank every value. The owner rejected it: "you absolutely butchered the watch display". The look below is the design; don't restyle it. Reference screenshots: `~/.local/share/light/approved/`.
+A lane that took "native first" literally removed Log Set, gave vitals their own row and shrank every value. The owner rejected it: "you absolutely butchered the watch display". The look below is the design; don't restyle it. Reference screenshots: `~/.local/share/liteweight/approved/`.
 - **Native parts, only here:** top-corner ✓ on rating pages (`ToolbarItem` with a plain `Button` + SF Symbol, so the system draws standard glass), and the system back button where a page has no vitals.
 - **Vitals pill:** heart rate and calories share a 34 pt capsule in the toolbar, with width reserved for the clock and back control. It fits full readings, compact energy ("1.2k"), tighter readings, then heart rate alone; if none fits, it hides rather than crowding the clock. There is no KCAL caption; the flame carries that meaning. Pages with a trailing button hide vitals (`showsTrailingButton: true`).
 - **Running rest screen:** back button and vitals in the toolbar row. Below it, the ring and a column of `+15 · Skip · −15` `watchNeutralCapsule()` buttons (50 pt wide below 180 pt width, 60 pt otherwise), with the column on the right, or on the left when the Watch is worn on the right wrist, because the buttons belong on the side the other hand reaches from. The next set's full exercise name and weight × reps run across the bottom, on one line when they fit and two otherwise. The ring only holds REST and the time. At accessibility type sizes the screen keeps the stacked readout with a `−15 · Skip · +15` row (44 pt tall below 180 pt width, 52 pt otherwise).
 - **After Log Set:** RPE opens first when the set needs one, then slides to the rest screen on ✓ or after 5 s untouched. Rest's back button returns to RPE, which then waits for ✓. RPE opened by hand also waits for ✓. A set that already has an RPE skips this page, and new sets start unrated rather than copying an old rating. Only a manual action saves: ✓ saves the number shown and turning the wheel saves the new value. Opening RPE or letting the 5 s pass saves nothing, so the dimmed suggestion is never recorded on its own and that set stays unrated.
 - **Vitals live in the toolbar row** beside the back button (`watchVitalsInset`). Never a separate row of their own.
-- **Primary actions** are the big full-width capsule near the bottom: `watchGlassButton(prominent: true)` / `watchPrimaryCapsule()`, Liquid Glass tinted Iron blue. Never replace one with a small toolbar ✓ to save height. Never use native `.glassProminent` directly; it stops short of full width on larger Watches, so it won't line up with the tiles.
-- **Data surfaces** are flat and dark, like the iPhone logger: set tiles and controls 15 pt radius, cards and rows 13 pt, `IronTheme.platter` fills. No glass, gloss or gradients around data. Selection changes color only.
+- **Primary actions** are the big full-width capsule near the bottom: `watchGlassButton(prominent: true)` / `watchPrimaryCapsule()`, Liquid Glass tinted liteweight blue. Never replace one with a small toolbar ✓ to save height. Never use native `.glassProminent` directly; it stops short of full width on larger Watches, so it won't line up with the tiles.
+- **Data surfaces** are flat and dark, like the iPhone logger: set tiles and controls 15 pt radius, cards and rows 13 pt, `LiteweightTheme.platter` fills. No glass, gloss or gradients around data. Selection changes color only.
 - **Value tiles** use one fixed font size per row, set from the width that fits "188.5", so turning the Crown never resizes the number. Weight/reps split 54/46 (50/50 below 180 pt width).
 - **Previous set** is read-only and always on the first screen; never tappable.
 - **Scrolling lists** (`WatchContentList`) are flat and full width, with no carousel scaling, even 4 pt spacing and bottom padding so the last row scrolls clear of the rounded corners.
@@ -1079,8 +1079,8 @@ A lane that took "native first" literally removed Log Set, gave vitals their own
 - **Notes** are text only. Rows say "Add Note" (accent) or preview two lines of the note, and an empty plan note has no row. On the note page the whole box is the control: a tap opens the system text input with the note filled in, Done saves, Cancel changes nothing. No Edit, Dictate, Save or Cancel buttons; Clear shows only when there is a note.
 - **No visible "Test mode" text** on the Watch.
 - **Secondary/destructive actions:** `WatchSecondaryButtonStyle` uses native Liquid Glass on watchOS 26, with a neutral-fill fallback. `WatchDestructiveButtonStyle` gives destructive confirmation a full-width red glass capsule with intrinsic height; use `watchGlassButton(destructive: true)`.
-- **Controls entrance:** selecting the controls page animates metrics, then Pause/Exercise/Discard/Finish from the clock bar at 0.6 scale and zero opacity, using `IronMotion.snappy` with 40 ms stagger. It restarts on page selection, since TabView pre-renders; Reduce Motion uses a fade.
-- **Empty/completed workout actions:** Add Exercise and Finish have an explicit `IronTheme.controlHeight + 8` height (52 pt) so the prominent style cannot stretch in the unbounded layout.
+- **Controls entrance:** selecting the controls page animates metrics, then Pause/Exercise/Discard/Finish from the clock bar at 0.6 scale and zero opacity, using `LiteweightMotion.snappy` with 40 ms stagger. It restarts on page selection, since TabView pre-renders; Reduce Motion uses a fade.
+- **Empty/completed workout actions:** Add Exercise and Finish have an explicit `LiteweightTheme.controlHeight + 8` height (52 pt) so the prominent style cannot stretch in the unbounded layout.
 
 ### 22.1 Fill the screen; design boldly
 - The first screen of every Watch page uses the whole display: no empty bands and no floating controls.
@@ -1099,7 +1099,7 @@ A lane that took "native first" literally removed Log Set, gave vitals their own
 - The Digital Crown must be focused on the value when the page appears (`.focusable()`, `@FocusState` set in `onAppear` and again in `.task`). If it isn't, the Crown scrolls the page on device even though the simulator looks fine.
 
 ### 22.4 Don't regress verified screens
-- Approved screens: the Now page (Ultra), the rest screen, the set editor, the one-screen RPE and effort pages, the notes page. Reference screenshots live in `~/.local/share/light/approved/`.
+- Approved screens: the Now page (Ultra), the rest screen, the set editor, the one-screen RPE and effort pages, the notes page. Reference screenshots live in `~/.local/share/liteweight/approved/`.
 - A lane that touches a file containing an approved screen must leave that screen pixel-equivalent unless the brief asks to change it. It states in its report which approved screens it affected.
 - When fixing one screen, never change shared components (tiles, `WatchFirstScreenLayout`, the rating layout, safe-area modifiers) without listing every screen that uses them.
 
@@ -1116,7 +1116,7 @@ A lane that took "native first" literally removed Log Set, gave vitals their own
 
 
 ### 22.7 Debug screenshot routes
-Fixtures are gated by `DEBUG && targetEnvironment(simulator)` in `IronApp.swift`. Launch with `--light-watch-demo <route>`; `--hold-watch-flow` holds automatic transitions, and `--demo-weight 135.5` seeds a weight for checking tile fit.
+Fixtures are gated by `DEBUG && targetEnvironment(simulator)` in `LiteweightApp.swift`. Launch with `--liteweight-watch-demo <route>`; `--hold-watch-flow` holds automatic transitions, and `--demo-weight 135.5` seeds a weight for checking tile fit.
 
 Routes: `home`, `active`, `now`, `controls`, `exercises`, `exercise`, `set`, `options`, `catalog`, `tracking-type`, `set-type`, `superset`, `notes`, `plates`, `rest`, `rest-picker`, `warmup`, `rpe`, `rpe-manual`, `rpe-auto`, `effort`, `finish`, `discard`, `saved`, `saved-detail`, `saved-editor`, `history`, `history-detail`, `summary`, `empty`, `complete`, `after-log`, `after-rest`, `after-final-rest`.
 

@@ -137,7 +137,7 @@ extension WorkoutDataStorage {
 
         let fileManager = FileManager.default
         let migrationDirectory = storeURL.deletingLastPathComponent()
-            .appendingPathComponent(".iron-migration-\(UUID().uuidString)", isDirectory: true)
+            .appendingPathComponent(".liteweight-migration-\(UUID().uuidString)", isDirectory: true)
         try fileManager.createDirectory(at: migrationDirectory, withIntermediateDirectories: true)
         defer { try? fileManager.removeItem(at: migrationDirectory) }
 

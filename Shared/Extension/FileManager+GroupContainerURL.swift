@@ -1,6 +1,6 @@
 //
 //  FileManager+GroupContainerURL.swift
-//  Iron
+//  liteweight
 //
 //  Created by Karim Abou Zeid on 06.12.19.
 //  Copyright © 2019 Karim Abou Zeid Software. All rights reserved.
@@ -10,12 +10,10 @@ import Foundation
 
 extension FileManager {
     static let appGroupIdentifier: String = {
-        guard let identifier = Bundle.main.object(forInfoDictionaryKey: "LightAppGroupIdentifier") as? String,
+        guard let identifier = Bundle.main.object(forInfoDictionaryKey: "LiteweightAppGroupIdentifier") as? String,
               !identifier.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
               !identifier.contains("$(") else {
-            // The old-ID app must retain both its defaults suite and its exact
-            // DEBUG fallback directory, where its on-device history lives.
-            return "group.com.kabouzeid.Iron"
+            return "group.me.joshpatra.liteweight"
         }
         return identifier
     }()

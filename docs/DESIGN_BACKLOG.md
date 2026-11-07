@@ -1,8 +1,8 @@
-# Iron Design Backlog: build specs
+# liteweight Design Backlog: build specs
 
 **Latest owner decision (2026-10-31):** correct the Watch retheme to match the phone, keep
 Previous visible/read-only, and give reps more width. Finish simulator verification while
-sharing resources with Overland, then install on the owner's phone and Watch for direct testing.
+sharing resources with WhereWolf, then install on the owner's phone and Watch for direct testing.
 The earlier October 26 stop is superseded by the owner's later requests. Read HANDOFF.md's
 active correction and DESIGN_SYSTEM.md §22 before using the historical specifications below.
 
@@ -24,12 +24,12 @@ lanes can run at the same time. A lane must **not** edit files owned by another 
 
 | Lane | Items, in order | Owns these files (exclusive) |
 | --- | --- | --- |
-| **A: Live workout** | B1 → B4 → B5 → B3 → B2 | `Iron/UI/Workout/CurrentWorkoutView.swift`, `Iron/UI/Workout/RestTimerView.swift`, `Iron/UI/Workout/WorkoutSetEditor.swift`, `Iron/UI/SwiftUISupport.swift`, `Shared/UI/SwiftUI/IronStyle.swift`, new `Iron/UI/Components/RestLengthRuler.swift`, `Light.xcodeproj/project.pbxproj` |
-| **B: Exercise detail** | B6 | `Iron/UI/Exercises/ExerciseDetailView.swift`, `Iron/UI/Exercises/ExerciseStatisticsView.swift`, `Iron/UI/Exercises/ExerciseHistoryView.swift` |
-| **C: Workout tab and Home** | B8 → B9 | `Iron/UI/Workout/StartWorkoutView.swift`, `Iron/UI/History/WorkoutDetailView.swift`, `Iron/UI/Feed/FeedView.swift` |
+| **A: Live workout** | B1 → B4 → B5 → B3 → B2 | `liteweight/UI/Workout/CurrentWorkoutView.swift`, `liteweight/UI/Workout/RestTimerView.swift`, `liteweight/UI/Workout/WorkoutSetEditor.swift`, `liteweight/UI/SwiftUISupport.swift`, `Shared/UI/SwiftUI/LiteweightStyle.swift`, new `liteweight/UI/Components/RestLengthRuler.swift`, `liteweight.xcodeproj/project.pbxproj` |
+| **B: Exercise detail** | B6 | `liteweight/UI/Exercises/ExerciseDetailView.swift`, `liteweight/UI/Exercises/ExerciseStatisticsView.swift`, `liteweight/UI/Exercises/ExerciseHistoryView.swift` |
+| **C: Workout tab and Home** | B8 → B9 | `liteweight/UI/Workout/StartWorkoutView.swift`, `liteweight/UI/History/WorkoutDetailView.swift`, `liteweight/UI/Feed/FeedView.swift` |
 | **D: Polish** (after A–C merge) | B7, B10 | Whatever those items name |
 
-Lanes B and C may **read** but not edit `SwiftUISupport.swift` and `IronStyle.swift`. If a lane
+Lanes B and C may **read** but not edit `SwiftUISupport.swift` and `LiteweightStyle.swift`. If a lane
 needs a new token, it uses existing ones and leaves a `// TODO(design-token)` comment. Only lane A
 adds files to the Xcode project.
 
@@ -38,9 +38,9 @@ adds files to the Xcode project.
 - **Do not** commit, push, stash, reset or checkout without an explicit owner request.
 - **Do not** touch `reference-material/`.
 - **Apple Health:** never export imported workouts (`Workout.importSource != nil`). Only workouts
-  completed in Iron are exported. Do not change `HealthManager` behavior.
+  completed in liteweight are exported. Do not change `HealthManager` behavior.
 - No new package dependencies. A new Swift file must be registered in
-  `Light.xcodeproj/project.pbxproj` for the correct target(s).
+  `liteweight.xcodeproj/project.pbxproj` for the correct target(s).
 - Preserve every existing action, persistence path, accessibility label and the Watch and Live
   Activity sync calls. Visual changes must not change data behavior.
 - Follow `DESIGN_SYSTEM.md` §16 and §18 for anything this file does not spell out.
@@ -50,13 +50,13 @@ adds files to the Xcode project.
 Offline simulator build (package checkouts are already cloned):
 
 ```bash
-xcodebuild -project Light.xcodeproj -scheme Iron -destination 'generic/platform=iOS Simulator' \
-  -derivedDataPath /tmp/iron-<lane>-dd -clonedSourcePackagesDirPath /tmp/iron-spm \
+xcodebuild -project liteweight.xcodeproj -scheme liteweight -destination 'generic/platform=iOS Simulator' \
+  -derivedDataPath /tmp/liteweight-<lane>-dd -clonedSourcePackagesDirPath ~/.local/share/liteweight/spm \
   -disableAutomaticPackageResolution build CODE_SIGNING_ALLOWED=NO 2>&1 \
   | grep -E "error:|BUILD (SUCCEEDED|FAILED)"
 ```
 
-If `/tmp/iron-spm` is missing, copy it from an earlier derived-data `SourcePackages` folder or
+If `~/.local/share/liteweight/spm` is missing, copy it from an earlier derived-data `SourcePackages` folder or
 resolve once with network access. Codex's `workspace-write` sandbox cannot run `xcodebuild`
 (`sandbox_apply: Operation not permitted`). Run Codex with `-s danger-full-access` when builds
 are needed, or let the orchestrator build.
@@ -64,14 +64,14 @@ are needed, or let the orchestrator build.
 Install on the owner's iPhone (the orchestrator does this; the phone must be unlocked):
 
 ```bash
-xcodebuild -project Light.xcodeproj -scheme Iron -configuration Debug \
-  -destination 'id=00008150-001914903E69401C' -derivedDataPath /tmp/iron-device-dd \
-  -clonedSourcePackagesDirPath /tmp/iron-spm -disableAutomaticPackageResolution \
+xcodebuild -project liteweight.xcodeproj -scheme liteweight -configuration Debug \
+  -destination 'id=00008150-001914903E69401C' -derivedDataPath /tmp/liteweight-device-dd \
+  -clonedSourcePackagesDirPath ~/.local/share/liteweight/spm -disableAutomaticPackageResolution \
   -allowProvisioningUpdates build
 xcrun devicectl device install app --device 00008150-001914903E69401C \
-  /tmp/iron-device-dd/Build/Products/Debug-iphoneos/Iron.app
+  /tmp/liteweight-device-dd/Build/Products/Debug-iphoneos/liteweight.app
 xcrun devicectl device process launch --device 00008150-001914903E69401C \
-  com.joshpatra.IronDev
+  me.joshpatra.liteweight
 ```
 
 Ask the owner before booting a simulator, because other apps on the Mac may be using the CPU.
@@ -110,7 +110,7 @@ remains tappable.
 3. While the row is open (`swipeOffset < 0`):
    - every control in the row (check, fields, steppers, set-type menu, RPE pill) is
      non-interactive (`allowsHitTesting(false)` on the row content);
-   - a transparent tap catcher over the row closes it (`swipeOffset = 0`, `IronMotion.snappy`);
+   - a transparent tap catcher over the row closes it (`swipeOffset = 0`, `LiteweightMotion.snappy`);
    - the open position is `−(deleteActionWidth + 8 + completedChromeExpansion)`, so the full
      action is visible beside the row.
 4. Keep everything else unchanged: the full-swipe delete threshold, the horizontal-only
@@ -138,14 +138,14 @@ remains even above the liquid glass time duration thingy when I collapse."
    **directly below `workoutTopBar`** and **outside** the collapsible `sessionHeader`, so it is
    visible in both the expanded and collapsed states. In the collapsed state the glass summary
    pill sits *below* the bar.
-2. Geometry: horizontal padding `IronTheme.horizontalPadding`, 2 pt top and 8 pt bottom
+2. Geometry: horizontal padding `LiteweightTheme.horizontalPadding`, 2 pt top and 8 pt bottom
    padding, a **6 pt tall** capsule track in `tertiaryFill`.
 3. Segments: one per exercise in workout order, width proportional to that exercise's total set
    count (completed plus planned), with **2 pt gaps** that show the background. Each segment is
    its own small capsule.
 4. Fill: within each segment, completed sets fill left to right in **accent**. Completed warm-up
    sets fill in `metricSets` at 0.7 opacity; drop and failure sets use their B4 badge colors at
-   0.7. Animate widths with `IronMotion.snappy`.
+   0.7. Animate widths with `LiteweightMotion.snappy`.
 5. Segments use fill only, with no inner stroke. The active exercise is communicated by the
    focused editor and accessibility summary. The strip shares the unified toolbar surface.
 6. Tapping a segment scrolls to that exercise, through the existing `scrollTarget` and
@@ -172,7 +172,7 @@ timer up top right of the exercise", "I'm ok with the rest length ruler! That wi
 the rest timer modal."
 
 ### B3.1 The rest strip stays as it is
-Keep `activeRestTimerStrip` exactly as it is: `metricTimeContainer` background, `IronRestRing`,
+Keep `activeRestTimerStrip` exactly as it is: `metricTimeContainer` background, `LiteweightRestRing`,
 countdown and "Rest of 2:30", and the four 44 pt neutral controls **−15 · pause/play · +15 ·
 skip**. The only behavior change: tapping the readout (ring plus countdown) **toggles the inline
 ruler (B3.3)** instead of setting `activeSheet = .restTimer`. Update its accessibility hint to
@@ -181,47 +181,47 @@ ruler (B3.3)** instead of setting `activeSheet = .restTimer`. Update its accessi
 ### B3.2 Rest chip at the top right of each exercise card
 In the exercise card header, between the title block and the ⋯ menu:
 - **Idle** (this exercise has no running rest): a 32 pt capsule on `metricTimeContainer` holding
-  the `timer` symbol (13 pt semibold) and the exercise's rest length in `ironMetric(.footnote,
+  the `timer` symbol (13 pt semibold) and the exercise's rest length in `liteweightMetric(.footnote,
   weight: .bold)`, all in `metricTime`. The length is `workoutExercise.restTimerDurationValue`,
   or the app's default rest when that is nil. Tap it to open the inline ruler (B3.3) under the
   exercise header, editing **this exercise's default rest**
   (`workoutExercise.restTimerDurationValue`; persist with the existing save path).
 - **Running** (this exercise's rest is active): the same capsule shows a 16 pt mini
-  `IronRestRing` and the live countdown (`numericText(countsDown: true)`). When paused, the tint
+  `LiteweightRestRing` and the live countdown (`numericText(countsDown: true)`). When paused, the tint
   is `warning`, matching `restTimerTint`. Tap it to scroll the strip into view and briefly pulse
   it (scale 1.03, `snappy`).
 - Hide the chip for exercises whose sets are all duration sets with no rest configured.
 
 ### B3.3 `RestLengthRuler`: the new reusable component
-Create `Iron/UI/Components/RestLengthRuler.swift` and register it in the Iron target.
+Create `liteweight/UI/Components/RestLengthRuler.swift` and register it in the liteweight target.
 
 ```
 ┌──────────────────────────────────────────┐
-│ Rest length                        2:30   │  footnote semibold secondary / ironMetric(.title3) metricTime
+│ Rest length                        2:30   │  footnote semibold secondary / liteweightMetric(.title3) metricTime
 │ ▮ | | | ▮ | | | ▮ ┃ | | ▮ | | | ▮ | | | ▮ │  ticks + indicator
 │ 0:30 1:00     2:00    3:00   4:00   5:00  │  caption2 secondary
 │ ( 1:00 )( 1:30 )( 2:00 )( 2:30 )( 3:00 )  │  presets
 └──────────────────────────────────────────┘
 ```
 
-- Container: `IronTheme.raisedSurface`, `RoundedRectangle(cornerRadius: 18, style: .continuous)`,
+- Container: `LiteweightTheme.raisedSurface`, `RoundedRectangle(cornerRadius: 18, style: .continuous)`,
   padding 12 vertical and 14 horizontal, 10 pt vertical spacing.
 - Range **0:30–5:00 in 15 s steps** (19 ticks), evenly spaced. Each tick is 2 pt wide with a
   1 pt radius. Full-minute ticks are 26 pt tall, the others 14 pt, bottom-aligned in a 26 pt
   band. Ticks at or below the value are `metricTime`; ticks above it are `tertiaryFill`.
 - Indicator: a 4 × 32 pt `metricTime` capsule. During a drag it tracks the touch continuously
   without a chasing spring; the duration and notch feedback still snap to 15 s. On release
-  it settles to the chosen tick with `IronMotion.snappy` (respect Reduce Motion).
+  it settles to the chosen tick with `LiteweightMotion.snappy` (respect Reduce Motion).
 - Labels 0:30, 1:00, 2:00, 3:00, 4:00 and 5:00, positioned under their ticks.
 - Interaction: a horizontal drag anywhere on the ruler sets the value to the nearest step, and a
-  tap jumps to it. Each step change plays a `.selection` haptic and `IronSoundPlayer.tick`. Only
+  tap jumps to it. Each step change plays a `.selection` haptic and `LiteweightSoundPlayer.tick`. Only
   **horizontal intent** starts a drag (reuse the `HorizontalSwipeRecognizer` approach on iOS 18
   or later; on iOS 17, `DragGesture(minimumDistance: 8)` with an `abs(dx) > abs(dy)` check), so
   vertical drags scroll the logger.
 - Presets: five equal capsules, 34 pt tall: 1:00, 1:30, 2:00, 2:30, 3:00. The selected one is
   filled `metricTime` with **black** text in dark mode and **white** in light mode
   (`Color(.systemBackground)` inverted). The others are `tertiaryFill` with primary text.
-  `ironMetric(.footnote, weight: .bold)`.
+  `liteweightMetric(.footnote, weight: .bold)`.
 - API: `RestLengthRuler(value: Binding<TimeInterval>, range: 30...300, step: 15, onCommit:
   (TimeInterval) -> Void)`. It scrubs locally and calls `onCommit` **on release** (and on a
   preset tap). Notification, Watch and Live Activity updates happen in `onCommit` only, so
@@ -231,7 +231,7 @@ Create `Iron/UI/Components/RestLengthRuler.swift` and register it in the Iron ta
 
 ### B3.4 Where the ruler appears
 1. **Running rest:** inline, directly under the rest strip, inserted with `.move(edge:
-   .top).combined(with: .opacity)` and `IronMotion.collapse`. Changing the value changes the
+   .top).combined(with: .opacity)` and `LiteweightMotion.collapse`. Changing the value changes the
    **running timer's total**. It cannot go below elapsed + 15 s; clamp it and play `.error`
    feedback at the clamp. It collapses automatically when the rest ends or is skipped.
 2. **Exercise default rest** (B3.2 idle chip): inline under the exercise header. A second tap
@@ -241,7 +241,7 @@ Create `Iron/UI/Components/RestLengthRuler.swift` and register it in the Iron ta
    dial with `RestLengthRuler` plus a prominent "Start Rest" capsule button. Keep the sheet at
    `.height(~320)` with the system drag indicator.
 4. Remove the dial (`activeSheet = .restTimer` from the strip, and the radial editor views)
-   once nothing references them. Keep `IronDurationPickerSheet` for duration *sets*; that is a
+   once nothing references them. Keep `LiteweightDurationPickerSheet` for duration *sets*; that is a
    different feature.
 
 **Acceptance:**
@@ -258,22 +258,22 @@ Create `Iron/UI/Components/RestLengthRuler.swift` and register it in the Iron ta
 **Owner:** "I like filling in the set according to set type, but I want softer colors for
 that." Normal sets keep today's blue exactly.
 
-1. Add tokens to `IronStyle.swift`:
+1. Add tokens to `LiteweightStyle.swift`:
    - `setWarmUpTint = systemOrange`, `setDropTint = systemIndigo`, `setFailureTint = systemRed`;
    - container variants at 0.18 / 0.18 / 0.16 for badges;
-   - `IronTheme.setFill(for tag: WorkoutSetTag?) -> (tint: Color, settled: Double, peak: Double)`:
+   - `LiteweightTheme.setFill(for tag: WorkoutSetTag?) -> (tint: Color, settled: Double, peak: Double)`:
      - normal (nil): accent, settled 0.12, peak 0.24 (**unchanged**);
      - warm-up: orange, 0.14, 0.22;
      - drop: indigo, 0.14, 0.22;
      - failure: red, 0.12, 0.20.
-2. Extend `ironSetCompletion(isComplete:feedbackEnabled:tint:settledOpacity:peakOpacity:)`, with
+2. Extend `liteweightSetCompletion(isComplete:feedbackEnabled:tint:settledOpacity:peakOpacity:)`, with
    defaults equal to today's values so existing call sites do not change, and pass the set's
    tag values from `InlineWorkoutSetRow`.
 3. Badges: the letter W/D/F in the tint color on its container; normal sets keep the accent
    badge.
 4. Values on completed set-type rows stay **primary text**. Never white on a soft fill.
 5. Upcoming and current rows are unchanged. Only completed rows are tinted by type.
-6. `IronSessionStrip` kinds stay as they are (warm-up, normal, record).
+6. `LiteweightSessionStrip` kinds stay as they are (warm-up, normal, record).
 
 **Acceptance:** at a glance, warm-up, drop and failure rows read as gently tinted; normal rows
 look exactly as they do today; contrast passes in light and dark.
@@ -286,22 +286,22 @@ look exactly as they do today; contrast passes in light and dark.
 
 `RPE.allowedValues` is **5.0 … 10.0 in 0.5 steps** (11 values).
 
-1. Generalize `EffortRatingGraph` into `IronIntensityGraph<Value: Hashable>(values: [Value],
+1. Generalize `EffortRatingGraph` into `LiteweightIntensityGraph<Value: Hashable>(values: [Value],
    selection: Binding<Value?>, color: Color, label: (Value) -> String)`. Keep the rising-capsule
    geometry (height ratio 0.18 → 1.0, 5 pt spacing, active `color.gradient`, inactive
    `quaternarySystemFill`, the selected bar scaled 1.06 with a glow), tap and drag selection,
    the selection haptic and the adjustable action. Re-express `EffortRatingGraph` on top of it,
    so the session-effort UI is unchanged.
-2. New `RPEPickerSheet` content inside `IronUtilitySheet(title: "Set effort", subtitle: "Rating
+2. New `RPEPickerSheet` content inside `LiteweightUtilitySheet(title: "Set effort", subtitle: "Rating
    of perceived exertion", systemImage: "gauge.with.dots.needle.50percent")`:
    - **Readout**, centered: "RPE" `.headline` `secondaryText`, then the value in
-     `ironMetric(.largeTitle)` `metricEffort` with `numericText()` ("8.5"), then the
+     `liteweightMetric(.largeTitle)` `metricEffort` with `numericText()` ("8.5"), then the
      description line `RPE.title(value)` (for example "1–2 reps left") in `.subheadline`
      `secondaryText`. If nothing is selected, show "—" and "Drag to rate this set".
-   - **Graph:** `IronIntensityGraph` over the 11 values, 120 pt tall, in `metricEffort`. Under
+   - **Graph:** `LiteweightIntensityGraph` over the 11 values, 120 pt tall, in `metricEffort`. Under
      the bars, label whole numbers only (5 6 7 8 9 10) in `.caption2` `secondaryText`, aligned
      under their bars.
-   - **Primary button:** full-width 50 pt capsule `.ironProminentGlassButtonStyle()`, "Set RPE
+   - **Primary button:** full-width 50 pt capsule `.liteweightProminentGlassButtonStyle()`, "Set RPE
      8.5", disabled until a value is chosen.
    - **Secondary:** if the set already has an RPE, show a plain "Clear RPE" button in `danger`
      below it.
@@ -333,7 +333,7 @@ match this spec.
   with a close button. Hide the badge when there is no animated media.
 
 ### B6.2 Progress card
-`IronTheme.surface`, `heroCornerRadius`, padding 12 / 16 / 14, 12 pt vertical spacing. It sits
+`LiteweightTheme.surface`, `heroCornerRadius`, padding 12 / 16 / 14, 12 pt vertical spacing. It sits
 in a List row with clear background and zero insets apart from the 16 pt gutter, or in a
 `ScrollView` (see B6.5).
 
@@ -343,11 +343,11 @@ in a List row with clear background and zero insets apart from the 16 pt gutter,
    choice per app (`@AppStorage("exerciseDetail.metric")`).
 2. **Headline row** (1RM, Weight and Volume):
    - On the left, a label in `.footnote` `secondaryText` ("Estimated 1RM" / "Top weight" /
-     "Volume per session") above a value in `ironMetric(.largeTitle)` plus the unit in
+     "Volume per session") above a value in `liteweightMetric(.largeTitle)` plus the unit in
      `.headline.weight(.semibold)`. The value is accent for 1RM and Weight and `metricVolume`
      for Volume. It shows the **latest** value in range, or the scrubbed session.
    - On the right, aligned to the bottom: the delta from the first to the last session in range,
-     as `arrow.up` 11 pt plus "18 lb" in `ironMetric(.subheadline, weight: .bold)`
+     as `arrow.up` 11 pt plus "18 lb" in `liteweightMetric(.subheadline, weight: .bold)`
      (`metricVolume` when up, `secondaryText` when flat or down), and below it a `.caption`
      `secondaryText` caption: "in 1 month", "in 3 months", "in 6 months", "in a year" or
      "all time".
@@ -367,7 +367,7 @@ in a List row with clear background and zero insets apart from the 16 pt gutter,
    - the **5 most recent sessions**, each a `NavigationLink` to that workout's detail:
      - line 1: the date ("Today", "Sat, Oct 17") in `.callout.weight(.semibold)`, then " ·
        Push A" (workout title) in `.footnote` `secondaryText`; on the right, the session's best
-       e1RM in `ironMetric(.callout, weight: .bold)`, accent, or `metricRecord` if that session
+       e1RM in `liteweightMetric(.callout, weight: .bold)`, accent, or `metricRecord` if that session
        set a PR, plus "lb";
      - line 2: set chips (§9.3) that wrap, using a small flow `Layout`: warm-ups in sets colors,
        the PR set with the trophy treatment, other sets on `tertiaryFill`;
@@ -378,7 +378,7 @@ in a List row with clear background and zero insets apart from the 16 pt gutter,
    `chart.xyaxis.line` symbol (28 pt, `secondaryText`), "No sessions yet" (`.headline`) and
    "Log this exercise in a workout and your progress will chart here." (`.subheadline`
    `secondaryText`).
-7. Motion: switching segments cross-fades the content area (`IronMotion.snappy`; fade under
+7. Motion: switching segments cross-fades the content area (`LiteweightMotion.snappy`; fade under
    Reduce Motion) and the headline digits roll (`numericText`). Changing the range animates the
    chart marks.
 
@@ -399,7 +399,7 @@ Same card style. Contents, top to bottom:
    - Unhighlighted muscles produce nothing.
    - Implementation: read `MuscleMap/Views/BodyView.swift` (`onMuscleLongPressed(duration:)`,
      `onMuscleDragged`, `tooltip`), `InteractiveBodyOverlay.swift` and `MuscleTooltip.swift` in
-     the package checkout (`/tmp/iron-spm/checkouts/MuscleMap/Sources/MuscleMap`). Prefer the
+     the package checkout (`~/.local/share/liteweight/spm/checkouts/MuscleMap/Sources/MuscleMap`). Prefer the
      package's long-press plus drag. If its drag recognizer would block vertical scrolling, gate
      the drag behind the long press:
      `LongPressGesture(minimumDuration: 0.25).sequenced(before: DragGesture(minimumDistance: 0))`
@@ -456,7 +456,7 @@ exercises you have done show a trailing `.caption` `secondaryText` relative date
 wants to redo the same workout they did before they can." Repeat already exists, but only under
 History → workout → ⋯ → Repeat (`WorkoutDetailView.repeatWorkout(blank:)`).
 
-`StartWorkoutView` (`Iron/UI/Workout/StartWorkoutView.swift`), top to bottom, as a
+`StartWorkoutView` (`liteweight/UI/Workout/StartWorkoutView.swift`), top to bottom, as a
 `List(.insetGrouped)` with a large title "Workout":
 
 1. **Start card** (first section, one row, custom content):
@@ -464,7 +464,7 @@ History → workout → ⋯ → Repeat (`WorkoutDetailView.repeatWorkout(blank:)
      - a 44 pt accent soft circle with `dumbbell.fill` (accent), "Empty Workout"
        (`.headline`) and "Add exercises as you go" (`.subheadline` `secondaryText`);
      - below that, a full-width 50 pt capsule "Start Workout"
-       (`.ironProminentGlassButtonStyle()`) with `play.fill`.
+       (`.liteweightProminentGlassButtonStyle()`) with `play.fill`.
    - **Active workout:** the title is the active workout's name, with the metric line
      (§9.2: elapsed · sets · volume) and a "Resume Workout" button in the same position.
 2. **Recent Workouts** section (hide it if there is no history). Header "Recent Workouts" with a
@@ -472,7 +472,7 @@ History → workout → ⋯ → Repeat (`WorkoutDetailView.repeatWorkout(blank:)
    recent completed workouts** (any source, imports included), each row:
    - title (`.headline`); "Wed, Oct 14 · Chest, Triceps" (date per §13, then the top 2–3 muscle
      groups) in `.subheadline` `secondaryText`; the metric line (time · sets · volume); a
-     compact `IronSessionStrip` is optional, if it fits without crowding;
+     compact `LiteweightSessionStrip` is optional, if it fits without crowding;
    - trailing: a **Repeat** button, 36 pt circle, `.bordered` / glass, `arrow.clockwise` in
      accent, accessibility label "Repeat Push A";
    - row tap opens `WorkoutDetailView`; `contextMenu` and long press offer Repeat, Repeat with
@@ -490,7 +490,7 @@ History → workout → ⋯ → Repeat (`WorkoutDetailView.repeatWorkout(blank:)
      today. Toolbar "+" menu: New Workout and Import Workout.
    - Empty: a `ContentUnavailableView`, "No saved workouts", "Save a workout for push/pull/legs,
      upper/lower, or any split you train.", plus a "New Workout" button.
-4. Entrance: rows use `ironStaggeredEntrance(index:)` on first appearance only.
+4. Entrance: rows use `liteweightStaggeredEntrance(index:)` on first appearance only.
 
 **Acceptance:** the tab is never visually empty for someone with history; one tap on Repeat
 starts the same workout; Repeat from History still works.
@@ -518,7 +518,7 @@ every element and build what is missing:
    `tertiaryFill` with `secondaryText`; today gets a 1.5 pt accent ring if untrained.
 5. Keep Recent Training, Muscle Focus, Body and Pinned Charts, in today's order.
 
-**Acceptance:** Home matches the board in both light and dark; all numbers use `ironMetric`
+**Acceptance:** Home matches the board in both light and dark; all numbers use `liteweightMetric`
 and metric colors.
 
 ---
@@ -530,7 +530,7 @@ and metric colors.
    `.navigationTransition(.zoom(sourceID:in:))` on the presented logger), with a fade under
    Reduce Motion. Minimizing reverses it.
 2. **Exercises library:** recency reorders use the default List animation; the search results
-   transition is `IronMotion.fade`.
+   transition is `LiteweightMotion.fade`.
 3. **Settings:** stock. No custom motion.
 
 ---
@@ -541,7 +541,7 @@ and metric colors.
 | --- | --- |
 | 2026-10-17 | Apple-native direction; keep system blue; one color per metric |
 | 2026-10-18 | SF Pro bold fixed-width numerals, never rounded; Apple-quality motion everywhere; original sounds instead of beeps |
-| 2026-10-19 | Health: export only Iron-completed workouts, never imports |
+| 2026-10-19 | Health: export only liteweight-completed workouts, never imports |
 | 2026-10-19 | Logger B focused current-set editor; keep today's blue completed fill |
 | 2026-10-21 | Exercises ordered by recency everywhere, search included; history imports count |
 | 2026-10-21 | Exercise detail: progress inline with metric segments and range; target on the live-workout muscle map; tooltip, not modal |
@@ -550,12 +550,12 @@ and metric colors.
 | 2026-10-22 | Workout tab gets Recent Workouts with Repeat; finish the Home redesign; remake the RPE picker; fix the swipe overlap |
 | 2026-10-25 | Approved the native Imported Data section after Import, with Hevy count/date range, replacement picker then confirmation, destructive removal confirmation, progress overlay, and no measurement removal |
 | 2026-10-25 | Approved local vendoring of pinned MIT MuscleMap 1.6.4 and a small public hit-test facade for hold-and-scrub |
-| 2026-10-25 | Approved simulator QA, including one additional Iron simulator; subsequently authorized direct coordination and trading the simulator/build slot with the Overland chat |
+| 2026-10-25 | Approved simulator QA, including one additional liteweight simulator; subsequently authorized direct coordination and trading the simulator/build slot with the WhereWolf chat |
 
 ### Owner follow-up, 2026-10-25 morning
 
 - Remove the blue haze from Home's greeting/week card: use an opaque neutral surface.
-- Apply Iron styling to the exercise library: headline names, neutral metadata capsules.
+- Apply liteweight styling to the exercise library: headline names, neutral metadata capsules.
 - Exercise detail: one title in the page header, and custom cards aligned with native sections.
 - Collapsed logger summary must own space above the scroll viewport, with a 12 pt bottom gap.
 - Approved Previous-result capsules and 10 pt outlined compact input fields; keep completed blue fills.
@@ -570,20 +570,20 @@ type hierarchy across Home's lower sections, History, Workout, library/picker an
 headline data-row titles; shared number/unit readouts; subheadline inline summaries;
 secondary smaller units. Keep native form/chrome typography. Home and Quick Start use native
 prominent list buttons; exercise tags share one neutral capsule component. Logger input
-values use bold, compact values title3, and nested corners use IronTheme tokens.
+values use bold, compact values title3, and nested corners use LiteweightTheme tokens.
 
 ### Owner catalog direction, 2026-10-25
 
-The owner stopped the V2 image comparison, chose to keep Iron and requested the current
+The owner stopped the V2 image comparison, chose to keep liteweight and requested the current
 OpenGym dataset plus matching of imported Hevy names (not account/API sync). Update the main
 library with OpenGym text and preserve all existing UUIDs, original Hevy custom names and
 workout relationships. Keep legacy entries absent upstream. Use persisted still thumbnails
-from Iron's current provider and retain animations for demonstrations. OpenGym's restricted
+from liteweight's current provider and retain animations for demonstrations. OpenGym's restricted
 artwork was not integrated; its non-commercial media exception is for OpenGym forks.
 
 ### Owner polish and performance requests, 2026-10-26
 
-- Stop the OpenGym-fork direction. Keep working on Iron's native UI and Watch app.
+- Stop the OpenGym-fork direction. Keep working on liteweight's native UI and Watch app.
 - Restore native exercise-filter toolbar spacing; remove the extra label frames.
 - Recent Workouts: full-width summary/disclosure, bold text Repeat button, and Save as
   Workout in the ellipsis menu. Saving opens a prefilled, cancellable draft.
@@ -633,7 +633,7 @@ artwork was not integrated; its non-commercial media exception is for OpenGym fo
   incomplete order snapshots before mutation; failed saves restore the prior graph.
 
 
-### 2026-10-26 approved Light name and Set tile Live Activities
+### 2026-10-26 approved liteweight name and Set tile Live Activities
 
 - Owner selected Set tile from the visual comparison and authorized implementation. Compact
   iPhone/Mac shows artwork plus blue per-exercise set cells; minimal shows the tile. Remove
@@ -643,7 +643,7 @@ artwork was not integrated; its non-commercial media exception is for OpenGym fo
   decodable and cap tile density at twelve cells with proportional fills above that.
 - Owner reported compact clipping. Use 20 pt tile, 24 pt slot and 6 pt trailing clearance;
   require native visual verification before claiming the corner issue fully verified.
-- Rename displayed app to Light and update README/About with current features and original Iron
+- Rename displayed app to liteweight and update README/About with current features and original project
   credit. Preserve installed-data identifiers and current icon; the owner will supply new art.
 - Owner wants the Ultra 4 installation repaired and confirmed Developer Mode is on. Preserve
   device pairings/data. They explicitly prefer IPv6 stay Off; do not change network settings.
@@ -690,7 +690,7 @@ flow below; shared visual tokens, native controls and recording requirements sti
 Independent correctness update delivered before the redesign: live heart rate/estimated active
 calories in the phone connection row, best-effort UUID-scoped telemetry, native Watch Live
 Activity launch declaration, and HealthKit stop/collect/save/end sequencing. Time edits remain
-in Light; the Watch's HealthKit sample retains its recorded sensor window and associations.
+in liteweight; the Watch's HealthKit sample retains its recorded sensor window and associations.
 
 
 ### Focus implementation and Watch-only expansion (2026-10-26)

@@ -1,6 +1,6 @@
 //
 //  NSManagedObjectContext+Publisher.swift
-//  Iron
+//  liteweight
 //
 //  Created by Karim Abou Zeid on 08.08.19.
 //  Copyright © 2019 Karim Abou Zeid Software. All rights reserved.

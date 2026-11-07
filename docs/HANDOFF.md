@@ -1,9 +1,17 @@
-# Iron: handoff to the next lead agent
+# liteweight: handoff to the next lead agent
 
-## Repo renamed to Light (2026-11-02)
-The GitHub repo is now `SoPat712/Light` (`origin` updated). The folder is `~/Projects/Light`
-and the project is `Light.xcodeproj`; the scheme and targets are still named `Iron`.
-`~/Projects/Iron` is a symlink to the new folder so older scripts keep working.
+## Final app rename (2026-11-07)
+The app is **liteweight**, all lowercase. The project is `liteweight.xcodeproj`, scheme
+`liteweight`, with owner team `CSNM446KVY` and app ID `me.joshpatra.liteweight` in both
+configurations. Code uses `Liteweight` / `liteweight` prefixes. The repository URL is
+`SoPat712/liteweight`; documentation uses `/Users/joshp/Projects/liteweight` as the canonical
+workspace path. The checkout root was not moved by this lane.
+
+The new app ID has a separate data container. Use Share Full Backup in the old app and
+Restore Backup in liteweight. New files use `.liteweightbackup`; pre-rename backups and
+settings still restore. Feedback: `liteweight@joshpatra.me`. Upstream credit remains in About
+and README. Rename checks are text/plist/project-list checks only; the lead must build and
+verify runtime behavior before installing.
 
 ## Customizable Home (2026-11-02)
 Build 71 (installed) added This Week styles chosen one at a time, the Muscle Focus target
@@ -11,9 +19,9 @@ band, and hide/reorder for sections. Since then, uncommitted and not yet on a de
 - Each This Week view (Rings, Pace, Muscle Week, Daily Volume) is its own Home card, so any
   number show together. Customize Home lists the cards on Home (delete, drag) and the ones
   to add. The first week card is "This Week" with Start Workout. See DESIGN_SYSTEM §15.2.
-- Code: `Iron/UI/Components/HomeWeekViews.swift`, `FeedView.swift`; tests in
-  `IronTests/ThisWeekWidgetDataTests.swift` (`HomeWeekSummaryTests`).
-- Debug flag `-ironInspectCustomizeHome` opens Customize Home on its own.
+- Code: `liteweight/UI/Components/HomeWeekViews.swift`, `FeedView.swift`; tests in
+  `liteweightTests/ThisWeekWidgetDataTests.swift` (`HomeWeekSummaryTests`).
+- Debug flag `-liteweightInspectCustomizeHome` opens Customize Home on its own.
 - The shared phone simulator stopped accepting simhid taps and drags on 2026-11-02, and
   Simulator.app is not installed with this Xcode. Check lower Home cards by writing
   `home.cards` (for example `bars,pace`) with `simctl spawn … defaults write`.
@@ -24,14 +32,14 @@ band, and hide/reorder for sections. Since then, uncommitted and not yet on a de
 - After Log Set, RPE opens first and slides to the rest screen on ✓ or after 5 s untouched. Rest has a back button to RPE; that return, and RPE opened by hand, wait for ✓.
 - Fixed RPE spreading across sets: opening the page saved the suggestion copied from the previous set, which then became the next suggestion. Opening never saves now.
 - Rest screen: −15/Skip/+15 are larger in-page capsules instead of the native bottom bar, and the ring shrinks to clear them (§22.0). Weight and reps digits roll up or down with the scroll wheel.
-- Checked by timed simulator shots at 40 mm and Ultra (`~/.local/share/light/screens/flow/`). Rolling digits and the real wrist timing need a workout; simulator shots can't show them. Unit suite not rerun: only Watch view and navigation code changed, and `IronTests` doesn't cover them.
+- Checked by timed simulator shots at 40 mm and Ultra (`~/.local/share/liteweight/screens/flow/`). Rolling digits and the real wrist timing need a workout; simulator shots can't show them. Unit suite not rerun: only Watch view and navigation code changed, and `liteweightTests` doesn't cover them.
 - Build 58: removed the Edit Set row from the Now page at the owner's request; its other rows were already there. The set editor stays reachable from the exercise's set list and as a VoiceOver action, and it's the only place with Mark as Done / Not Done.
 
-- Build 60: the green bar beside the scroll wheel on value controls is gone by using continuous rotation. Disassembling `CrownSequencer.update(with:)` in the Watch's 27.0.1 SwiftUI (`~/Library/Developer/Xcode/watchOS DeviceSupport`) shows the bar is only enabled when `isContinuous` is false; `.digitalCrownAccessory(.hidden)` doesn't reach it. `watchCrownRotation` in `WatchDesign.swift` pads the range and holds values at their limits, because continuous rotation wraps. Build 59's root `.scrollIndicators(.hidden)` was the wrong theory and was reverted. The wheel can't be exercised here: this Mac has no Simulator.app and Xcode 27's test connection hangs (throwaway probe in `~/.local/share/light/crown-ui`), so limits and feel need checking on the Watch.
+- Build 60: the green bar beside the scroll wheel on value controls is gone by using continuous rotation. Disassembling `CrownSequencer.update(with:)` in the Watch's 27.0.1 SwiftUI (`~/Library/Developer/Xcode/watchOS DeviceSupport`) shows the bar is only enabled when `isContinuous` is false; `.digitalCrownAccessory(.hidden)` doesn't reach it. `watchCrownRotation` in `WatchDesign.swift` pads the range and holds values at their limits, because continuous rotation wraps. Build 59's root `.scrollIndicators(.hidden)` was the wrong theory and was reverted. The wheel can't be exercised here: this Mac has no Simulator.app and Xcode 27's test connection hangs (throwaway probe in `~/.local/share/liteweight/crown-ui`), so limits and feel need checking on the Watch.
 
 - Build 61: tapping a selected tile again now hands the scroll wheel back to the page on the Now page and plate calculator (`watchReturnsCrown`); before, the wheel did nothing until a finger scroll. Owner confirmed build 60 removed the green bar. The wheel can't be tested here, so the owner needs to confirm this too. The full set editor still keeps the wheel on its value and has no deselect.
-- Build 62: Watch lists now end 6 pt (small Watches) or 10 pt (larger) from the screen edge instead of about 49–70 pt; the Exercises page keeps its clearance for the page dots. On 2026-11-01 Light stopped launching on the iPhone because its signing certificate was revoked and Xcode showed No Accounts. The owner signed back in at Xcode > Settings > Accounts, Xcode issued a new certificate, and build 62 is installed on both devices.
-- Build 63: the owner found build 61's wheel hand-back did nothing. `watchReturnsCrown` now rebuilds the ScrollView when a field stops editing, because watchOS only gives a ScrollView the wheel when it appears or is touched. Moving focus to it, directly or with `resetFocus`, failed. The rebuild returns the page to the top. Wheel behavior can now be tested in the Watch simulator: `~/.local/share/light/crown/simhid <udid> crown <delta> [count]` sends real wheel input (delta 3 × 15 is a good start) and `tap`/`drag` send touches, using ratios of the screen.
+- Build 62: Watch lists now end 6 pt (small Watches) or 10 pt (larger) from the screen edge instead of about 49–70 pt; the Exercises page keeps its clearance for the page dots. On 2026-11-01 liteweight stopped launching on the iPhone because its signing certificate was revoked and Xcode showed No Accounts. The owner signed back in at Xcode > Settings > Accounts, Xcode issued a new certificate, and build 62 is installed on both devices.
+- Build 63: the owner found build 61's wheel hand-back did nothing. `watchReturnsCrown` now rebuilds the ScrollView when a field stops editing, because watchOS only gives a ScrollView the wheel when it appears or is touched. Moving focus to it, directly or with `resetFocus`, failed. The rebuild returns the page to the top. Wheel behavior can now be tested in the Watch simulator: `~/.local/share/liteweight/crown/simhid <udid> crown <delta> [count]` sends real wheel input (delta 3 × 15 is a good start) and `tap`/`drag` send touches, using ratios of the screen.
 - Build 64: build 63 froze the app (100% CPU layout loop) when a NavigationLink was tapped with a box selected, because opening the link ended editing and rebuilt the ScrollView holding the link. `watchReturnsCrown` now only rebuilds while on screen. The Bar Weight page also owns its editing state, since a NavigationLink destination never saw the parent's change. Checked with real wheel and touch input on Ultra and 40 mm: edit, confirm, scroll, re-select, switch boxes, Log Set from a selected box, and links opened with a box selected. Confirming on Bar Weight then scrolling was checked on Ultra only. A device check by the owner is still needed.
 - Build 65: the rest ring's next-exercise line is limited to the circle's width at that height, so it no longer touches the ring. Most names lose the "Next ·" prefix and very long names truncate. 40 mm still hides this line because its ring is under 120 pt.
 - Build 66: Watch notes are text only, with no audio kept. Note rows say "Add Note" or preview the note, and an empty plan note has no row because it can only be written on iPhone. The note page has no Edit, Dictate, Save or Cancel buttons: tapping the note box opens the system text input with the note filled in, Done saves and Cancel changes nothing. The box is drawn over a TextField because a Watch TextField shows one truncated line in its own box. The Watch list's bottom clearance went from 6/10 pt to 8/14 pt at the owner's request.
@@ -43,17 +51,17 @@ band, and hide/reorder for sections. Since then, uncommitted and not yet on a de
 ## Build 56 Watch restore (2026-10-31)
 
 - Claude took orchestration back after the owner stopped the Codex session on build 54 ("absolutely butchered the watch display"). Root cause: the rejected "native first" retheme.
-- Restored the approved Now, set editor, rest picker, controls, warm-up and plate components from pre-retheme snapshots in `~/.local/share/light/pre-wr/`, then re-applied only the owner's requests. `b54-*.swift` there are backups of the state before this repair. See `docs/DESIGN_SYSTEM.md` §22.0, which replaces the native-first rule.
+- Restored the approved Now, set editor, rest picker, controls, warm-up and plate components from pre-retheme snapshots in `~/.local/share/liteweight/pre-wr/`, then re-applied only the owner's requests. `b54-*.swift` there are backups of the state before this repair. See `docs/DESIGN_SYSTEM.md` §22.0, which replaces the native-first rule.
 - New: one full-width blue glass primary button (`WatchPrimaryButtonStyle`), fixed-size value tiles, `WatchContentList` as a flat ScrollView, controls filling down to the page dots, RPE number/graph/description layout, no visible Test mode text.
-- Verified by simulator screenshots at 40 mm and Ultra (`~/.local/share/light/approved/` refreshed). Unit suite not rerun: only Watch view code changed since 453/453, and the suite doesn't cover those views. Crown feel, auto-accept timing and the freeze fix need a real workout.
+- Verified by simulator screenshots at 40 mm and Ultra (`~/.local/share/liteweight/approved/` refreshed). Unit suite not rerun: only Watch view code changed since 453/453, and the suite doesn't cover those views. Crown feel, auto-accept timing and the freeze fix need a real workout.
 - Rest Timer picker is one screen: scroll wheel and Done only. Presets and −15/+15 removed for the owner's no-scroll rule; bring presets back only if they still fit one screen.
 - The owner calls the Digital Crown the "scroll wheel"; use that word with them.
-- Overland's orchestrator is now a Claude Code session; coordinate with `SendMessage` (coord README rule 1).
+- WhereWolf's orchestrator is now a Claude Code session; coordinate with `SendMessage` (coord README rule 1).
 
 ## Build 54 flat scrolling — installed on both devices (2026-10-31)
 
 - Owner explicitly rejects shrinking list items at the top/bottom. Changed the common row container from carousel to plain; root applies plain style to native settings/catalog/editor lists too. Constant width/scale, current colors/radii and title-free Home are required. No other layout/action changes.
-- **Light 1.6 (54) installed and normally launched on the iPhone and Watch; both installed versions read back as 54.** Fresh Watch install followed the owner manually uninstalling it to clear a conflicting installation. iPhone launch initially needed an unlock; Watch network tunnel and process-scoped installation conflicts were resolved before verification.
+- **liteweight 1.6 (54) installed and normally launched on the iPhone and Watch; both installed versions read back as 54.** Fresh Watch install followed the owner manually uninstalling it to clear a conflicting installation. iPhone launch initially needed an unlock; Watch network tunnel and process-scoped installation conflicts were resolved before verification.
 - Focused Home/options/settings and end-of-list captures passed on Ultra. Five sampled rows retain x=4…417 (414 px / 207 pt) boundaries; last Home card has 42.5 pt of bottom clearance. Source colors/radii and value-editor layout remain unchanged. No full unit-suite repeat for this list-style correction. Receipts/evidence: `docs/qa/watch-flat-54/`.
 - Shared slots released; the one Watch simulator is off, no phone simulator booted. Signed build guard mean 32.8%, peak 99.1%, three samples above 80%, 37 throttle intervals; simulator startup/capture sampled up to 100%. The guard is throttling, not a hard aggregate ceiling.
 
@@ -63,14 +71,14 @@ band, and hide/reorder for sections. Since then, uncommitted and not yet on a de
 - Scope: Home; saved/history lists and details; saved and active supersets; exercise list/detail/options; set-type and plate-choice lists; finish summary. Now/editor, RPE, effort, running rest and rest-length picker retain their existing layout.
 - Idle Home omits the app-name title, putting New Workout first beneath native clock chrome.
 - Focused native-list checks passed on Ultra and 40 mm, including reachable Home endpoints (painted-card bottom clearance 42.5 pt / 21 pt). Title removal checked on both. Eight value-page component bodies match build 52 exactly; evidence is in `docs/qa/watch-width-53/`.
-- **Light 1.6 (53) installed and normally launched on both the physical iPhone and Watch.** Signatures verified, both installed versions read back as 53. Receipts are in `docs/qa/watch-width-53/`. No new unit-suite run for this UI correction; build 51 passed 453 tests. No physical Crown gesture or new Health workout was exercised for QA.
+- **liteweight 1.6 (53) installed and normally launched on both the physical iPhone and Watch.** Signatures verified, both installed versions read back as 53. Receipts are in `docs/qa/watch-width-53/`. No new unit-suite run for this UI correction; build 51 passed 453 tests. No physical Crown gesture or new Health workout was exercised for QA.
 - Compiler/check leases released; both Watches shut down after serial checks, no phone simulator booted. Signed build guard mean 25.4%, peak 75.4%, zero samples above 80%, 34 throttle intervals. Simulator startup/checks had higher sampled peaks (up to 100%); this guard is not a hard aggregate CPU ceiling.
 
 ## Build 52 surface restoration — prior build, superseded by 53 (2026-10-31)
 
 - Owner rejected build 51's pill-shaped saved workouts and brighter system-gray fills. Restored approved flat Watch surfaces: saved/history/recorded exercise cards, settings symbol wells, selected/current/completed states, Now/editor tiles and control-grid colors. Restored 13 pt card / 15 pt hero corners from the pre-retheme implementation. The metric RGB palette itself had not changed; native button backgrounds had replaced the semantic fills.
 - Keep build 51's behavior/layout fixes: narrower weight split, measured read-only Previous, native toolbar actions, hidden Crown/scroll accessories and five-second automatic RPE. No data/sync/Health changes in this correction.
-- **Light 1.6 (52) installed and normally launched on both the physical iPhone and Watch.** Both app signatures verified, then both installed versions read back as 52. Receipts and fresh screenshots: `docs/qa/watch-restoration-52/`. Eight affected Ultra states inspected; simulator and signed builds passed. No full test-suite repeat for this visual correction; the build 51 run passed 453 tests. Wrist Crown/interaction testing remains with the owner.
+- **liteweight 1.6 (52) installed and normally launched on both the physical iPhone and Watch.** Both app signatures verified, then both installed versions read back as 52. Receipts and fresh screenshots: `docs/qa/watch-restoration-52/`. Eight affected Ultra states inspected; simulator and signed builds passed. No full test-suite repeat for this visual correction; the build 51 run passed 453 tests. Wrist Crown/interaction testing remains with the owner.
 - Shared resources released, Watch simulator shut down; no phone simulator booted for this check. CPU guard did throttle owned work but did not impose a hard aggregate ceiling: signed build mean 28.0%, peak 100.0%, seven samples above 80%, 39 throttle intervals. Detailed simulator samples are in the QA readme.
 
 ## Build 51 — prior owner-testing build, superseded by 52 (uncommitted)
@@ -79,16 +87,16 @@ band, and hide/reorder for sections. Since then, uncommitted and not yet on a de
 - Owner requested ten percentage points more width for reps: Weight/Reps is now 50/50 on compact Watches and approximately 54/46 on larger Watches, independent of live values.
 - Previous must be fully visible on the first screen. It is read-only text, not an entry to a duplicate weight/reps editor. A measured footer now reserves space before hero sizing. The older below-fold rule is superseded.
 - Hide the green Crown accessory on main weight/reps as well as RPE and other editors; the main/editor ScrollViews also hide their accessory/scroll indicators. Running rest remains ±15/Skip only. Automatic RPE is five seconds; manual RPE requires confirmation.
-- Fresh standalone IronTests completed at 00:40 on October 31: **453/453, zero failures/skips**, including all 18 Watch-store concurrency tests. The final view-navigation adjustment was then compiled and checked separately on the Ultra simulator; no full suite was repeated after the CPU-headroom request.
-- **Installed and launched on both physical devices: Light 1.6 (51).** Both versions were queried directly after installation. Phone install sequence 2584; Watch sequence 888. Both bundle signatures verified before installation. Receipts, version queries and launch results are in `docs/qa/watch-native-2026-10-30/`. The current Watch CoreDevice identifier is `B252916C-22C3-5EF9-9137-6432DB27276B` (hardware UDID `00008320-001F472A2160000A`).
+- Fresh standalone liteweightTests completed at 00:40 on October 31: **453/453, zero failures/skips**, including all 18 Watch-store concurrency tests. The final view-navigation adjustment was then compiled and checked separately on the Ultra simulator; no full suite was repeated after the CPU-headroom request.
+- **Installed and launched on both physical devices: liteweight 1.6 (51).** Both versions were queried directly after installation. Phone install sequence 2584; Watch sequence 888. Both bundle signatures verified before installation. Receipts, version queries and launch results are in `docs/qa/watch-native-2026-10-30/`. The current Watch CoreDevice identifier is `B252916C-22C3-5EF9-9137-6432DB27276B` (hardware UDID `00008320-001F472A2160000A`).
 - Now/full editor use the native top trailing checkmark on all sizes. Measured Ultra editor height was 129 pt; a 55.5 pt content action plus Previous left only 25.3 pt for tiles. Moving confirmation to the toolbar restores large values without clipping Previous. This supersedes the larger-Watch content-button rule.
 - Simulator-only plates/tracking routes were hanging in SwiftUI layout. Replacing the derived Boolean debug destination with item navigation after a task yield makes both screens render; physical navigation/actions are unchanged.
 - Automatic RPE now uses native item navigation rather than a modal, removing watchOS's automatic close X. Targeted captures show only ✓, automatic return to rest, and manual RPE still open after nine seconds. The main value fields hide both their Crown accessory and surrounding scroll indicators. Previous is plain text and does not navigate.
 - A broad pass captured 54 fresh default/large-text/timing frames on 40 mm and Ultra before the final presentation-only correction; that correction received a focused Ultra check. Simulator fixtures are demo data and never sensor evidence. No workout was started, finished or discarded on a physical device for QA.
-- **Resource rules changed during this run:** keep one shared phone booted, currently Overland Regression `42FA2C2F-F66C-41DB-A33C-A018165BB0D7`; use one Watch only when essential and shut that Watch down afterward. Serialize with `coord.py` and communicate directly with Overland. Old Light scripts hard-code the former phone and shutdown behavior: adapt them to the new shared-phone rule before reuse.
-- Idle-runtime exception: Overland found both iOS 27 phone runtimes consumed high CPU with the app closed, and shut down the replacement as well. Do not keep an unhealthy idle runtime running merely to preserve a boot. Coordinate shutdown and wait for a safe baseline; never boot a second phone as a workaround.
-- CPU guard is `Overland-iOS/ci_scripts/resource_guard.py`, used inside the coordinator with specific DerivedData roots. Use jobs1 and the agreed conservative 50% pause / 35% resume thresholds; simulator app monitoring also needs its exact installed executable via `--process-path`. It is sampled throttling, not a hard global ceiling. The signed build reported peak 88.6% and 76 throttle intervals; do not claim it stayed below 80%.
-- Next is the owner's direct wrist check: weight/reps Crown indicator, tapping Previous, and the log → RPE → rest flow. Fresh sensors, a completed Health save and end-to-end device sync were not exercised in this session. All Iron build/check jobs have finished and resource claims are released; Overland continues separately.
+- **Resource rules changed during this run:** keep one shared phone booted, currently WhereWolf Regression `42FA2C2F-F66C-41DB-A33C-A018165BB0D7`; use one Watch only when essential and shut that Watch down afterward. Serialize with `coord.py` and communicate directly with WhereWolf. Old liteweight scripts hard-code the former phone and shutdown behavior: adapt them to the new shared-phone rule before reuse.
+- Idle-runtime exception: WhereWolf found both iOS 27 phone runtimes consumed high CPU with the app closed, and shut down the replacement as well. Do not keep an unhealthy idle runtime running merely to preserve a boot. Coordinate shutdown and wait for a safe baseline; never boot a second phone as a workaround.
+- CPU guard is `/Users/joshp/Projects/WhereWolf/ci_scripts/resource_guard.py`, used inside the coordinator with specific DerivedData roots. Use jobs1 and the agreed conservative 50% pause / 35% resume thresholds; simulator app monitoring also needs its exact installed executable via `--process-path`. It is sampled throttling, not a hard global ceiling. The signed build reported peak 88.6% and 76 throttle intervals; do not claim it stayed below 80%.
+- Next is the owner's direct wrist check: weight/reps Crown indicator, tapping Previous, and the log → RPE → rest flow. Fresh sensors, a completed Health save and end-to-end device sync were not exercised in this session. All liteweight build/check jobs have finished and resource claims are released; WhereWolf continues separately.
 
 ## Round 8 and Watch Round 6 built (2026-10-27, uncommitted)
 
@@ -124,11 +132,11 @@ band, and hide/reorder for sections. Since then, uncommitted and not yet on a de
   - The Exercise Options → Warm-up Sets row opens a one-screen list with a pinned "Add N Sets" button.
   - The math lives in `Shared/Data/WarmupPlan.swift`, shared with the iPhone calculator. With a plate setup it rounds to weights that setup can actually load; without one, results are unchanged.
 - **This Week widget** (lane WK): small, medium, Lock Screen rectangular and circular families. It uses Home's computed history, so the widget and Home agree. Its visuals are not verified yet, because the simulator can't place widgets from a script.
-- **Tests:** 453/453 pass. The 10 Watch-store concurrency tests are now enabled: `WatchWorkoutStoreConcurrencyTests` compiles the real store into IronTests.
+- **Tests:** 453/453 pass. The 10 Watch-store concurrency tests are now enabled: `WatchWorkoutStoreConcurrencyTests` compiles the real store into liteweightTests.
 - **Simulator limits:**
   - On iOS 27, paired-simulator WatchConnectivity is broken: phone `wcd` fails `fetchInstalledApplicationsForPairedDevice` with `NSXPCConnectionInvalid`, so the Watch sees `companionAppInstalled: NO`, even after re-pairing. Verify sync with unit tests and on devices.
-  - Use `-ironSkipHealthAuthorization` (DEBUG) for iPhone screenshot runs.
-  - `~/.local/share/light/phone-screens.sh` takes `LIGHT_PHONE_ROUTES` (`logger` or any `-ironInspect…` suffix). Approved Watch shots are in `~/.local/share/light/approved/`.
+  - Use `-liteweightSkipHealthAuthorization` (DEBUG) for iPhone screenshot runs.
+  - `~/.local/share/liteweight/phone-screens.sh` takes `LITEWEIGHT_PHONE_ROUTES` (`logger` or any `-liteweightInspect…` suffix). Approved Watch shots are in `~/.local/share/liteweight/approved/`.
 
 ### 2026-10-29 afternoon: Codex lanes P–PR2 (uncommitted, on both devices)
 
@@ -140,7 +148,7 @@ band, and hide/reorder for sections. Since then, uncommitted and not yet on a de
 - **Set tracking types:** eight types in `Shared/Data/SetTrackingType.swift`.
   - They drive logger columns, Previous, volume, records/PR badges, history, backups (v5) and saved-workout export (v2).
   - Each exercise can override its type; overrides sync with the Watch.
-  - The file is internal and compiled into six targets. In tests that import both modules, use a module-qualified name (`Iron.` or `WorkoutDataKit.`).
+  - The file is internal and compiled into six targets. In tests that import both modules, use a module-qualified name (`liteweight.` or `WorkoutDataKit.`).
 - **Sync:** a Watch-started workout is no longer deferred behind an empty phone placeholder. The phone shows "Workout running on Apple Watch", with an "Open on iPhone" action. Ack retries have been added.
 - **Live Activity:**
   - The rest bar is a self-updating `ProgressView(timerInterval:)`, with "of M:SS" for the total.
@@ -149,7 +157,7 @@ band, and hide/reorder for sections. Since then, uncommitted and not yet on a de
 - **Haptics and sounds:** there's an iPhone audit; `RestTimerStore.adjust(by:feedback:)` ticks only for user actions. The Watch uses WatchKit paired cues, which follow Silent Mode, and has a Haptics toggle. The Watch owns rest alerts when it drives the workout.
 - **Watch layout:** the rest controls are in the bottom toolbar. The Now page scrolls under the page dots. The weight/reps split is fixed per field, never per live value.
 - **iPhone:** the set rows are polished (6 pt gaps, 40 pt badge), and the heart-rate chart scrubs with press-and-hold.
-- **Tests:** 368/368 pass. Xcode 27's `xcodebuild test` hangs at the runner handshake, so use `~/Library/Caches/Light/standalone/build-and-test.sh` through `coord.py run check Light ...`. It's adapted from Overland's in-app runner.
+- **Tests:** 368/368 pass. Xcode 27's `xcodebuild test` hangs at the runner handshake, so use `~/Library/Caches/liteweight/standalone/build-and-test.sh` through `coord.py run check liteweight ...`. It's adapted from WhereWolf's in-app runner.
 
 ### Build 50 and Watch follow-ups (2026-10-29, uncommitted)
 
@@ -157,14 +165,14 @@ band, and hide/reorder for sections. Since then, uncommitted and not yet on a de
 - Watch-only fixes after 50, on the Watch with no new version number:
   - Weight tile takes 1.75/2.75 of the row and scales to 0.55, so "173.5" fits next to "12".
   - The controls page grid is Pause | Exercise over Discard | Finish. Large heart-rate and kcal values head the page, followed by sets and volume.
-  - The plate calculator draws a mirrored barbell with gym-colored plates (`IronTheme.plate*`), an each-side list with swatches, and a note for any weight that can't be loaded.
+  - The plate calculator draws a mirrored barbell with gym-colored plates (`LiteweightTheme.plate*`), an each-side list with swatches, and a note for any weight that can't be loaded.
 - Not yet run on build 50: the unit tests, test mode on a device, and the Crown handoff on a device.
 
 ### Build 49 (2026-10-28, uncommitted)
 - Add Exercise sheet: the bottom-bar filters are icon-only again (`figure.arms.open`, `dumbbell`, `plus`), tinted accent when a filter is active, matching the Exercises tab.
 - Superset sheet: one-line rows (letter badge + name, then "N sets · Equipment"), a legend plus a wrapping A1 · B1 · A2 chip sequence showing every round, and Save in the toolbar instead of a full-width button.
 - Workout pill: live Watch heart rate and active kcal on the title row (`ActiveWorkoutPillVitals` observes `liveMetrics` on its own); the inline accessory shows heart rate only.
-- Workout detail: a new "Heart Rate" card (`Iron/UI/History/WorkoutVitalsSection.swift`) reads heart rate samples and summed active energy from Apple Health for the workout's time window: Average, Maximum, Active kcal, plus a line chart with an average rule. It asks for read access the first time and hides itself when Health has no data. In DEBUG, `-ironDemoVitals` draws synthetic data.
+- Workout detail: a new "Heart Rate" card (`liteweight/UI/History/WorkoutVitalsSection.swift`) reads heart rate samples and summed active energy from Apple Health for the workout's time window: Average, Maximum, Active kcal, plus a line chart with an average rule. It asks for read access the first time and hides itself when Health has no data. In DEBUG, `-liteweightDemoVitals` draws synthetic data.
 
 ### Round 10, build 48 (2026-10-28, uncommitted)
 
@@ -246,7 +254,7 @@ do not establish owner acceptance or complete physical-device validation.
 Preserve the iPhone app's current design and all saved work. Do not resume Watch implementation
 or install another build until the owner asks. No workout data was removed for this checkpoint.
 
-## Active follow-up: Light rename and Live Activities (2026-10-26)
+## Active follow-up: liteweight rename and Live Activities (2026-10-26)
 
 ### Latest steering: exercise-first Watch navigation (2026-10-26)
 
@@ -286,7 +294,7 @@ that a real Smart Stack tap or a full completed on-wrist Health save was exercis
 The real library contains 5,798 exercise picks and 453 history sessions; zero saved routines
 matches the phone's empty routine library. Current identifiers remain compatible; IPv6 stays
 Off. Debug device builds write a read-only recording diagnostic to
-`Library/Caches/LightRecordingState.json`; it never changes session state or exists in Release.
+`Library/Caches/LiteweightRecordingState.json`; it never changes session state or exists in Release.
 
 ### Historical Focus implementation and live metrics (superseded navigation)
 
@@ -322,12 +330,12 @@ for both units: implemented for Crown display/commit and ±, preserving accumula
 Build **38** small correctness update is installed (phone **5700**, Watch **1168**); normal
 launches succeeded. It adds live Watch HR/estimated active calories to the phone status row,
 transient UUID/time-scoped sensor transport, WKSupportsLiveActivityLaunchAttributeTypes, and
-correct HealthKit stop/collect/save/end ordering. Start-time edits remain in Light while the
+correct HealthKit stop/collect/save/end ordering. Start-time edits remain in liteweight while the
 Health workout retains its original sensor window/sample associations. Seven telemetry tests
 and ten actual-source/mock-HK lifecycle scenarios passed; iOS test-bundle and signed builds
 passed. Physical metric values and native local tap still need in-use verification. Forced
 restart was auto-review rejected for an active-workout risk; normal launch was used instead.
-Owner is actively using devices; do not assume a later screenshot is still Light after launch.
+Owner is actively using devices; do not assume a later screenshot is still liteweight after launch.
 IPv6 remains Off; never change it. No workout data was changed for QA.
 
 
@@ -342,11 +350,10 @@ IPv6 remains Off; never change it. No workout data was changed for QA.
   Three native XCTest cases executed against the extracted production snapshot type passed.
   Simulator app/test-bundle, signed iPhone/embedded Watch, and generic Watch builds passed.
   Full iOS XCTest runtime remains limited by the earlier DTServiceHub stall.
-- Owner chose **Light**; display names, permission copy, Siri phrases and visible branding are
-  updated. README describes current features and credits Iron/Karim Abou Zeid; About links to
-  this fork and original project. Icon remains the owner's next task. Internal names, bundle
-  IDs, backup/UTI formats, app groups, preferences, media paths and companion IDs stay stable
-  to preserve data. `com.sopat712.light` is only a proposed future distribution identity.
+- Owner chose **liteweight**; display names, permission copy, Siri phrases and visible branding are
+  updated. README describes current features and credits the upstream project/Karim Abou Zeid; About links to
+  this fork and original project. Icon remains the owner's next task. The later final rename (2026-11-07) supersedes the
+  earlier decision to keep installed-data identifiers; data now moves by backup and restore.
 - Latest installed/launch-verified iPhone update: build **37**, install sequence **5692**.
   This includes the compact tile correction: a 20 pt tile in a 24 pt slot with 6 pt trailing
   clearance, replacing the 24 pt tile that clipped at the curve. Simulator and signed device
@@ -359,7 +366,7 @@ IPv6 remains Off; never change it. No workout data was changed for QA.
   Destination-specific Watch build with `-allowProvisioningDeviceRegistration` succeeded.
   Renewed profile **392ffe10-71b2-4fe1-9641-a13458364910** includes the actual Watch and
   expires **2026-11-02 21:38 UTC**. Signature verification passed; direct Watch install
-  sequence **1160** and launch succeeded. CLI screenshot shows **Light / iPhone connected**.
+  sequence **1160** and launch succeeded. CLI screenshot shows **liteweight / iPhone connected**.
   The iPhone was reinstalled with the same renewed embedded Watch profile and launched.
   Actual Watch Smart Stack/full-screen Live Activity still needs a running workout to verify.
 - Mac Wi-Fi IPv6 is **Off**, verified after successful pairing. The agent never changed it;
@@ -370,7 +377,7 @@ IPv6 remains Off; never change it. No workout data was changed for QA.
   AXe handles simulator input when responsive. `pymobiledevice3 companion list` found the
   correct Watch ID through USB before Xcode discovered it. `devicectl device pairings list`
   is a simulator capability and fails on the physical phone. Device Hub was used for initial
-  pairing only. CACE is shut down; compiler and simulator slots returned to Overland.
+  pairing only. CACE is shut down; compiler and simulator slots returned to WhereWolf.
 
 
 Written 2026-10-25 by the previous lead (Claude) for Codex or any agent taking over. It holds
@@ -385,13 +392,13 @@ looks) and [`DESIGN_BACKLOG.md`](DESIGN_BACKLOG.md) (B1–B10 specs, lanes, buil
 ## Prompt 1: implement the remaining work (paste into `codex exec`)
 
 ```
-You are working on Iron, a SwiftUI strength-training app (iPhone + Apple Watch) in this repo.
+You are working on liteweight, a SwiftUI strength-training app (iPhone + Apple Watch) in this repo.
 Read AGENTS.md, docs/DESIGN_SYSTEM.md (all of it), docs/DESIGN_BACKLOG.md §0, and
 docs/HANDOFF.md ("Task list") first. They are the spec.
 
 Implement the tasks in docs/HANDOFF.md "Task list" marked [CODEX], in order, starting with T1.
 For each task: read the files named, make the change following DESIGN_SYSTEM.md exactly
-(IronTheme roles, Font.ironMetric, IronMotion + Reduce Motion, 44 pt targets, VoiceOver labels),
+(LiteweightTheme roles, Font.liteweightMetric, LiteweightMotion + Reduce Motion, 44 pt targets, VoiceOver labels),
 and keep all existing persistence, Watch sync, Live Activity and Apple Health behavior.
 Never export imported workouts to Health.
 
@@ -404,7 +411,7 @@ Finish with at most 25 lines: per task, the files changed, what you did, and wha
 ## Prompt 2: carry on as the lead/orchestrator (paste into a fresh agent session)
 
 ```
-You are the new lead for Iron (SwiftUI, iPhone + Watch), taking over from a previous lead.
+You are the new lead for liteweight (SwiftUI, iPhone + Watch), taking over from a previous lead.
 Read docs/HANDOFF.md fully, then AGENTS.md, docs/DESIGN_SYSTEM.md and docs/DESIGN_BACKLOG.md.
 
 Your job: (1) keep shipping the owner's goals: finish the app and keep its own Apple-native
@@ -418,7 +425,7 @@ on the owner's iPhone (§0.3 commands). Leave changes uncommitted unless explici
 every owner decision and every new idea.
 
 Owner rules: ask before booting a simulator (other apps use the CPU). Push only to the fork's
-`origin` (SoPat712/Iron) main, never upstream, and only when asked. Never enter credentials;
+`origin` (SoPat712/liteweight) main, never upstream, and only when asked. Never enter credentials;
 the owner handles Apple ID and trust prompts. Never export imported workouts to Apple Health.
 Be fast: the owner tests on their phone daily and wants builds on it quickly.
 ```
@@ -427,14 +434,14 @@ Be fast: the owner tests on their phone daily and wants builds on it quickly.
 
 ## 1. Mission
 
-1. **Finish building Iron** into a daily-use strength tracker that replaces Hevy for the
+1. **Finish building liteweight** into a daily-use strength tracker that replaces Hevy for the
    owner. They have already imported their Hevy history.
 2. **Give it its own design identity**, Apple-native: "imagine if Apple made a workout
    tracker". It must stop looking like a Hevy copy. The full system is in `DESIGN_SYSTEM.md`.
 
 ## 2. Current state (2026-11-04, uncommitted working tree)
 
-- **Identity/signing:** the active Debug app is `me.joshpatra.light`; `com.joshpatra.IronDev`
+- **Identity/signing:** the active Debug app is `me.joshpatra.liteweight`; `me.joshpatra.liteweight`
   is retired. Sign through the Xcode account with `-allowProvisioningUpdates`; the API key
   only refreshes existing App IDs and cannot create the new identity.
 - **Backup/import:** backup v7 includes portable app settings (`AppSettingsArchive`), alongside
@@ -445,7 +452,7 @@ Be fast: the owner tests on their phone daily and wants builds on it quickly.
 - **Apple Health:** session effort exports as an Apple effort score linked to the existing
   workout, including later edits. Imported workouts never export. Debug Health test mode
   defaults **off**; it must be enabled deliberately to suppress recording/export.
-- **Fast checks:** `~/.local/share/light/standalone/build-and-test.sh` compiles with
+- **Fast checks:** `~/.local/share/liteweight/standalone/build-and-test.sh` compiles with
   `build-for-testing -jobs 8`, then runs the standalone tests; screenshots use layout settling
   rather than long fixed waits. Shared runs still follow the coordinator/resource guard and
   current jobs1 limit; the fast script's job count is not a resource-policy override.
@@ -455,8 +462,8 @@ Be fast: the owner tests on their phone daily and wants builds on it quickly.
 | Area | State |
 | --- | --- |
 | Design system | Documented (`DESIGN_SYSTEM.md`), including §16, a recipe for restyling a screen from a screenshot |
-| Iron blue refresh: metric colors, SF Pro bold numerals, motion, original sounds | Shipped |
-| Apple Health | Exports **only Iron-completed** workouts (phone or Watch); imports are never exported; durable retry |
+| liteweight blue refresh: metric colors, SF Pro bold numerals, motion, original sounds | Shipped |
+| Apple Health | Exports **only liteweight-completed** workouts (phone or Watch); imports are never exported; durable retry |
 | Hevy CSV import | Fast, off the main thread, progress overlay, tagged `importSource = "hevy"` |
 | Logger: focused current-set editor (Logger B), blue completed fill | Shipped |
 | B1 swipe-overlap fix, B2 session bar, B3 rest chip + ruler (dial removed), B4 soft set-type fills, B5 RPE bars | Shipped in `d6cdeb5`, **visually unverified** |
@@ -465,7 +472,7 @@ Be fast: the owner tests on their phone daily and wants builds on it quickly.
 | B8 Workout tab (Recent Workouts + Repeat), B9 Home redesign | Shipped in `c3f401a`, **visually unverified**; empty-state button bug (T1) |
 | On the owner's iPhone | Build of `c3f401a` installed 2026-10-22 |
 | Pushed to fork | **No.** Commits `3ab7e2f..c3f401a` are local only (push when the owner asks) |
-| Unit tests | Exist (`IronTests/`), but `xcodebuild test` hung in this environment, so none ran recently |
+| Unit tests | Exist (`liteweightTests/`), but `xcodebuild test` hung in this environment, so none ran recently |
 
 ### 2026-10-25 continuation (uncommitted working tree)
 
@@ -501,12 +508,12 @@ Be fast: the owner tests on their phone daily and wants builds on it quickly.
   logger summaries now stack their values; set rows reflow into labelled fields instead of
   narrow table columns. Header and stepper touch targets meet 44 pt. See
   [`QA_2026-10-25.md`](QA_2026-10-25.md) for evidence and verification limits.
-- Owner authorized direct coordination with Overland's **Fix Live Activity display** chat
-  (`01a170c9-8baf-7263-a0df-6fe990715e1d`). Iron's simulator is
-  `CACE2E28-29B0-46A4-96F5-B66ACB4631A1`; Overland's is
+- Owner authorized direct coordination with WhereWolf's **Fix Live Activity display** chat
+  (`01a170c9-8baf-7263-a0df-6fe990715e1d`). liteweight's simulator is
+  `CACE2E28-29B0-46A4-96F5-B66ACB4631A1`; WhereWolf's is
   `E2C9ADC2-9481-4009-867F-7F00C53DC704`. Trade simulator/build windows directly; never reset
   the other app's data. AXe is available at `/tmp/overland-axe/axe` for simulator QA.
-  The completed run restored Iron's simulator to light/default sizing, shut it down, and
+  The completed run restored liteweight's simulator to light/default sizing, shut it down, and
   returned all shared slots. The final signed build is installed; phone launch awaits unlock.
 - No commits, pushes, stashes, resets or checkouts were performed. No contents of
   `reference-material/` were read or changed. T7 and equipment-setting designs remain proposals.
@@ -515,7 +522,7 @@ Be fast: the owner tests on their phone daily and wants builds on it quickly.
 
 The owner rejected Home's blue glass haze, requested library theming, full-width exercise
 detail cards, one exercise title, and clearance below the collapsed summary at the scroll top. These
-now use the existing Iron surface/type roles. The owner also approved Previous-result
+now use the existing liteweight surface/type roles. The owner also approved Previous-result
 capsules and 10 pt compact input outlines, and requested the remaining numeric font pass.
 Live Activity rest now takes priority over the 10 s confirmation; ±15 intents await their
 ActivityKit publication and countdowns suppress replacement/placeholder effects. Validation
@@ -527,8 +534,8 @@ succeeded; iOS denied launch because the phone was locked.
 ### 2026-10-25 afternoon cohesion, media and navigation follow-up
 
 The owner rejected the partial font pass. A full-page comparison corrected Home's lower
-data rows, measurement spacing and accessibility layout; shared `IronMetricValue` and
-`IronWorkoutMetricLine` now keep numeric weights, units and metric colors consistent across
+data rows, measurement spacing and accessibility layout; shared `LiteweightMetricValue` and
+`LiteweightWorkoutMetricLine` now keep numeric weights, units and metric colors consistent across
 Home, History, Workout and logger. Library, picker, saved-workout tags and Custom Exercises
 share row/tag treatments. Logger uses bold focused values, title3 compact values and theme
 corner tokens. See `QA_2026-10-25_COHESION.md` for screenshots and validation.
@@ -547,7 +554,7 @@ History → exercise route. No historical records were merged or re-imported for
 
 ### 2026-10-25 OpenGym catalog and Hevy matching
 
-The owner stopped V2 comparisons and chose to keep Iron, update its main dataset from
+The owner stopped V2 comparisons and chose to keep liteweight, update its main dataset from
 OpenGym and match imported Hevy names. This means imported-history matching, not automatic
 Hevy account sync. Canonical OpenGym text at revision
 `042c9ee42282756ab0e6e86a1cd5c710efaecee6` contributes 5,632 definitions. The library combines
@@ -559,7 +566,7 @@ metadata, 25/49 with existing-source media. Original custom UUIDs, names and on-
 kept; custom exact titles win over canonical titles during import. Sixteen unresolved names
 remain available without guessed variant assignments. No workout records are merged.
 
-Lists now persist a first-frame PNG from Iron's existing provider; demos retain the original
+Lists now persist a first-frame PNG from liteweight's existing provider; demos retain the original
 GIF and its resolution. OpenGym's licensed media was not copied: its non-commercial exception
 specifically permits OpenGym forks, not an independent app. Support for separately licensed
 bundled `catalogue/still/` files is ready. See `EXERCISE_CATALOG_AUDIT.md` for checks and limits.
@@ -648,13 +655,13 @@ with `No Accounts` / no matching profiles: Xcode currently has no Apple Account 
 Xcode Settings → Apple Accounts is open at Sign In for the owner. Do not enter credentials or
 delete the app. After the owner signs in, rebuild with `-allowProvisioningUpdates`, verify fresh
 embedded profile dates, install over the existing app and verify launch. Compiler slot released
-to Overland; Iron simulator remains shut down. Renewal log: `/tmp/iron-profile-renewal-build.log`.
+to WhereWolf; liteweight simulator remains shut down. Renewal log: `/tmp/liteweight-profile-renewal-build.log`.
 
 **Resolved after owner sign-in:** The signed renewal build passed. All five embedded profiles
 are fresh through 2026-11-02 (the app expires 14:52:45 EST), with the same team/bundle IDs and
 valid signatures. Reinstalled over the existing app as sequence 5628; launch succeeded after
 iOS verification settled. No app deletion or workout-data changes. Logs:
-`/tmp/iron-profile-renewal-{build,install,launch}.log`.
+`/tmp/liteweight-profile-renewal-{build,install,launch}.log`.
 
 The owner rejected the progress/summary gray panel and bottom rules, and reported duration
 colliding with volume. Toolbar, strip and expanded metrics now share one header material;
@@ -678,7 +685,7 @@ Save/Cancel persistence checks passed. Default/dark AX3 inspection caught and fi
 overlap during a live text-size change by using a separate accessibility stack. Final builds
 passed and iPhone installation/launch succeeded (sequence 5596). See `QA_2026-10-26.md` for
 details. The interactive interaction reference remains in the thread's
-`iron-workout-arrangement.html` visualization.
+`liteweight-workout-arrangement.html` visualization.
 
 ## 3. The owner: preferences and how they work
 
@@ -692,9 +699,9 @@ details. The interactive interaction reference remains in the thread's
   Liquid Glass"; beeps; graphs that look like random lines.
 - Wants: Apple-quality animation everywhere; better sounds; speed (build to the phone fast);
   orchestration with parallel Codex workers. They are a capable engineer.
-- Git: works on `main` of the fork `origin` (SoPat712/Iron). Commit per feature or lane. Push
+- Git: works on `main` of the fork `origin` (SoPat712/liteweight). Commit per feature or lane. Push
   only when asked. Never push upstream. `reference-material/` is untracked on purpose; never add it.
-- Phone: "Josh's iPhone", UDID `00008150-001914903E69401C`, bundle `me.joshpatra.light`,
+- Phone: "Josh's iPhone", UDID `00008150-001914903E69401C`, bundle `me.joshpatra.liteweight`,
   personal-team signing (`-allowProvisioningUpdates`). The free-team profile expires after
   about 7 days; if launch fails with a profile error, rebuild and reinstall.
 - Ask before booting a simulator.
@@ -717,9 +724,9 @@ those limits or to commit.
 - After workers finish: read each report, review the diffs (look for hard-coded colors, rounded
   fonts, `DragGesture(minimumDistance: 0)` inside scroll views, `onDisappear` resets, Health
   changes), then build, install on the phone, and commit per lane.
-- Packages are pre-cloned in `/tmp/iron-spm`. `/tmp` gets wiped on reboot; if it's gone,
+- Packages are pre-cloned in `/tmp/liteweight-spm`. `/tmp` gets wiped on reboot; if it's gone,
   run one normal `xcodebuild -resolvePackageDependencies` with network access, then copy
-  `<derivedData>/SourcePackages` to `/tmp/iron-spm`.
+  `<derivedData>/SourcePackages` to `/tmp/liteweight-spm`.
 
 ## 5. Task list (priority order)
 
@@ -732,9 +739,9 @@ remains blocked by the host service. The original task specifications below rema
 T4 still requires an explicit push request. T7 and equipment configuration remain owner proposals.
 
 ### T1 [CODEX] The empty Saved Workouts "New Workout" button renders far taller than it is wide (owner-reported bug)
-`Iron/UI/Workout/StartWorkoutView.swift`, around line 398: `ContentUnavailableView { … } actions:
+`liteweight/UI/Workout/StartWorkoutView.swift`, around line 398: `ContentUnavailableView { … } actions:
 { Button("New Workout", systemImage: "plus", action: newPlan).buttonStyle(.bordered)
-.frame(minHeight: IronTheme.controlHeight) }`, inside a `List` `Section`. The `.frame` sits
+.frame(minHeight: LiteweightTheme.controlHeight) }`, inside a `List` `Section`. The `.frame` sits
 outside the button style, and `ContentUnavailableView` in a list row lets the action stretch
 vertically, giving a narrow, very tall "+" bezel.
 
@@ -785,7 +792,7 @@ workout and skips CSV sessions that match, reporting "N duplicate workouts skipp
 fresh full Hevy export therefore adds only the new sessions.
 
 **Gaps to fix:**
-1. A Hevy workout that the owner **renamed in Iron**, or whose start time they edited,
+1. A Hevy workout that the owner **renamed in liteweight**, or whose start time they edited,
    no longer matches and would be re-imported as a duplicate. Match imported workouts
    (`importSource == "hevy"`) by start second plus exercise and set fingerprint as well, so a
    title change alone doesn't defeat deduplication.
@@ -796,8 +803,8 @@ fresh full Hevy export therefore adds only the new sessions.
 - A summary row: "Hevy · 412 workouts · Oct 2019 – Oct 2026" (count and date range of
   `importSource == "hevy"`).
 - **"Remove Imported Workouts"**, a destructive action:
-  - It deletes only workouts with `importSource == "hevy"` (never Iron-completed ones).
-  - A `.confirmationDialog` states the count and says "Workouts you logged in Iron are kept."
+  - It deletes only workouts with `importSource == "hevy"` (never liteweight-completed ones).
+  - A `.confirmationDialog` states the count and says "Workouts you logged in liteweight are kept."
   - It runs on a background context with the import progress overlay pattern.
   - It refreshes exercise recency afterwards (it observes saves, so this is automatic).
   - Imported workouts were never exported, so there is no Apple Health effect; assert that in
@@ -817,7 +824,7 @@ transition is the most visible of them.
 
 ### T6 [CODEX] Known technical issues
 - An `AVAudioSession` setup warning on the main thread at launch
-  (`Shared/IronSoundPlayer.swift`): move the session configuration off the main thread, or make
+  (`Shared/LiteweightSoundPlayer.swift`): move the session configuration off the main thread, or make
   it lazy and idempotent.
 - `xcodebuild test` hangs before connecting in this environment. Investigate: try a specific
   simulator destination, `-parallel-testing-enabled NO`, and check for a test host that waits on
@@ -860,9 +867,9 @@ Prepared directions for the next owner review (proposals, not approval to build)
 Everything discussed or proposed so far, with its status.
 
 ### Approved and shipped
-Iron blue + one color per metric · SF Pro bold fixed-width numerals · fill sweep on set
+liteweight blue + one color per metric · SF Pro bold fixed-width numerals · fill sweep on set
 completion · rest strip inside the exercise with −15 / pause / +15 / skip · rest drains an
-`IronRestRing` · inline rest-length ruler replacing the dial · rest chip at the top right of each
+`LiteweightRestRing` · inline rest-length ruler replacing the dial · rest chip at the top right of each
 exercise card (countdown while resting) · focused current-set editor (Logger B: big fields, −/+
 steppers, "Last time", plates hint, Add RPE, Log Set) · soft set-type fills (warm-up orange,
 drop indigo, failure red) · RPE rising-bar picker · session effort rising bars ("How hard was
@@ -912,17 +919,17 @@ still a good, unrejected idea; propose it.**
 8. **Exercise thumbnails** in History rows and the Recent Workouts list (the first 3
    exercises' diagrams, overlapped).
 9. **App icon:** a blue weight plate seen face-on (systemBlue rim, darker blue inner ring,
-   black hub). Sketched on the canvas "System · Iron blue" board. It needs light, dark and
+   black hub). Sketched on the canvas "System · liteweight blue" board. It needs light, dark and
    tinted variants.
 10. **Lock Screen widget:** the rest countdown and next set, with Smart Stack relevance during
     workouts.
 11. **Weekly streak widget:** the week's day bars plus the streak.
 12. **First-run flow:** a welcome screen and "Import from Hevy" as the first-class second step;
-    Health permission explained (exports only Iron-completed workouts).
+    Health permission explained (exports only liteweight-completed workouts).
 13. **Inline exercise notes** in the logger, shown as a secondary line under the exercise name
     and editable in place.
 14. **Body tab charts** restyled to the §10 chart rules (`metricBody` purple).
-15. **Session strip set-type colors:** add drop and failure kinds to `IronSessionStrip`, so the
+15. **Session strip set-type colors:** add drop and failure kinds to `LiteweightSessionStrip`, so the
     recap and History match the new soft fills.
 
 ## 7. Lessons and pitfalls (the "intellect")
@@ -945,12 +952,12 @@ still a good, unrejected idea; propose it.**
   Any new attribute needs v7 plus a migration stage.
 - **Codex** follows long, exact specs well, but will take a "permitted fallback" quickly. Say
   explicitly when a fallback is unacceptable.
-- **Signing:** the IronIntentsUI target uses personal-team entitlements in Debug
-  (`IronIntentsUI/IronIntentsUIPersonalTeam.entitlements`); don't reintroduce upstream app
+- **Signing:** the liteweightIntentsUI target uses the owner’s entitlements in both configurations
+  (`liteweightIntentsUI/liteweightIntentsUI.entitlements`); don't reintroduce upstream app
   groups there.
 - **Siri extensions restored:** they were shelved on 2026-11-01 to save App IDs on the free team.
-  On the paid team they are embedded again as `me.joshpatra.light.intents` and
-  `me.joshpatra.light.intentsui`, and `Shortcuts.isAvailable` is true. The restore is in checkpoint
+  On the paid team they are embedded again as `me.joshpatra.liteweight.intents` and
+  `me.joshpatra.liteweight.intentsui`, and `Shortcuts.isAvailable` is true. The restore is in checkpoint
   `1607275`. Live Activity buttons use App Intents in `Shared/WidgetKit/WidgetKind.swift` and don't
   depend on these extensions.
 - **Canvas:** the design canvas is a claude.ai artifact
@@ -962,15 +969,15 @@ still a good, unrejected idea; propose it.**
 
 | Concern | Files |
 | --- | --- |
-| Tokens | `Shared/UI/SwiftUI/IronStyle.swift`; shared numeric font in `IronMetricFont.swift` |
-| Shared UI helpers | `Iron/UI/SwiftUISupport.swift`, `Iron/UI/Components/*` |
-| Live logger | `Iron/UI/Workout/CurrentWorkoutView.swift` (big), `RestTimerView.swift`, `WorkoutSetEditor.swift` |
-| Workout tab | `Iron/UI/Workout/StartWorkoutView.swift` (includes `WorkoutRepeater`) |
-| Home | `Iron/UI/Feed/FeedView.swift` |
-| History | `Iron/UI/History/HistoryView.swift`, `WorkoutDetailView.swift` |
-| Exercises | `Iron/UI/Exercises/*` (detail, statistics, history, library) |
+| Tokens | `Shared/UI/SwiftUI/LiteweightStyle.swift`; shared numeric font in `LiteweightMetricFont.swift` |
+| Shared UI helpers | `liteweight/UI/SwiftUISupport.swift`, `liteweight/UI/Components/*` |
+| Live logger | `liteweight/UI/Workout/CurrentWorkoutView.swift` (big), `RestTimerView.swift`, `WorkoutSetEditor.swift` |
+| Workout tab | `liteweight/UI/Workout/StartWorkoutView.swift` (includes `WorkoutRepeater`) |
+| Home | `liteweight/UI/Feed/FeedView.swift` |
+| History | `liteweight/UI/History/HistoryView.swift`, `WorkoutDetailView.swift` |
+| Exercises | `liteweight/UI/Exercises/*` (detail, statistics, history, library) |
 | Model | `WorkoutDataKit/` (`ExerciseStore` holds recency) |
-| Health | `Iron/HealthKit/HealthManager.swift`, `Workout+Logic.swift` |
-| Watch | `WatchIron Extension/`, `Iron/WatchConnectivity/` |
-| Import | `Iron/Data/Model/HevyCSV.swift` |
-| Sounds | `Shared/IronSoundPlayer.swift`, `Iron/Resources/Sounds/`, `scripts/generate_sounds.py` |
+| Health | `liteweight/HealthKit/HealthManager.swift`, `Workout+Logic.swift` |
+| Watch | `liteweight Watch Extension/`, `liteweight/WatchConnectivity/` |
+| Import | `liteweight/Data/Model/HevyCSV.swift` |
+| Sounds | `Shared/LiteweightSoundPlayer.swift`, `liteweight/Resources/Sounds/`, `scripts/generate_sounds.py` |

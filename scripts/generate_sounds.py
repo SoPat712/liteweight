@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Generate Iron's original interaction sounds. Run on macOS with afconvert.
+"""Generate liteweight's original interaction sounds. Run on macOS with afconvert.
 
 Only the Python standard library is used. WAV intermediates are temporary;
 the reproducible, uncompressed CAFs are the app/notification bundle resources.
@@ -15,7 +15,7 @@ import wave
 
 
 SAMPLE_RATE = 44100
-OUTPUT = Path(__file__).resolve().parents[1] / "Iron/Resources/Sounds"
+OUTPUT = Path(__file__).resolve().parents[1] / "liteweight/Resources/Sounds"
 
 
 def silence(duration):
@@ -107,7 +107,7 @@ def sounds():
 
 def main():
     OUTPUT.mkdir(parents=True, exist_ok=True)
-    with tempfile.TemporaryDirectory(prefix="iron-sounds-") as temporary:
+    with tempfile.TemporaryDirectory(prefix="liteweight-sounds-") as temporary:
         for name, buffer, peak_db, cutoff in sounds():
             low_pass(buffer, cutoff)
             # Bring the filter tail smoothly to zero, then normalize with headroom.

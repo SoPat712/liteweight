@@ -1,6 +1,6 @@
 //
 //  UserDefaults+HiddenExerciseUuids.swift
-//  Iron
+//  liteweight
 //
 //  Created by Karim Abou Zeid on 15.10.19.
 //  Copyright © 2019 Karim Abou Zeid Software. All rights reserved.

@@ -1,6 +1,6 @@
 //
 //  WorkoutExerciseMigrationPolicyV1.swift
-//  Iron
+//  liteweight
 //
 //  Created by Karim Abou Zeid on 25.10.19.
 //  Copyright © 2019 Karim Abou Zeid Software. All rights reserved.
@@ -13,7 +13,7 @@ class WorkoutExerciseMigrationPolicyV1: UuidMigrationPolicy {
     private static let exerciseStore = ExerciseStore(
         // not completely clean to hardcode the custom exercises path here
         customExercisesURL: FileManager.default
-            .containerURL(forSecurityApplicationGroupIdentifier: "group.com.kabouzeid.Iron")?
+            .containerURL(forSecurityApplicationGroupIdentifier: "group.me.joshpatra.liteweight")?
             .appendingPathComponent("Library")
             .appendingPathComponent("Application Support")
             .appendingPathComponent("custom_exercises").appendingPathExtension("json")

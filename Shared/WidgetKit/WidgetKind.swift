@@ -1,6 +1,6 @@
 //
 //  WidgetKind.swift
-//  Iron
+//  liteweight
 //
 //  Created by Karim Abou Zeid on 12.10.20.
 //  Copyright © 2020 Karim Abou Zeid Software. All rights reserved.
@@ -25,7 +25,7 @@ enum WidgetKind: String {
 enum WorkoutLiveActivityArtwork {
     private static var appGroupIdentifier: String {
         #if DEBUG && targetEnvironment(simulator)
-        return "group.com.joshpatra.IronDev.live-activity"
+        return "group.me.joshpatra.liteweight.simulator"
         #else
         return FileManager.appGroupIdentifier
         #endif
@@ -53,7 +53,7 @@ enum WorkoutLiveActivityArtwork {
 }
 
 #if canImport(ActivityKit)
-/// The value-only contract shared by Iron and its WidgetKit extension.
+/// The value-only contract shared by liteweight and its WidgetKit extension.
 /// Keep this payload compact: ActivityKit limits static and dynamic data to 4 KB.
 @available(iOS 16.1, *)
 struct WorkoutActivityAttributes: ActivityAttributes {
@@ -174,7 +174,7 @@ struct WorkoutActivityAttributes: ActivityAttributes {
 @available(iOS 17.0, *)
 struct CompleteWorkoutSetIntent: LiveActivityIntent {
     static var title: LocalizedStringResource = "Complete Workout Set"
-    static var description = IntentDescription("Marks the displayed Light workout set complete.")
+    static var description = IntentDescription("Marks the displayed liteweight workout set complete.")
     static var openAppWhenRun = false
     static var isDiscoverable = false
 
@@ -195,7 +195,7 @@ struct CompleteWorkoutSetIntent: LiveActivityIntent {
     }
 
     func perform() async throws -> some IntentResult {
-        #if IRON_WIDGET_EXTENSION
+        #if LITEWEIGHT_WIDGET_EXTENSION
         // The system executes this LiveActivityIntent in the containing app.
         #else
         await WorkoutLiveActivityIntentHandler.completeSet(
@@ -210,7 +210,7 @@ struct CompleteWorkoutSetIntent: LiveActivityIntent {
 @available(iOS 17.0, *)
 struct AdjustWorkoutRestTimerIntent: LiveActivityIntent {
     static var title: LocalizedStringResource = "Adjust Workout Rest Timer"
-    static var description = IntentDescription("Adds or removes time from Light's active rest timer.")
+    static var description = IntentDescription("Adds or removes time from liteweight's active rest timer.")
     static var openAppWhenRun = false
     static var isDiscoverable = false
 
@@ -231,7 +231,7 @@ struct AdjustWorkoutRestTimerIntent: LiveActivityIntent {
     }
 
     func perform() async throws -> some IntentResult {
-        #if IRON_WIDGET_EXTENSION
+        #if LITEWEIGHT_WIDGET_EXTENSION
         // LiveActivityIntent is performed by the containing app. This copy exists so
         // the widget extension can archive the button's intent metadata.
         #else
@@ -257,7 +257,7 @@ struct ResumeWorkoutRestTimerIntent: LiveActivityIntent {
     init(workoutID: String) { self.workoutID = workoutID }
 
     func perform() async throws -> some IntentResult {
-        #if !IRON_WIDGET_EXTENSION
+        #if !LITEWEIGHT_WIDGET_EXTENSION
         await WorkoutLiveActivityIntentHandler.resumeRestTimer(workoutID: workoutID)
         #endif
         return .result()
@@ -267,7 +267,7 @@ struct ResumeWorkoutRestTimerIntent: LiveActivityIntent {
 @available(iOS 17.0, *)
 struct SkipWorkoutRestTimerIntent: LiveActivityIntent {
     static var title: LocalizedStringResource = "Skip Workout Rest Timer"
-    static var description = IntentDescription("Skips Light's active rest timer.")
+    static var description = IntentDescription("Skips liteweight's active rest timer.")
     static var openAppWhenRun = false
     static var isDiscoverable = false
 
@@ -283,7 +283,7 @@ struct SkipWorkoutRestTimerIntent: LiveActivityIntent {
     }
 
     func perform() async throws -> some IntentResult {
-        #if IRON_WIDGET_EXTENSION
+        #if LITEWEIGHT_WIDGET_EXTENSION
         // See AdjustWorkoutRestTimerIntent.perform().
         #else
         await WorkoutLiveActivityIntentHandler.skipRestTimer(workoutID: workoutID)

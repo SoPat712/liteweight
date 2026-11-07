@@ -11,7 +11,7 @@ copied or changed for this audit. The glyph was `o.circle.fill` for the “other
   synonyms. Hevy “Bicep Curl (Machine)” did not match “Biceps Curl: Machine”; “Machine” did
   not bridge the catalog's “Lever” naming. Unmatched exercises were created with empty
   metadata and a distinct custom UUID. Changing the matcher alone would not repair them.
-- Iron bundles **1,441** entries; 1,324 have remote media filenames, 159 have PDF references
+- liteweight bundles **1,441** entries; 1,324 have remote media filenames, 159 have PDF references
   (some overlap). Only 71 entries originally had aliases. The catalog last changed in
   `adec86d` (2026-08-27); it mixes retained legacy Everkinetic entries with ExerciseDB V1
   metadata. It has no explicit upstream dataset version. The provider currently advertises
@@ -94,7 +94,7 @@ explicitly separates media rights from the code/text: the media is licensed to O
 limited non-commercial OpenGym-fork exception, and cannot simply be integrated into an
 independent app. Higher resolutions exist only in its compiled app packages. The original
 1,324 text entries retain their MIT provenance; newer text/edits/descriptions are AGPL.
-Iron's root license is GPL v3. OpenGym artwork is not included. The later text integration is described below, with bundled AGPL/MIT notices.
+liteweight's root license is GPL v3. OpenGym artwork is not included. The later text integration is described below, with bundled AGPL/MIT notices.
 
 OpenGym's [published App Store listing](https://apps.apple.com/us/app/opengym-workout-tracker/id6822275400)
 now includes Apple Watch, heart rate, set/rest controls, Hevy import and optional Apple Health.
@@ -107,7 +107,7 @@ The owner's Watch requirement therefore does not by itself rule out trying OpenG
 
 ## Current dataset update and imported-history matching
 
-The owner explicitly chose to keep Iron and requested an OpenGym-based main dataset update,
+The owner explicitly chose to keep liteweight and requested an OpenGym-based main dataset update,
 plus matching imported Hevy history (not API/account synchronization).
 
 - Canonical text source: OpenGym revision `042c9ee42282756ab0e6e86a1cd5c710efaecee6`.
@@ -115,7 +115,7 @@ plus matching imported Hevy history (not API/account synchronization).
   excluding 922 variant-only records. The converter preserves all 1,324 existing media-prefix
   UUIDs/IDs and generates stable UUIDs/negative IDs for 4,308 new definitions.
 - `ExerciseCatalogMetadata.updatingCatalog` replaces the 1,324 known definitions in place,
-  keeps 117 legacy-only exercises, and appends the 4,308 new definitions. Iron's main library
+  keeps 117 legacy-only exercises, and appends the 4,308 new definitions. liteweight's main library
   therefore contains **5,749 built-ins**, with every original UUID/ID/media reference retained.
   Original titles remain aliases when renamed upstream. New entries without existing artwork
   show their muscle/equipment metadata and the neutral strength-training placeholder.
@@ -131,7 +131,7 @@ plus matching imported Hevy history (not API/account synchronization).
   `everkinetic-data/Licenses/`; Settings attributes both text sources. OpenGym's media notice
   permits a limited non-commercial OpenGym-fork exception and explicitly excludes independent
   app integration. No OpenGym stills or clips were read, processed or included.
-- List thumbnails now persist a PNG of the first frame from Iron's existing ExerciseDB media.
+- List thumbnails now persist a PNG of the first frame from liteweight's existing ExerciseDB media.
   Demonstrations retain the original animation. Native resolution remains 180 px; this is a
   cache/loading improvement, not higher-resolution artwork. Separately licensed bundled
   `catalogue/still/` files can be resolved without changing workout identities.
@@ -152,12 +152,12 @@ Verification for this update:
 - Simulator search for “Hip Thrust (Barbell)” found the canonical and existing custom entries;
   the custom detail showed its Hevy name, Glutes/Barbell metadata, target map and instructions.
   Five persisted list PNGs were created while 1,324 original GIFs remained cached.
-  Screenshots are in the task's `iron-cohesion/opengym-*` artifacts. The stale 1,400+ search
+  Screenshots are in the task's `liteweight-cohesion/opengym-*` artifacts. The stale 1,400+ search
   prompt was corrected to “Search exercises”.
 - The final signed app installed and launched on Josh's iPhone. An optional post-install
   device-to-host copy for byte comparison was blocked by automatic approval review because
   it could contain personal exercise data; no transfer was retried. Phone-file byte equality
-  is not claimed for this update. Iron's simulator was shut down and shared slots released.
+  is not claimed for this update. liteweight's simulator was shut down and shared slots released.
 
 ## One illustrated set and OpenGym revision `b6cfe2b` — 2026-11-02
 
@@ -174,8 +174,8 @@ The owner asked to replace the black-and-white outline icons with the cohesive s
 - **OpenGym has no consolidated list.** Its README says an id is never deleted and a duplicate
   is fixed by improving one entry. Against the earlier revision, 316 exercise files changed and
   none were added or removed. They add `hold` (135), `needs` (110), and equipment or body-part
-  corrections. Iron's importer reads equipment but not those new fields, so regenerating changed
-  46 entries. Iron guesses timed holds from names, so wall sits and L-sits still default to reps.
+  corrections. liteweight's importer reads equipment but not those new fields, so regenerating changed
+  46 entries. liteweight guesses timed holds from names, so wall sits and L-sits still default to reps.
 - **Default lists:** the owner asked for high-quality exercises over every exercise, and for
   caution: "I'd rather miss some than get rid of too many". Of 5,749 built-ins, default lists show
   1,383. No exercise is deleted, and history, imports and UUIDs are unchanged. Search and "Show N
@@ -188,7 +188,7 @@ The owner asked to replace the black-and-white outline icons with the cohesive s
   whether they differ. Anything Hevy imports map to was left out, which excluded
   Bench Press: Machine, Biceps Curl: Machine and Triceps Pushdown: Cable with and without rope.
   Plain common names such as Crunch, Plank, Leg Press and Leg Extension also stay.
-- **ExerciseDB's free tier** has 1,500 entries. It includes all 1,324 pictures Iron uses and 176
+- **ExerciseDB's free tier** has 1,500 entries. It includes all 1,324 pictures liteweight uses and 176
   more, of which only 2 exactly name a no-picture exercise, so it doesn't close the gap. Its README
   calls the free endpoints "for exploration only and not recommended for production integration".
 - **Before a public release:** OpenGym's text may be used under the bundled AGPL and MIT notices;

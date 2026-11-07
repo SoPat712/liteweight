@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 
-// Builds Iron's bundled catalogue from the MIT-licensed exercise metadata supplied with
-// the openGym reference tree. Existing Iron UUIDs and diagrams are retained for matching
+// Builds liteweight's bundled catalogue from the MIT-licensed exercise metadata supplied with
+// the openGym reference tree. Existing liteweight UUIDs and diagrams are retained for matching
 // exercises so historical Core Data relationships remain valid.
 
 import crypto from 'node:crypto'
@@ -18,7 +18,7 @@ if (!fs.existsSync(sourcePath)) {
 }
 
 // Generated openGym entries use negative IDs. Filtering them makes this generator idempotent
-// while preserving Iron's original positive-ID catalogue for UUID and PDF matching.
+// while preserving liteweight's original positive-ID catalogue for UUID and PDF matching.
 const legacy = JSON.parse(fs.readFileSync(outputPath, 'utf8'))
   .filter(exercise => exercise.id >= 0)
 const source = fs.readFileSync(sourcePath, 'utf8')
@@ -112,14 +112,14 @@ const generated = openGym.map(exercise => {
     tips: matched?.tips || [],
     references: matched?.references || [],
     // The app extracts the ExerciseDB media ID and resolves it against the official free
-    // V1 CDN at runtime. The third-party binaries are intentionally not copied into Iron.
+    // V1 CDN at runtime. The third-party binaries are intentionally not copied into liteweight.
     pdf: matched?.pdf || [],
     image: exercise.img || null,
     animation: exercise.gif || null,
   }
 })
 
-// Keep unmatched legacy movements so old workout history and Iron's existing diagrams never
+// Keep unmatched legacy movements so old workout history and liteweight's existing diagrams never
 // become unresolved. They remain searchable alongside the broader catalogue.
 for (const exercise of legacy) {
   if (!matchedLegacyUuids.has(exercise.uuid)) generated.push(exercise)
@@ -133,4 +133,4 @@ if (uuidCount !== generated.length) {
 }
 
 fs.writeFileSync(outputPath, `${JSON.stringify(generated, null, 2)}\n`)
-console.log(`Generated ${generated.length} Iron exercises (${openGym.length} openGym, ${matchedLegacyUuids.size} diagram/history matches, ${legacy.length - matchedLegacyUuids.size} retained legacy).`)
+console.log(`Generated ${generated.length} liteweight exercises (${openGym.length} openGym, ${matchedLegacyUuids.size} diagram/history matches, ${legacy.length - matchedLegacyUuids.size} retained legacy).`)

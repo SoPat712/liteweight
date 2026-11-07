@@ -100,7 +100,7 @@ struct NumericKeyboard: View {
     }
     
     static func playButtonSound() {
-        IronSoundPlayer.shared.play(.tick)
+        LiteweightSoundPlayer.shared.play(.tick)
     }
     
     static func textActionKeyboardButton(
@@ -111,7 +111,7 @@ struct NumericKeyboard: View {
     ) -> some View {
         Button(action: { playButtonSound(); action() }) {
             label
-                .font(.ironMetric(.title3, weight: .semibold))
+                .font(.liteweightMetric(.title3, weight: .semibold))
                 .foregroundStyle(.primary)
                 .frame(width: width)
                 .frame(minHeight: minHeight)

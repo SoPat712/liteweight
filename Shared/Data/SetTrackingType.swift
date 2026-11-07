@@ -280,7 +280,7 @@ final class DefaultsValueCache<Value: Equatable>: ObservableObject {
     private let publishesChanges: Bool
     private var observers: [NSObjectProtocol] = []
     private var entries: [ObjectIdentifier: Entry] = [:]
-    private let writeNotification = Notification.Name("ironCachedDefaultsValueDidChange")
+    private let writeNotification = Notification.Name("liteweightCachedDefaultsValueDidChange")
 
     private final class Entry {
         weak var defaults: UserDefaults?

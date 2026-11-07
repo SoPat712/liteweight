@@ -1,6 +1,6 @@
 //
 //  ExerciseStore.swift
-//  Iron
+//  liteweight
 //
 //  Created by Karim Abou Zeid on 17.09.19.
 //  Copyright © 2019 Karim Abou Zeid Software. All rights reserved.
@@ -244,7 +244,7 @@ public enum ExerciseRecency {
     /// One scalar fetch for the entire history, with no managed-object faults or
     /// per-exercise queries. A qualifying workout has at least one completed set;
     /// every exercise appearing in it counts, including an entry with no sets.
-    /// importSource is deliberately unrestricted (Hevy and Iron use the same rule).
+    /// importSource is deliberately unrestricted (Hevy and liteweight use the same rule).
     public static func latestDates(in context: NSManagedObjectContext) throws -> [UUID: Date] {
         let request = NSFetchRequest<NSDictionary>(entityName: "WorkoutExercise")
         request.resultType = .dictionaryResultType
@@ -470,13 +470,13 @@ extension ExerciseStore {
             case .duplicateTitle(let title):
                 return "An exercise named \(title) already exists."
             case .storageUnavailable:
-                return "Light could not access custom-exercise storage."
+                return "liteweight could not access custom-exercise storage."
             case .exerciseNotFound:
                 return "This custom exercise no longer exists."
             case .couldNotRead(let error):
-                return "Light could not read your custom exercises: \(error.localizedDescription)"
+                return "liteweight could not read your custom exercises: \(error.localizedDescription)"
             case .couldNotWrite(let error):
-                return "Light could not save the custom exercise: \(error.localizedDescription)"
+                return "liteweight could not save the custom exercise: \(error.localizedDescription)"
             }
         }
     }

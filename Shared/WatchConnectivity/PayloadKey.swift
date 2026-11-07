@@ -1,6 +1,6 @@
 //
 //  PayloadKey.swift
-//  Iron
+//  liteweight
 //
 //  Created by Karim Abou Zeid on 04.11.19.
 //  Copyright © 2019 Karim Abou Zeid Software. All rights reserved.
@@ -841,7 +841,7 @@ struct WatchWorkoutLibrary: Codable, Equatable {
 
     static func historyMediaURL(for exercise: WatchWorkoutExercise) -> URL {
         exercise.imageURL.flatMap(URL.init(string:))
-            ?? URL(fileURLWithPath: "/LightExerciseMedia/" + (exercise.exerciseUuid ?? exercise.id).uuidString)
+            ?? URL(fileURLWithPath: "/LiteweightExerciseMedia/" + (exercise.exerciseUuid ?? exercise.id).uuidString)
     }
 
     /// Transport clocks alone must not rewrite the large library file or

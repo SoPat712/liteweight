@@ -48,7 +48,7 @@ enum AppSettingsArchive {
     private static let allowlist: [Domain: [String: ValueType]] = [
         .appGroup: [
             "weightUnit": .string,
-            "ironAppearance": .string,
+            "liteweightAppearance": .string,
             "defaultRestTime": .number,
             "defaultRestTimeDumbbellBased": .number,
             "defaultRestTimeBarbellBased": .number,
@@ -71,7 +71,7 @@ enum AppSettingsArchive {
             "hiddenExerciseUuids": .uuidStrings
         ],
         .standard: [
-            "Iron.finishWorkout.syncWithHealth": .bool,
+            "liteweight.finishWorkout.syncWithHealth": .bool,
             "home.cards": .string,
             // Still read when home.cards has not yet been customized.
             "home.weekStyle": .string,
@@ -85,6 +85,12 @@ enum AppSettingsArchive {
             "plateCalculator.inventory.v1": .plateInventory,
             "plateCalculator.loadouts.v1": .plateLoadouts
         ]
+    ]
+
+    // Read aliases only on import. New archives contain current keys exclusively.
+    private static let legacyAliases: [Domain: [String: String]] = [
+        .appGroup: ["liteweightAppearance": LegacyIdentifiers.appearanceSettingKey],
+        .standard: ["liteweight.finishWorkout.syncWithHealth": LegacyIdentifiers.syncWithHealthSettingKey]
     ]
 
     static func capture(standard: UserDefaults, appGroup: UserDefaults) throws -> Data {
@@ -136,7 +142,8 @@ enum AppSettingsArchive {
             guard let values = archive[domain.rawValue] as? [String: Any] else { continue }
             let defaults = domain == .standard ? standard : appGroup
             for (key, type) in allowlist[domain] ?? [:] {
-                guard let value = values[key], type.accepts(value) else { continue }
+                let legacyValue = legacyAliases[domain].flatMap { $0[key] }.flatMap { values[$0] }
+                guard let value = values[key] ?? legacyValue, type.accepts(value) else { continue }
                 switch type {
                 case .plateInventory:
                     if let data = value as? Data,

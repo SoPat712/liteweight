@@ -259,7 +259,7 @@ public class Workout: NSManagedObject, Codable {
         let storedSource = try container.decodeIfPresent(String.self, forKey: .importSource)
         let storedState = try container.decodeIfPresent(String.self, forKey: .healthExportState)
         // Only a backup restores provenance. A history JSON import cannot claim
-        // to have been completed/exported by this installation of Iron.
+        // to have been completed/exported by this installation of liteweight.
         let preservingProvenance = decoder.userInfo[.preserveWorkoutProvenance] as? Bool == true
         importSource = preservingProvenance ? storedSource : "json"
         healthExportState = preservingProvenance ? storedState : nil

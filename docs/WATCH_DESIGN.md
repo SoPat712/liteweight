@@ -1,4 +1,4 @@
-# Light Watch app and effort/RPE: build spec (Round 6, owner-approved 2026-10-26)
+# liteweight Watch app and effort/RPE: build spec (Round 6, owner-approved 2026-10-26)
 
 Designed by the lead (Claude). The owner approved Round 6 ("I like the artifact a lot") and the
 two follow-ups in §3. Build exactly this. Do not redesign or add buttons, menus or screens.
@@ -26,10 +26,10 @@ two follow-ups in §3. Build exactly this. Do not redesign or add buttons, menus
    `deleteSet`, `updateSetTag`, `addExercise`, `replaceExercise`, `deleteExercise`,
    `startRestTimer`, `stopRestTimer`, superset and reorder helpers, finish and discard). Imported
    workouts are never exported to Health.
-5. Watch tokens live in `WatchIron Extension/UI/WatchDesign.swift` (`IronTheme`). Add the new ones
+5. Watch tokens live in `liteweight Watch Extension/UI/WatchDesign.swift` (`LiteweightTheme`). Add the new ones
    there (§1). No literal colors in view code.
 6. Accessibility: every control is a real `Button` with a label. Numbers have accessibility
-   values. Respect Reduce Motion (`IronMotion.preferred`). Large text sizes wrap rather than clip.
+   values. Respect Reduce Motion (`LiteweightMotion.preferred`). Large text sizes wrap rather than clip.
 
 ## 1. Watch tokens (add to `WatchDesign.swift`)
 
@@ -64,8 +64,8 @@ Type: use watchOS text styles, scaled to match the mockup on a 49 mm screenshot.
 - Row title: `.headline`.
 - Meta: `.footnote`, secondary.
 - Section header: `.footnote.weight(.semibold)`, secondary.
-- Big numbers: `Font.ironMetric(.title, weight: .semibold)` or `.largeTitle`.
-- Every number uses monospaced digits (`ironMetric`).
+- Big numbers: `Font.liteweightMetric(.title, weight: .semibold)` or `.largeTitle`.
+- Every number uses monospaced digits (`liteweightMetric`).
 
 Never use the rounded font design.
 
@@ -107,7 +107,7 @@ SF Symbols:
 ### 2.1 Workout toolbar (every workout screen)
 
 Leading slot, next to the system back button:
-- `heart.fill` at 13 pt and the BPM value, both in `metricHeartRate`, value in `.ironMetric(.headline, .semibold)`;
+- `heart.fill` at 13 pt and the BPM value, both in `metricHeartRate`, value in `.liteweightMetric(.headline, .semibold)`;
 - 7 pt gap;
 - `flame.fill` at 13 pt with the kcal value in `metricEnergy`, followed by a small "KCAL" caption in the darker orange.
 
@@ -127,7 +127,7 @@ Type: names and buttons use `.footnote` semibold, and screen titles use `.headli
 
 ### 2.2 Home (W6Home, W6HomeIdle)
 
-The navigation title is "Light", shown in the accent color as the system title. Scrolling list,
+The navigation title is "liteweight", shown in the accent color as the system title. Scrolling list,
 from the top:
 1. **When a workout is running:** a card on `accentWash`:
    - a dot and "In Progress" in `accentText`, `.footnote.semibold`;
@@ -230,7 +230,7 @@ This is the root of an active workout.
 1. The exercise name (one line, secondary), then "Set 4 of 5" (`.title3.bold`) with a set-type chip
    if the set isn't normal.
 2. Two fields side by side, about 60 pt tall:
-   - Weight: label "Weight · lb", value in `.ironMetric(.largeTitle)`;
+   - Weight: label "Weight · lb", value in `.liteweightMetric(.largeTitle)`;
    - Reps.
 
    The focused field has `accentWash` with a 1.5 pt accent stroke, and its label is accent. The
@@ -259,7 +259,7 @@ This is the root of an active workout.
 - Delete Exercise (red), which confirms first.
 
 **Rest Timer:**
-- a cyan value in `.ironMetric(.largeTitle)`;
+- a cyan value in `.liteweightMetric(.largeTitle)`;
 - −15 and +15 circles (38 pt) on either side; **the Crown also adjusts it in 15 s detents**;
 - preset capsules 1:00, 1:30, 2:00, 2:30, 3:00 and 4:00, three per row, with the selected one filled cyan with black text;
 - a Done prominent button.
@@ -279,7 +279,7 @@ checkmark on the selected one. Choosing one returns immediately.
 This is a full-screen page pushed after Log Set, with no back button but with the vitals.
 - "Rest" title in cyan.
 - A 112 pt ring with an 8 pt stroke: cyan progress on a cyan 0.2 track, with round caps, starting at 12 o'clock.
-- Inside the ring: the remaining time in `.ironMetric(.largeTitle)`, and "of 2:30", secondary.
+- Inside the ring: the remaining time in `.liteweightMetric(.largeTitle)`, and "of 2:30", secondary.
 - −15 and +15 glass circles (38 pt) on each side.
 - **The Crown adds or removes 15 s per detent**, with a click haptic. The owner confirmed this.
 - "Next" plus the next set (exercise short name · weight × reps), one line.
@@ -351,15 +351,15 @@ It should **match Apple's control almost exactly**:
   Easy systemGreen, Moderate systemYellow, Hard systemOrange, All Out systemRed. The selected dot
   is white and larger; dots for lower levels are white at 0.75; dots above the selection inside the
   selected block are black at 0.28.
-- **Readout above the graph.** The number in `ironMetric` (large) and the tier word, both in the
+- **Readout above the graph.** The number in `liteweightMetric` (large) and the tier word, both in the
   tier color. On light backgrounds use Apple's accessible text variants: green #248A3D, yellow
   #B25000, orange #C93400, red #D70015.
 - **Input:**
   - tapping a dot selects that level;
   - tapping a block selects its first level, or keeps the current level if it's already inside that block;
-  - a horizontal scrub selects by position (reuse `ironHorizontalScrub`) without stealing vertical scroll;
+  - a horizontal scrub selects by position (reuse `liteweightHorizontalScrub`) without stealing vertical scroll;
   - on Watch, the Crown steps 1…10;
-  - every change plays `.selection` haptics and animates with `IronMotion.snappy`;
+  - every change plays `.selection` haptics and animates with `LiteweightMotion.snappy`;
   - VoiceOver is adjustable, read as "7 of 10, Hard".
 - **Placement.**
   - iPhone: replace the existing `EffortRatingGraph` and `FinishWorkoutEffortControl` visuals (in
@@ -380,12 +380,12 @@ The same language, but **not chunked**:
   `min(4, barWidth / 2.6)` on Watch.
 - **Fill.** Bars at or below the selection are `metricEffort` (pink); the rest are the gray base.
 - **Labels.** Whole-number labels (5 6 7 8 9 10) centered under their bars, `.caption.semibold`, secondary.
-- **Readout.** The value ("8.5") in pink `ironMetric` and the reps-in-reserve text from `RPE`
+- **Readout.** The value ("8.5") in pink `liteweightMetric` and the reps-in-reserve text from `RPE`
   (for example "1–2 reps left"), with a Clear button.
 - **Input.** Tap or scrub; on Watch the Crown moves in 0.5 steps; haptics; VoiceOver adjustable
   ("RPE 8.5, 1 to 2 reps left").
-- **Placement.** Replace the set RPE `IronIntensityGraph` use in `CurrentWorkoutView.swift`. Remove
-  `IronIntensityGraph` if nothing else uses it.
+- **Placement.** Replace the set RPE `LiteweightIntensityGraph` use in `CurrentWorkoutView.swift`. Remove
+  `LiteweightIntensityGraph` if nothing else uses it.
 
 ## 4. Done means
 

@@ -37,10 +37,10 @@ struct BannerViewEntry : View, Identifiable {
     var body: some View {
         VStack {
             text
-                .font(.ironMetric(.title2))
+                .font(.liteweightMetric(.title2))
             if detail != nil {
                 detail!
-                    .font(.ironMetric(.body, weight: .semibold))
+                    .font(.liteweightMetric(.body, weight: .semibold))
                     .foregroundColor(detailColor ?? Color(UIColor.tertiaryLabel))
             }
             title

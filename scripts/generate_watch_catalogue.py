@@ -98,7 +98,7 @@ for item in sorted(source_order, key=lambda item: proposed_titles[item['uuid']].
     if item['uuid'] in duplicates or not (filename or item.get('pdf')):
         entry['listed'] = False
     result.append(entry)
-destination = root / 'WatchIron Extension/WatchExerciseCatalog.json'
+destination = root / 'liteweight Watch Extension/WatchExerciseCatalog.json'
 destination.write_text(json.dumps(result, ensure_ascii=False, separators=(',', ':')) + '\n')
 assert len({entry['id'] for entry in result}) == len(result)
 print(f'{len(result)} exercises; {destination.stat().st_size} bytes')

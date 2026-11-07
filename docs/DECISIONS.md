@@ -1,12 +1,24 @@
-# Light decisions log
+# liteweight decisions log
 
 Calls made for the owner without his explicit sign-off on the detail. Newest first. Each entry says why, where it lives, and how to undo it. Once commits exist, each entry names its commit, so `git revert <sha>` undoes it.
 
-Builds are installed with `~/.local/share/light/tools/install-NN.sh`. Lane briefs and reports live in `~/.local/share/light/lanes/ui/`.
+Builds are installed with `~/.local/share/liteweight/tools/install-NN.sh`. Lane briefs and reports live in `~/.local/share/liteweight/lanes/ui/`.
 
 **Checkpoint commit `1607275`** (2026-11-06) contains every entry below dated up to and including build 97. Those entries can't be reverted one by one with git. Use each entry's "Roll back" steps instead. Entries added after this checkpoint each get their own commit.
 
 ---
+
+## 2026-11-07
+
+### Renamed to liteweight
+- **Asked:** the owner chose the final name **liteweight**, all lowercase wherever people see it.
+- **Decided:**
+  - Code uses the `Liteweight` prefix, lowercase `liteweight` helpers, and matching project, target and resource paths.
+  - The app ID is `me.joshpatra.liteweight`; existing data moves by backup and restore into the new app's container.
+  - The “Built on Iron” upstream credit stays in About and the project credits stay in README.
+  - Feedback goes to `liteweight@joshpatra.me`.
+  - New backups use `.liteweightbackup`; old backups still restore, including their saved settings.
+- **Roll back:** restore the pre-rename files from a deliberate owner-approved snapshot; this lane is uncommitted. The new app ID has a separate container, so move data with backup and restore when switching identities.
 
 ## 2026-11-06
 
@@ -49,7 +61,7 @@ Builds are installed with `~/.local/share/light/tools/install-NN.sh`. Lane brief
   - The owner's phone runs Debug builds, and unoptimized Swift string code was the bottleneck.
   - Search logic and ranking are unchanged. ENABLE_TESTABILITY stays on, so `@testable import WorkoutDataKit` still works.
 - **Trade-off:** stepping through WorkoutDataKit in the debugger is less precise.
-- **Roll back:** set that one setting back to `"-Onone"` (WorkoutDataKit Debug, in `Light.xcodeproj/project.pbxproj`).
+- **Roll back:** set that one setting back to `"-Onone"` (WorkoutDataKit Debug, in `liteweight.xcodeproj/project.pbxproj`).
 
 ### Exercise search runs off the main thread and stays pinned at the top (build 97)
 - **Asked:** "search is super laggy" and "search should stay atop!"
@@ -73,8 +85,8 @@ Builds are installed with `~/.local/share/light/tools/install-NN.sh`. Lane brief
   - Bar Weight became one screen with preset capsules.
   - Option icons use one style, a solid role-color circle with a white symbol.
   - Row values are secondary text; accent marks only tappable items.
-- **Where:** `WatchIron Extension/UI/ContentView.swift`, `WorkoutSessionView.swift`, `WatchDesign.swift`, `IronApp.swift` (demo routes).
-- **Roll back:** revert lanes W2A and W2B. A pre-lane copy of the Watch UI files is at `~/.local/share/light/pre-watch-audit/files.tar`, but it predates rounds 1 and 2.
+- **Where:** `liteweight Watch Extension/UI/ContentView.swift`, `WorkoutSessionView.swift`, `WatchDesign.swift`, `LiteweightApp.swift` (demo routes).
+- **Roll back:** revert lanes W2A and W2B. A pre-lane copy of the Watch UI files is at `~/.local/share/liteweight/pre-watch-audit/files.tar`, but it predates rounds 1 and 2.
 
 ### Watch plate calculator layout (build 96)
 - **Asked:** "diagram front and center? weight small? idk!"
@@ -127,7 +139,7 @@ Builds are installed with `~/.local/share/light/tools/install-NN.sh`. Lane brief
   - Only an allowlist of equipment words moves to the end: Barbell, EZ Bar, Dumbbell, Cable, Kettlebell, Band, Smith Machine, Trap Bar, Landmine.
   - Name collisions keep their original titles.
   - Siri suggestions match on the original title.
-- **Roll back:** revert lane R1. U9's first attempt is saved at `~/.local/share/light/lanes/ui/U9.patch`.
+- **Roll back:** revert lane R1. U9's first attempt is saved at `~/.local/share/liteweight/lanes/ui/U9.patch`.
 
 ### Tab titles use inline-large display (build 93)
 - **Asked:** "why are they wasting vertical space".

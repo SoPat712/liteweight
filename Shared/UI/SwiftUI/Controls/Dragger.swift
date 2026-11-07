@@ -154,7 +154,7 @@ struct Dragger : View {
                     if self.tmpValueInitialized { // no feedback on init
                         self.selectionFeedbackGenerator?.selectionChanged()
                         self.selectionFeedbackGenerator?.prepare()
-                        IronSoundPlayer.shared.play(.tick)
+                        LiteweightSoundPlayer.shared.play(.tick)
                     }
                     self.tmpValue = newTmpValue
                     self.tmpValueInitialized = true
@@ -263,7 +263,7 @@ struct Dragger : View {
                 HStack(spacing: 0) {
                     valueString.map {
                         Text($0)
-                            .font(.ironMetric(.body, weight: .semibold))
+                            .font(.liteweightMetric(.body, weight: .semibold))
                             .lineLimit(1)
                     }
                     if showCursor {

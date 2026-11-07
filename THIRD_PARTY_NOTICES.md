@@ -2,7 +2,7 @@
 
 ## Exercise catalogue and instructions
 
-Iron's generated exercise catalogue uses metadata and English instruction text from the
+liteweight's generated exercise catalogue uses metadata and English instruction text from the
 `hasaneyldrm/exercises-dataset` data included through the supplied openGym reference material.
 That metadata and text are distributed under the MIT License:
 
@@ -27,12 +27,12 @@ Source: https://github.com/hasaneyldrm/exercises-dataset
 
 ### OpenGym catalogue updates
 
-Iron also includes the current OpenGym exercise names, muscles, descriptions and instructions,
+liteweight also includes the current OpenGym exercise names, muscles, descriptions and instructions,
 adapted from revision `b6cfe2bbd3f099523ffbf2677438864e9a09a06f`.
 Copyright (C) 2026 Duarte Santos and contributors. OpenGym-authored text and corrections are
 licensed under GNU AGPL version 3; the original ExerciseDB text retains the MIT notice above.
 
-The converted JSON, source-ID map and converter ship in Iron's source tree. The full AGPL,
+The converted JSON, source-ID map and converter ship in liteweight's source tree. The full AGPL,
 upstream text notice and pinned source/hash manifest are bundled under
 `WorkoutDataKit/everkinetic-data/Licenses/`. No OpenGym exercise media is included.
 
@@ -40,8 +40,8 @@ Source: https://github.com/DuarteSantos8/openGym/tree/main/catalogue
 
 ## Exercise images and animations
 
-The JPG/GIF exercise media is not bundled into Iron. When an internet connection is available,
-Iron extracts the upstream ExerciseDB media ID and requests the corresponding 180p GIF from the
+The JPG/GIF exercise media is not bundled into liteweight. When an internet connection is available,
+liteweight extracts the upstream ExerciseDB media ID and requests the corresponding 180p GIF from the
 official free ExerciseDB V1 CDN (`static.exercisedb.dev`). The upstream dataset notice asks that
 every use carries this attribution:
 
@@ -51,17 +51,17 @@ The media is not covered by the dataset's MIT License. The dataset identifies Gy
 rights holder and says its permission is not transferable, while ExerciseDB presents the official
 V1 hosted media as a free app-development API. These provenance claims are not treated as legally
 resolved by runtime loading. Product distribution may therefore require written confirmation from
-the relevant rights holder. Iron retains its original bundled diagrams for the exercise detail
+the relevant rights holder. liteweight retains its original bundled diagrams for the exercise detail
 page of any exercise without other media.
 
-Iron saves the first frame of its existing provider's GIFs as a persistent PNG for list
+liteweight saves the first frame of its existing provider's GIFs as a persistent PNG for list
 thumbnails, preserving the original animation for demonstrations. This does not increase the
-source resolution. OpenGym's separately licensed stills and clips are not copied into Iron;
+source resolution. OpenGym's separately licensed stills and clips are not copied into liteweight;
 its media notice limits the non-commercial exception to forks of OpenGym.
 
 ## Muscle maps
 
-Iron vendors `MuscleMap` 1.6.4 in `Packages/MuscleMap`, retaining its license and adding a public
+liteweight vendors `MuscleMap` 1.6.4 in `Packages/MuscleMap`, retaining its license and adding a public
 hit-test facade for hold-and-scrub. It renders front/back muscle highlighting. The package is
 separate from OpenGym and is licensed under MIT:
 

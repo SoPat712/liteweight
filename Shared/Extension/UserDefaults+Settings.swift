@@ -9,15 +9,15 @@
 import Foundation
 
 extension UserDefaults {
-    /// Respect an explicit preference; new Iron completions sync by default.
+    /// Respect an explicit preference; new liteweight completions sync by default.
     var syncFinishedWorkoutsWithHealth: Bool {
-        get { object(forKey: "Iron.finishWorkout.syncWithHealth") as? Bool ?? true }
-        set { set(newValue, forKey: "Iron.finishWorkout.syncWithHealth") }
+        get { object(forKey: "liteweight.finishWorkout.syncWithHealth") as? Bool ?? true }
+        set { set(newValue, forKey: "liteweight.finishWorkout.syncWithHealth") }
     }
 
     enum SettingsKeys: String, CaseIterable {
         case weightUnit
-        case ironAppearance
+        case liteweightAppearance
         case defaultRestTime
         case defaultRestTimeDumbbellBased
         case defaultRestTimeBarbellBased
@@ -55,13 +55,13 @@ extension UserDefaults {
         }
     }
 
-    var ironAppearance: IronAppearance {
+    var liteweightAppearance: LiteweightAppearance {
         set {
-            self.set(newValue.rawValue, forKey: SettingsKeys.ironAppearance.rawValue)
+            self.set(newValue.rawValue, forKey: SettingsKeys.liteweightAppearance.rawValue)
         }
         get {
-            guard let rawValue = self.string(forKey: SettingsKeys.ironAppearance.rawValue),
-                  let appearance = IronAppearance(rawValue: rawValue) else {
+            guard let rawValue = self.string(forKey: SettingsKeys.liteweightAppearance.rawValue),
+                  let appearance = LiteweightAppearance(rawValue: rawValue) else {
                 return .system
             }
             return appearance

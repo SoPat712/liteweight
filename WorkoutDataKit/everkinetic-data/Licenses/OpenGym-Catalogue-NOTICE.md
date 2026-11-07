@@ -6,7 +6,7 @@ Pinned revision: b6cfe2bbd3f099523ffbf2677438864e9a09a06f
 
 OpenGym-authored exercise descriptions, new exercise text and corrections are licensed
 under GNU AGPL version 3. The full license is in OpenGym-AGPL-3.0.txt. The converted
-reference metadata and converter source are included in Iron's source tree.
+reference metadata and converter source are included in liteweight's source tree.
 
 The original 1,324 entries marked textSource=exercisedb retain metadata/instructions
 from ExerciseDB V1 by AscendAPI through hasaneyldrm/exercises-dataset under MIT:
@@ -41,5 +41,5 @@ is licensed separately by Gym visual; the non-commercial-fork exception does not
 provide general permission to integrate it into an independent application.
 See https://github.com/DuarteSantos8/openGym/blob/main/catalogue/media/NOTICE.md
 
-Iron retains its existing ExerciseDB media references and Everkinetic diagrams.
-Local still support is available for assets separately licensed for Iron.
+liteweight retains its existing ExerciseDB media references and Everkinetic diagrams.
+Local still support is available for assets separately licensed for liteweight.

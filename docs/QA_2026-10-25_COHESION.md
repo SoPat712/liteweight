@@ -13,7 +13,7 @@ separate changes at accessibility sizes. Focused logger values use bold rather t
 compact values use title3. Custom Exercises shares the illustrated library row.
 
 Evidence is under
-`/Users/joshp/.codex/visualizations/2026/10/25/01a1717b-ec55-7ea2-9c43-885e4b684d16/iron-cohesion/`:
+`/Users/joshp/.codex/visualizations/2026/10/25/01a1717b-ec55-7ea2-9c43-885e4b684d16/liteweight-cohesion/`:
 
 - `cohesion-review.jpg`: matching default/light Home top/lower, logger, History, Workout, library.
 - `final-*-dark-ax3.png`: Home, library, detail, History and collapsed logger at AX3/dark.
@@ -35,8 +35,8 @@ Validation:
   iPhone. The phone custom-exercise file was copied back read-only and was byte-for-byte
   identical to the original after launch.
 - Simulator fixtures were restored, light/default sizing restored, CACE shut down, and shared
-  resources returned to Overland. No commits/pushes, data merges or imported Health exports.
+  resources returned to WhereWolf. No commits/pushes, data merges or imported Health exports.
 
 After this work the owner stopped the V2 direction and asked about OpenGym's current catalog
 and still images. That follow-up is source research; no OpenGym catalog/media/code has been
-integrated into Iron. See `EXERCISE_CATALOG_AUDIT.md` for the source/license distinction.
+integrated into liteweight. See `EXERCISE_CATALOG_AUDIT.md` for the source/license distinction.

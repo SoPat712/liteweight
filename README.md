@@ -1,9 +1,9 @@
-# Light
+# liteweight
 
 Private strength training for iPhone and Apple Watch, built with SwiftUI, Core Data,
 HealthKit, WatchConnectivity, ActivityKit, and WidgetKit.
 
-Light is an independent continuation of **[Iron](https://github.com/karimknaebel/Iron)**,
+liteweight is an independent continuation of **[Iron](https://github.com/karimknaebel/Iron)**,
 created by **Karim Abou Zeid**. Iron provided the foundation; this fork adds a new visual
 system, inline workout logging, expanded import tools, and deeper training insights.
 Original copyright notices and the [GPL v3 license](LICENSE) are retained.
@@ -65,10 +65,10 @@ below describe the code currently preserved, not a finished or accepted Watch ex
 - Background Hevy workout/measurement CSV import with progress feedback. Name aliases reconnect
   imported history to catalogue exercises without rewriting historical names or relationships.
 - Re-import deduplication, imported-workout counts/date ranges, removal, and replacement from a
-  fresh export. Replacement rolls back on failure; workouts logged in Light are kept.
-- Hevy-compatible CSV export, complete backups, existing Iron backup restoration, and the
+  fresh export. Replacement rolls back on failure; workouts logged in liteweight are kept.
+- Hevy-compatible CSV export, complete backups, restoration of backups from the original project, and the
   available local/iCloud backup tools.
-- Only eligible workouts completed in Light are exported to Apple Health. **Imported workouts
+- Only eligible workouts completed in liteweight are exported to Apple Health. **Imported workouts
   are never exported.** Durable export state/retries avoid accidental duplicates; Watch-owned
   Health workouts retain their own recording path.
 - No public profile or social feed. Hevy compatibility does not imply affiliation.
@@ -79,7 +79,7 @@ The current working tree is verified with **Xcode 27 beta 6**. The iPhone app/wi
 require iOS 17 or later; the Watch app targets watchOS 10 or later. Some features require newer
 systems.
 
-1. Open `Light.xcodeproj` and select the `Iron` scheme.
+1. Open `liteweight.xcodeproj` and select the `liteweight` scheme.
 2. Select your Apple development team for the app, Watch app, and extensions.
 3. For your own distribution, configure consistent bundle/companion IDs, entitlements, app
    groups, and containers before building.
@@ -87,16 +87,15 @@ systems.
    [workspace build guide](docs/DESIGN_BACKLOG.md#03-build-and-install) for local commands.
 
 ```sh
-xcodebuild -project Light.xcodeproj -scheme Iron \
+xcodebuild -project liteweight.xcodeproj -scheme liteweight \
   -destination 'generic/platform=iOS Simulator' \
-  -derivedDataPath /tmp/light-dd build CODE_SIGNING_ALLOWED=NO
+  -derivedDataPath /tmp/liteweight-dd build CODE_SIGNING_ALLOWED=NO
 ```
 
-The displayed name is **Light**. Internal project/scheme names and compatibility identifiers
-still use Iron. The existing development installation keeps its bundle ID so updates preserve
-its data container, Watch relationship, backups, and preferences. `com.sopat712.light` is the
-proposed identity for a separately configured Light distribution; changing an installed app's
-bundle ID requires a deliberate data migration.
+The app name is **liteweight**, with app ID `me.joshpatra.liteweight` and owner team
+`CSNM446KVY` in Debug and Release. The new app ID starts with a separate data container;
+move your data using Share Full Backup in the old app, then Restore Backup in liteweight.
+New backups use `.liteweightbackup`; backups from before the rename still restore.
 
 ## Project notes and credits
 
@@ -106,5 +105,5 @@ bundle ID requires a deliberate data migration.
   and their individual license requirements. Catalogue text and artwork do not all share the
   app's license; retain the accompanying notices.
 
-Older repository screenshots and the upstream App Store listing describe the original Iron,
-not a published Light release. This fork does not currently claim an App Store listing.
+Older repository screenshots and the upstream App Store listing describe the original Iron project,
+not a published liteweight release. This fork does not currently claim an App Store listing.

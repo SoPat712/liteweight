@@ -1,6 +1,6 @@
 //
 //  ExerciseStore+IntentExercise.swift
-//  IronIntents
+//  liteweightIntents
 //
 //  Created by Karim Abou Zeid on 08.12.19.
 //  Copyright © 2019 Karim Abou Zeid Software. All rights reserved.

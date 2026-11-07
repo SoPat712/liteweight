@@ -1,6 +1,6 @@
 //
 //  DeepLink.swift
-//  Iron
+//  liteweight
 //
 //  Created by Karim Abou Zeid on 12.10.20.
 //  Copyright © 2020 Karim Abou Zeid Software. All rights reserved.
@@ -13,7 +13,7 @@ enum DeepLink: String {
 }
 
 extension DeepLink {
-    static let URLScheme = "iron"
+    static let URLScheme = "liteweight"
     
     static func url(for deepLink: DeepLink) -> URL {
         URL(string: "\(URLScheme)://\(deepLink.rawValue)")!

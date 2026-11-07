@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
-"""Build text-only OpenGym exercise updates for Iron's library and Hevy matching.
+"""Build text-only OpenGym exercise updates for liteweight's library and Hevy matching.
 
 The converter intentionally reads only catalogue JSON. It does not copy or inspect
-OpenGym media. Existing Iron records are matched by their legacy media filename
+OpenGym media. Existing liteweight records are matched by their legacy media filename
 prefixes (and generated negative IDs), so historical UUIDs and artwork references
 remain stable in the generated template metadata.
 """
@@ -298,7 +298,7 @@ def validate_templates(templates: list[dict[str, Any]], source_ids: set[str]) ->
 def validate_against_existing(
     templates: list[dict[str, Any]], existing: list[dict[str, Any]], matches: dict[str, dict[str, Any]]
 ) -> None:
-    """Reject new IDs/UUIDs that would collide with any retained Iron record."""
+    """Reject new IDs/UUIDs that would collide with any retained liteweight record."""
 
     existing_ids = {exercise["id"] for exercise in existing}
     existing_uuids = {exercise["uuid"] for exercise in existing}
@@ -323,7 +323,7 @@ def write_json(path: Path, value: Any) -> None:
 def parse_args(argv: list[str]) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--source", required=True, type=Path, help="OpenGym catalogue root or exercises directory")
-    parser.add_argument("--existing", required=True, type=Path, help="Existing Iron exercises.json")
+    parser.add_argument("--existing", required=True, type=Path, help="Existing liteweight exercises.json")
     parser.add_argument("--output", required=True, type=Path, help="Generated text-template JSON path")
     parser.add_argument("--id-map", required=True, type=Path, help="Generated OpenGym source-id to UUID JSON path")
     return parser.parse_args(argv)

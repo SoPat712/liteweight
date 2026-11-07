@@ -10,7 +10,7 @@ import Foundation
 import SwiftUI
 import Combine
 
-enum IronAppearance: String, CaseIterable, Identifiable {
+enum LiteweightAppearance: String, CaseIterable, Identifiable {
     case system
     case light
     case dark
@@ -52,8 +52,8 @@ enum IronAppearance: String, CaseIterable, Identifiable {
 
 final class SettingsStore: ObservableObject {
     let objectWillChange = ObservableObjectPublisher()
-    static let healthTestModeEnabledNotification = Notification.Name("Iron.healthTestModeEnabled")
-    static let restoredFromBackupNotification = Notification.Name("Iron.settingsRestoredFromBackup")
+    static let healthTestModeEnabledNotification = Notification.Name("liteweight.healthTestModeEnabled")
+    static let restoredFromBackupNotification = Notification.Name("liteweight.settingsRestoredFromBackup")
     
     private var userDefaults: UserDefaults
     private var defaultsObserver: AnyCancellable?
@@ -79,13 +79,13 @@ final class SettingsStore: ObservableObject {
         }
     }
 
-    var appearance: IronAppearance {
+    var appearance: LiteweightAppearance {
         get {
-            userDefaults.ironAppearance
+            userDefaults.liteweightAppearance
         }
         set {
             objectWillChange.send()
-            userDefaults.ironAppearance = newValue
+            userDefaults.liteweightAppearance = newValue
         }
     }
     
