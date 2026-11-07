@@ -425,6 +425,22 @@ extension PhoneConnectionManager {
         session.sendMessage([PayloadKey.requestWorkoutLibrary: true], replyHandler: nil, errorHandler: nil)
     }
 
+    /// Asks the iPhone for a fresh library and snapshot and flushes queued edits.
+    /// `completion(true)` runs on main when the iPhone acknowledges the request.
+    func syncNow(completion: @escaping (Bool) -> Void) {
+        guard isActivated, isReachable else {
+            DispatchQueue.main.async { completion(false) }
+            return
+        }
+        session.sendMessage([PayloadKey.requestWorkoutLibrary: true], replyHandler: { _ in
+            DispatchQueue.main.async { completion(true) }
+        }, errorHandler: { _ in
+            DispatchQueue.main.async { completion(false) }
+        })
+        requestCurrentSnapshot()
+        flushEventOutbox()
+    }
+
     private func scheduleEventRetry(_ eventID: UUID) {
         dispatchPrecondition(condition: .onQueue(connectivityQueue))
         guard WatchWorkoutStore.shared.pendingEvents().contains(where: { $0.id == eventID }) else { return }

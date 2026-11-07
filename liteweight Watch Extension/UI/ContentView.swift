@@ -1,4 +1,5 @@
 import SwiftUI
+import Accessibility
 import HealthKit
 import WidgetKit
 
@@ -1187,14 +1188,20 @@ private struct RecordedExerciseView: View {
 }
 
 struct WatchSettingsView: View {
+    private enum SyncState: Hashable { case idle, syncing, synced, failed, unreachable }
+
     @EnvironmentObject private var store: WorkoutSessionManagerStore
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @ObservedObject private var phone = PhoneConnectionManager.shared
     @State private var defaultRest = WatchPreferences.defaultRestDuration
     @State private var savedCurrent = false
+    @State private var syncState: SyncState = .idle
+    @State private var syncAttemptID: UUID?
+    @State private var syncStartedAt = Date()
     @AppStorage("workoutHaptics") private var workoutHaptics = true
     @AppStorage("logRPE") private var logRPE = true
     var body: some View {
-        WatchContentList {
+        WatchContentList(extraBottomInset: 16) {
             Text("Settings").font(.headline.weight(.bold))
                 .foregroundStyle(LiteweightTheme.primaryText)
                 .fixedSize(horizontal: false, vertical: true).padding(.horizontal, 8)
@@ -1204,9 +1211,10 @@ struct WatchSettingsView: View {
                     color: phone.isReachable ? LiteweightTheme.success : LiteweightTheme.warning,
                     value: syncCaption(at: context.date), metricValue: false)
             }
-            Button { phone.requestLibrary(); phone.requestCurrentSnapshot(); phone.flushEventOutbox() } label: {
-                WatchActionLabel(title: "Sync Now", symbol: "arrow.triangle.2.circlepath")
-            }.watchGlassButton()
+            Button(action: syncNow) { syncActionLabel }
+                .watchGlassButton()
+                .accessibilityLabel(syncTitle)
+                .animation(LiteweightMotion.preferred(LiteweightMotion.fade, reduceMotion: reduceMotion), value: syncState)
             let count = WatchWorkoutStore.shared.pendingEvents().count
             if count > 0 {
                 Text("\(count) edits queued").font(.footnote).foregroundStyle(LiteweightTheme.secondaryText)
@@ -1253,6 +1261,92 @@ struct WatchSettingsView: View {
         }
         .navigationTitle("").watchVitalsInset()
     }
+
+    // Match WatchActionLabel locally so the shared label remains unchanged.
+    private var syncActionLabel: some View {
+        HStack(spacing: 5) {
+            TimelineView(.animation(paused: syncState != .syncing || reduceMotion)) { context in
+                // Elapsed seconds map directly to turns: linear, one turn per second.
+                let turns = context.date.timeIntervalSince(syncStartedAt)
+                Image(systemName: syncSymbol)
+                    .rotationEffect(.degrees(syncState == .syncing && !reduceMotion
+                        ? turns.truncatingRemainder(dividingBy: 1) * 360 : 0))
+                    .transaction { $0.animation = nil }
+                    .accessibilityHidden(true)
+            }
+            // One line on every Watch, so the button never changes height between states.
+            ViewThatFits(in: .horizontal) {
+                Text(syncTitle).lineLimit(1)
+                Text(syncState == .unreachable ? "Not Reachable" : syncTitle).lineLimit(1).minimumScaleFactor(0.8)
+            }
+            .id(syncState).transition(.opacity)
+        }
+        .font(.liteweightMetric(.body, weight: .semibold)).frame(maxWidth: .infinity)
+        .multilineTextAlignment(.center)
+    }
+
+    private var syncTitle: String {
+        switch syncState {
+        case .idle: return "Sync Now"
+        case .syncing: return "Syncing…"
+        case .synced: return "Synced"
+        case .failed: return "Couldn't Sync"
+        case .unreachable: return "iPhone Not Reachable"
+        }
+    }
+
+    private var syncSymbol: String {
+        switch syncState {
+        case .idle, .syncing: return "arrow.triangle.2.circlepath"
+        case .synced: return "checkmark"
+        case .failed: return "exclamationmark.triangle.fill"
+        case .unreachable: return "iphone.slash"
+        }
+    }
+
+    private func syncNow() {
+        guard syncState == .idle else { return }
+        let attempt = UUID()
+        syncAttemptID = attempt
+        guard phone.isReachable else {
+            finishSync(.unreachable, attempt: attempt)
+            return
+        }
+
+        syncStartedAt = Date()
+        syncState = .syncing
+        let earliestResult = DispatchTime.now() + 0.8
+        phone.syncNow { acknowledged in
+            guard syncAttemptID == attempt, syncState == .syncing else { return }
+            DispatchQueue.main.asyncAfter(deadline: earliestResult) {
+                finishSync(acknowledged ? .synced : .failed, attempt: attempt)
+            }
+        }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 10) {
+            finishSync(.failed, attempt: attempt)
+        }
+    }
+
+    private func finishSync(_ result: SyncState, attempt: UUID) {
+        guard syncAttemptID == attempt,
+              syncState == .syncing || (syncState == .idle && result == .unreachable) else { return }
+        syncState = result
+        if result == .synced {
+            WatchFeedback.play(.success)
+            AccessibilityNotification.Announcement("Synced").post()
+        } else {
+            WatchFeedback.play(.failure)
+            if result == .failed {
+                AccessibilityNotification.Announcement("Couldn't Sync").post()
+            }
+        }
+        DispatchQueue.main.asyncAfter(deadline: .now() + (result == .synced ? 2 : 3)) {
+            guard syncAttemptID == attempt else { return }
+            syncAttemptID = nil
+            syncState = .idle
+        }
+    }
+
     private var sessionSettings: some View {
         VStack(alignment: .leading, spacing: 4) {
             WatchSectionTitle(title: "Current Workout")
@@ -1291,39 +1385,31 @@ struct WatchSettingsView: View {
 private struct WatchWeightUnitPicker: View {
     @EnvironmentObject private var store: WorkoutSessionManagerStore
     @Environment(\.dismiss) private var dismiss
-    @ScaledMetric(relativeTo: .headline) private var headingHeight: CGFloat = 22
     private let units: [WatchWorkoutWeightUnit] = [.pound, .kilogram]
 
     var body: some View {
-        GeometryReader { page in
-            let clearance: CGFloat = page.size.width < 180 ? 6 : 10
-            let titleHeight = min(headingHeight, max(0, page.size.height - 8 - clearance - 2 * LiteweightTheme.controlHeight))
-            let rowHeight = max(0, (page.size.height - titleHeight - 8 - clearance) / 2)
-            VStack(spacing: 4) {
-                Text("Weight Unit").font(.headline.weight(.bold)).foregroundStyle(LiteweightTheme.primaryText)
-                    .lineLimit(1).minimumScaleFactor(0.6)
-                    .frame(maxWidth: .infinity, minHeight: titleHeight, maxHeight: titleHeight, alignment: .leading)
-                    .padding(.horizontal, 8).accessibilityAddTraits(.isHeader)
-                ForEach(units, id: \.self) { unit in
-                    let selected = store.preferredWeightUnit == unit
-                    Button { store.setPreferredWeightUnit(unit); dismiss() } label: {
-                        HStack(spacing: 8) {
-                            Text(unit == .pound ? "Pounds" : "Kilograms")
-                                .font(.body.weight(.semibold)).foregroundStyle(LiteweightTheme.primaryText)
-                                .lineLimit(1).minimumScaleFactor(0.6)
-                                .frame(maxWidth: .infinity, alignment: .leading)
-                            Image(systemName: "checkmark").foregroundStyle(LiteweightTheme.accentText)
-                                .opacity(selected ? 1 : 0).accessibilityHidden(true)
-                        }.frame(maxWidth: .infinity, maxHeight: .infinity).watchPlatter()
-                    }.buttonStyle(.plain).frame(height: rowHeight)
-                    .accessibilityValue(selected ? "Selected" : "")
-                    .accessibilityAddTraits(selected ? .isSelected : [])
-                }
+        VStack(alignment: .leading, spacing: 4) {
+            Text("Weight Unit").font(.headline.weight(.bold)).foregroundStyle(LiteweightTheme.primaryText)
+                .lineLimit(1).minimumScaleFactor(0.6)
+                .padding(.horizontal, 8).accessibilityAddTraits(.isHeader)
+            ForEach(units, id: \.self) { unit in
+                let selected = store.preferredWeightUnit == unit
+                Button { store.setPreferredWeightUnit(unit); dismiss() } label: {
+                    HStack(spacing: 8) {
+                        Text(unit == .pound ? "Pounds" : "Kilograms")
+                            .font(.body.weight(.semibold)).foregroundStyle(LiteweightTheme.primaryText)
+                            .lineLimit(1).minimumScaleFactor(0.6)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                        Image(systemName: "checkmark").foregroundStyle(LiteweightTheme.accentText)
+                            .opacity(selected ? 1 : 0).accessibilityHidden(true)
+                    }.watchPlatter(verticalPadding: 4, minHeight: 46)
+                }.buttonStyle(.plain)
+                .accessibilityValue(selected ? "Selected" : "")
+                .accessibilityAddTraits(selected ? .isSelected : [])
             }
-            .padding(.horizontal, 2).padding(.bottom, clearance)
-            .frame(width: page.size.width, height: page.size.height, alignment: .top)
         }
-        .ignoresSafeArea(.container, edges: .bottom)
+        .padding(.horizontal, 2)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         .navigationTitle("").watchVitalsInset()
     }
 }

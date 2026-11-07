@@ -297,24 +297,31 @@ struct WatchVitalsInset: ViewModifier {
     @EnvironmentObject private var store: WorkoutSessionManagerStore
     @Environment(\.isLuminanceReduced) private var reducedLuminance
     @Environment(\.dismiss) private var dismiss
-    @ScaledMetric(relativeTo: .headline) private var clockReserve: CGFloat = 52
+    // "12:59" / "23:59" measure 40–42 pt at the default text size (2026-11-07). Fixed on purpose:
+    // at larger sizes the vitals grow with the text and fall back to heart rate before the clock.
+    private let widestClock: CGFloat = 42
 
     private let toolbarButtonWidth: CGFloat = 34
+    /// watchOS 26 draws its clock above the toolbar row's center. Raise the vitals to
+    /// the clock's line. Measured from screenshots on 2026-11-07; tune only from new screenshots.
+    private var clockLineOffset: CGFloat {
+        if #available(watchOS 26.0, *) {
+            return WKInterfaceDevice.current().screenBounds.width < 180 ? -7 : -9
+        }
+        return 0
+    }
     private let toolbarSpacing: CGFloat = 4
 
-    /// watchOS hides its clock if the leading item consumes the clock's room.
-    /// Budget the pill after both toolbar controls, including their spacing.
-    private var vitalsWidth: CGFloat {
+    /// Free width from where the vitals start to the widest clock, with a gap.
+    /// Edge insets and clock width were measured on Ultra 3 and SE 44 mm (2026-11-07).
+    private var vitalsRoom: CGFloat {
         let screen = WKInterfaceDevice.current().screenBounds.width
-        // Margins measured on the owner's Ultra (2026-11-01): the device draws this
-        // row about 1.5 pt wider than the simulator, so trimming them (32/18 pt was
-        // tried on 2026-11-05) hides the clock on device while the simulator still
-        // shows it. Don't reduce these without a device check.
-        // The fixed widest-value templates choose the pill's form.
-        let margins: CGFloat = screen < 180 ? 22 : 34
+        // Toolbar leading inset and clock trailing inset ("1:32" ends at x 193 on Ultra 3, 172 on 44 mm).
+        let leading: CGFloat = screen >= 200 ? 17 : 10
+        let trailing: CGFloat = screen >= 200 ? 18 : 12
         let back = showsBack ? toolbarButtonWidth + toolbarSpacing : 0
-        let trailing = showsTrailingButton ? toolbarButtonWidth + toolbarSpacing : 0
-        return max(0, screen - margins - clockReserve - back - trailing)
+        let gap: CGFloat = 6 // Includes the ~1.5 pt the device row runs wider.
+        return max(0, screen - leading - back - widestClock - gap - trailing)
     }
 
     private var activeSnapshot: WatchWorkoutSnapshot? {
@@ -345,9 +352,20 @@ struct WatchVitalsInset: ViewModifier {
                                 .buttonStyle(.plain)
                                 .accessibilityLabel("Back")
                             }
+                            // A trailing button moves the clock into the overflow area; hide vitals.
                             if !showsTrailingButton {
-                                WatchVitalsRow(manager: store.workoutSessionManager, snapshot: snapshot, availableWidth: vitalsWidth)
-                                    .privacySensitive(false).unredacted()
+                                // Growing the old leading-slot budget hid the clock on device.
+                                // Overflow from a small anchor instead of growing the toolbar item.
+                                // It fills the slot's minimum width; a narrower item is centered in it.
+                                Color.clear
+                                    .frame(width: 44, height: 34)
+                                    .overlay(alignment: .leading) {
+                                        WatchVitalsRow(manager: store.workoutSessionManager, snapshot: snapshot, availableWidth: vitalsRoom)
+                                            .frame(width: vitalsRoom, alignment: .leading)
+                                            .offset(y: clockLineOffset)
+                                            .privacySensitive(false).unredacted()
+                                            .allowsHitTesting(false)
+                                    }
                             }
                         }
                     }

@@ -164,6 +164,9 @@ struct WatchWorkoutEffortPage: View {
 struct WatchSavedView: View {
     @EnvironmentObject private var store: WorkoutSessionManagerStore
     @EnvironmentObject private var navigation: WatchNavigation
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+    @ScaledMetric(relativeTo: .body) private var estimatedDetailsHeight: CGFloat = 90
+    @State private var measuredDetailsHeight: CGFloat?
     private var snapshot: WatchWorkoutSnapshot? { navigation.savedWorkout ?? store.workoutSnapshot }
     private var isFinalizing: Bool { store.workoutSnapshot?.workoutID == snapshot?.workoutID && store.workoutSnapshot?.isFinishedRecord == true }
     private var synced: Bool {
@@ -171,6 +174,59 @@ struct WatchSavedView: View {
         return !WatchWorkoutStore.shared.pendingEvents().contains { $0.workoutID == snapshot.workoutID && $0.kind == .workoutFinished }
     }
     var body: some View {
+        Group {
+            if dynamicTypeSize.isAccessibilitySize || isFinalizing || store.recordingError != nil {
+                scrollingSummary
+            } else {
+                fittedSummary
+            }
+        }.navigationTitle("").navigationBarBackButtonHidden(true)
+        .onAppear { if let snapshot { WatchFeedback.workoutSaved(snapshot.workoutID) } }
+    }
+    private var fittedSummary: some View {
+        GeometryReader { proxy in
+            let buttonHeight: CGFloat = proxy.size.width < 180 ? 44 : 50
+            // Details include their three 4 pt gaps. Reserve the hero gap and
+            // minimum spacer separately; GeometryReader already clears safe areas.
+            let detailsHeight = measuredDetailsHeight ?? estimatedDetailsHeight
+            let diameter = min(58, max(32, proxy.size.height - detailsHeight - buttonHeight - 8))
+            VStack(spacing: 0) {
+                Image(systemName: "checkmark")
+                    .font(.system(size: diameter * 0.52, weight: .semibold))
+                    .foregroundStyle(LiteweightTheme.onAccent)
+                    .frame(width: diameter, height: diameter)
+                    .background(LiteweightTheme.accent, in: Circle()).accessibilityHidden(true)
+                VStack(spacing: 4) {
+                    Text("Workout Saved").font(.headline.weight(.bold))
+                        .lineLimit(1).minimumScaleFactor(0.8)
+                    if let snapshot {
+                        Text(snapshot.title ?? "Workout").font(.body.weight(.semibold))
+                            .lineLimit(1).minimumScaleFactor(0.7)
+                        Text(WatchNumber.duration(snapshot.recordedDuration))
+                            .font(.liteweightMetric(.title3, weight: .semibold))
+                            .foregroundStyle(LiteweightTheme.metricTime)
+                    }
+                    ViewThatFits(in: .horizontal) {
+                        HStack(spacing: 9) { saveDestinations }.fixedSize()
+                        HStack(spacing: 9) { compactSaveDestinations }
+                            .lineLimit(1).minimumScaleFactor(0.7)
+                    }
+                }
+                .fixedSize(horizontal: false, vertical: true)
+                .scenePadding(.horizontal)
+                .onGeometryChange(for: CGFloat.self, of: { $0.size.height }) {
+                    measuredDetailsHeight = $0
+                }
+                .padding(.top, 4)
+                Spacer(minLength: 4)
+                Button(action: closeSummary) { WatchActionLabel(title: "Done") }
+                    .watchGlassButton(prominent: true).frame(height: buttonHeight)
+            }
+            .multilineTextAlignment(.center)
+            .frame(width: proxy.size.width, height: proxy.size.height)
+        }
+    }
+    private var scrollingSummary: some View {
         ScrollView {
             VStack(spacing: 6) {
                 Image(systemName: "checkmark").font(.system(size: 30, weight: .semibold)).foregroundStyle(LiteweightTheme.onAccent)
@@ -190,8 +246,7 @@ struct WatchSavedView: View {
                 if isFinalizing { ProgressView("Saving Recording…").font(.footnote) }
                 WatchRecordingFailureRow()
             }.multilineTextAlignment(.center).frame(maxWidth: .infinity).scenePadding(.horizontal)
-        }.navigationTitle("").navigationBarBackButtonHidden(true)
-        .onAppear { if let snapshot { WatchFeedback.workoutSaved(snapshot.workoutID) } }
+        }
     }
     private func closeSummary() {
         navigation.savedWorkout = nil
@@ -204,6 +259,16 @@ struct WatchSavedView: View {
             .font(.footnote).foregroundStyle(synced ? LiteweightTheme.success : LiteweightTheme.secondaryText)
         if navigation.healthSaveSucceeded {
             Label("In Health", systemImage: "heart.fill").font(.footnote).foregroundStyle(LiteweightTheme.metricHeartRate)
+        }
+    }
+    @ViewBuilder private var compactSaveDestinations: some View {
+        Label("iPhone", systemImage: "iphone")
+            .font(.footnote).foregroundStyle(synced ? LiteweightTheme.success : LiteweightTheme.secondaryText)
+            .accessibilityLabel(synced ? "On iPhone" : "Waiting for iPhone")
+        if navigation.healthSaveSucceeded {
+            Label("Health", systemImage: "heart.fill")
+                .font(.footnote).foregroundStyle(LiteweightTheme.metricHeartRate)
+                .accessibilityLabel("In Health")
         }
     }
 }

@@ -832,7 +832,7 @@ failure preserves the old history. Measurements have no import-source tag and ar
 
 ### 15.9 Watch, widgets and Live Activity
 - **Watch:** the exercise-first hierarchy in §21, native `List`/`Section` and glass controls,
-  prominent Log Set, and the clock-safe vitals pill in §22.0. Same metric colors.
+  prominent Log Set, and the clock-safe vitals status line in §22.0. Same metric colors.
 - **Widget:** `containerBackground(.fill.tertiary, for: .widget)`, with no solid accent slabs.
 - **Live Activity:** the approved Set tile design in §20: exercise artwork, per-exercise blue
   completion cells and set position; compact surfaces omit the stopwatch. Expanded surfaces
@@ -1030,9 +1030,11 @@ saved-workout drafts, history/repeat, units/sync, and finish/effort/discard. Kee
 navigation stack and reset to the active workout for Live Activity/user-activity launches.
 Do not reset a draft merely because the scene becomes active.
 
-During an active workout, heart rate and active kcal share the toolbar vitals pill (§22.0),
-with red heart and orange flame symbols, except on pages with a trailing
-button, where vitals are hidden to preserve the clock. The pill remains visible in Always On
+During an active workout, heart rate and active kcal share a plain-text toolbar status line
+with no capsule (§22.0), with red heart and orange flame symbols. It is centered on the
+clock's line (a watchOS 26 upward offset) in the same place on every workout page, including
+controls, whose header shows elapsed time. Pages with a trailing button hide vitals to
+preserve the clock. The status line remains visible in Always On
 and explicitly unredacted. Missing/stale heart rate shows a dash; never
 manufacture a zero. Active energy remains Apple's native Traditional Strength Training estimate.
 Distinguish edit sync from Health recording, report failures and offer Retry for failures only.
@@ -1064,10 +1066,10 @@ These rules come from regressions on the owner's Watch. Every Watch UI change mu
 ### 22.0 Approved look first (owner, 2026-10-31; replaces the 2026-10-30 "native first" rule)
 A lane that took "native first" literally removed Log Set, gave vitals their own row and shrank every value. The owner rejected it: "you absolutely butchered the watch display". The look below is the design; don't restyle it. Reference screenshots: `~/.local/share/liteweight/approved/`.
 - **Native parts, only here:** top-corner ✓ on rating pages (`ToolbarItem` with a plain `Button` + SF Symbol, so the system draws standard glass), and the system back button where a page has no vitals.
-- **Vitals pill:** heart rate and calories share a 34 pt capsule in the toolbar, with width reserved for the clock and back control. It fits full readings, compact energy ("1.2k"), tighter readings, then heart rate alone; if none fits, it hides rather than crowding the clock. There is no KCAL caption; the flame carries that meaning. Pages with a trailing button hide vitals (`showsTrailingButton: true`).
+- **Vitals status line:** heart rate and calories share plain text with no capsule, drawing from a 44 × 34 pt toolbar anchor (the slot's minimum width, so the line starts at the screen edge) across the free screen width up to the widest clock (42 pt for "12:59"), using measured edge insets and a 6 pt gap. The toolbar item stays small so watchOS never hides the clock. Text is `caption2` semibold with 10 pt symbols, so both readings fit beside a back button on Ultra. Center the vitals on the clock's line: on watchOS 26 and later, offset only the vitals by −7 pt below 180 pt screen width or −9 pt otherwise; earlier watchOS uses zero offset. Both readings fit beside a back button on Ultra 3; on 44 mm and smaller, a back-button page falls back to heart rate alone. Fit the fixed widest-value templates in order: both readings with compact energy ("1.2k"), heart rate alone, then nothing if neither fits. There is no KCAL caption; the flame carries that meaning. Pages with a trailing button hide vitals (`showsTrailingButton: true`) because watchOS moves the clock into the overflow area.
 - **Running rest screen:** back button and vitals in the toolbar row. Below it, the ring and a column of `+15 · Skip · −15` `watchNeutralCapsule()` buttons (50 pt wide below 180 pt width, 60 pt otherwise), with the column on the right, or on the left when the Watch is worn on the right wrist, because the buttons belong on the side the other hand reaches from. The next set's full exercise name and weight × reps run across the bottom, on one line when they fit and two otherwise. The ring only holds REST and the time. At accessibility type sizes the screen keeps the stacked readout with a `−15 · Skip · +15` row (44 pt tall below 180 pt width, 52 pt otherwise).
 - **After Log Set:** RPE opens first when the set needs one, then slides to the rest screen on ✓ or after 5 s untouched. Rest's back button returns to RPE, which then waits for ✓. RPE opened by hand also waits for ✓. A set that already has an RPE skips this page, and new sets start unrated rather than copying an old rating. Only a manual action saves: ✓ saves the number shown and turning the wheel saves the new value. Opening RPE or letting the 5 s pass saves nothing, so the dimmed suggestion is never recorded on its own and that set stays unrated.
-- **Vitals live in the toolbar row** beside the back button (`watchVitalsInset`). Never a separate row of their own.
+- **Vitals live on the clock's line** beside the back button where present (`watchVitalsInset`), in the same place on every workout page including controls. The controls page shows elapsed time in its header above the unchanged workload line. Never give vitals a separate row of their own.
 - **Primary actions** are the big full-width capsule near the bottom: `watchGlassButton(prominent: true)` / `watchPrimaryCapsule()`, Liquid Glass tinted liteweight blue. Never replace one with a small toolbar ✓ to save height. Never use native `.glassProminent` directly; it stops short of full width on larger Watches, so it won't line up with the tiles.
 - **Data surfaces** are flat and dark, like the iPhone logger: set tiles and controls 15 pt radius, cards and rows 13 pt, `LiteweightTheme.platter` fills. No glass, gloss or gradients around data. Selection changes color only.
 - **Value tiles** use one fixed font size per row, set from the width that fits "188.5", so turning the Crown never resizes the number. Weight/reps split 54/46 (50/50 below 180 pt width).

@@ -23,12 +23,7 @@ struct WorkoutSessionView: View {
         }
         .navigationTitle("")
         .navigationBarBackButtonHidden(true)
-        .watchVitalsInset(showsBack: false, showsVitals: navigation.workoutPage != .controls)
-        .toolbar {
-            if navigation.workoutPage == .controls, let snapshot = store.workoutSnapshot, !snapshot.isFinishedRecord {
-                ToolbarItem(placement: .topBarLeading) { WatchControlsToolbar(snapshot: snapshot) }
-            }
-        }
+        .watchVitalsInset(showsBack: navigation.workoutPage == .controls)
         .onChange(of: store.persistenceFailure?.id) {
             if store.persistenceFailure != nil { WatchFeedback.play(.failure) }
         }
@@ -465,9 +460,7 @@ private struct WatchWorkoutControls: View {
     private func content(clockY: CGFloat) -> some View {
         VStack(alignment: .leading, spacing: 6) {
             entering(order: 0, clockY: clockY) {
-                if let manager = store.workoutSessionManager, manager.uuid == snapshot.workoutID {
-                    WatchLiveControlsMetrics(snapshot: snapshot, manager: manager)
-                } else { WatchControlsMetrics(snapshot: snapshot, heartRate: nil, energy: snapshot.activeEnergyKilocalories) }
+                WatchControlsMetrics(snapshot: snapshot)
             }
             VStack(spacing: 4) {
                 HStack(spacing: 4) {
@@ -530,27 +523,6 @@ private struct WatchWorkoutControls: View {
     }
 }
 
-private struct WatchControlsToolbar: View {
-    @Environment(\.dismiss) private var dismiss
-    @Environment(\.isLuminanceReduced) private var reducedLuminance
-    @ScaledMetric(relativeTo: .headline) private var clockReserve: CGFloat = 52
-    let snapshot: WatchWorkoutSnapshot
-    var body: some View {
-        HStack(spacing: 4) {
-            Button { dismiss() } label: {
-                Image(systemName: "chevron.backward").font(.body.weight(.semibold))
-                    .frame(width: LiteweightTheme.controlHeight, height: LiteweightTheme.controlHeight)
-            }.buttonStyle(.plain).accessibilityLabel("Back")
-            TimelineView(.periodic(from: Date(), by: reducedLuminance ? 60 : 1)) { context in
-                Text(WatchNumber.elapsed(snapshot, at: context.date, reduced: reducedLuminance))
-                    .font(.liteweightMetric(.headline)).foregroundStyle(LiteweightTheme.metricTime)
-                    .lineLimit(1).minimumScaleFactor(0.5)
-            }
-        }
-        .frame(maxWidth: max(0, WKInterfaceDevice.current().screenBounds.width - 18 - clockReserve), alignment: .leading)
-    }
-}
-
 private struct WatchWorkoutControlLabel: View {
     let title: String
     let symbol: String
@@ -586,27 +558,21 @@ private struct WatchPauseControl: View {
     }
 }
 
-private struct WatchLiveControlsMetrics: View {
-    let snapshot: WatchWorkoutSnapshot
-    @ObservedObject var manager: WorkoutSessionManager
-    @Environment(\.isLuminanceReduced) private var reducedLuminance
-    var body: some View {
-        TimelineView(.periodic(from: Date(), by: reducedLuminance ? 60 : 5)) { context in
-            WatchControlsMetrics(snapshot: snapshot, heartRate: WatchHeartRate.text(manager, at: context.date),
-                                 energy: manager.burnedCalories)
-        }
-    }
-}
-
-/// Heart rate and calories lead the page in large type; logged work follows.
+/// Elapsed time leads the page at the former vitals height; logged work follows.
 private struct WatchControlsMetrics: View {
     @EnvironmentObject private var store: WorkoutSessionManagerStore
+    @Environment(\.isLuminanceReduced) private var reducedLuminance
     let snapshot: WatchWorkoutSnapshot
-    let heartRate: String?
-    let energy: Double?
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            vitals
+            TimelineView(.periodic(from: Date(), by: reducedLuminance ? 60 : 1)) { context in
+                let elapsed = WatchNumber.elapsed(snapshot, at: context.date, reduced: reducedLuminance)
+                Text(elapsed)
+                    .font(.liteweightMetric(.title3, weight: .semibold))
+                    .foregroundStyle(LiteweightTheme.metricTime)
+                    .lineLimit(1).minimumScaleFactor(0.7)
+                    .accessibilityLabel("Elapsed time \(elapsed)")
+            }
             // One line wherever it fits, so the control grid keeps its height.
             ViewThatFits(in: .horizontal) {
                 workload.lineLimit(1).fixedSize()
@@ -617,41 +583,6 @@ private struct WatchControlsMetrics: View {
             .foregroundStyle(LiteweightTheme.secondaryText)
         }
         .accessibilityElement(children: .combine)
-    }
-    @ViewBuilder private var vitals: some View {
-        #if DEBUG
-        // Test workouts run without a Health session, so there are no readings to show.
-        if store.isHealthTestWorkout { vitalsLine(heartRate: nil, energy: "--", testMode: true) }
-        else { vitalsLine(heartRate: heartRate, energy: WatchNumber.whole(energy)) }
-        #else
-        vitalsLine(heartRate: heartRate, energy: WatchNumber.whole(energy))
-        #endif
-    }
-    private func vitalsLine(heartRate: String?, energy: String, testMode: Bool = false) -> some View {
-        // Drop the unit captions before the numbers ever truncate.
-        ViewThatFits(in: .horizontal) {
-            vitalsRow(heartRate: heartRate, energy: energy, units: true, testMode: testMode).fixedSize()
-            vitalsRow(heartRate: heartRate, energy: energy, units: false, testMode: testMode)
-        }
-        .lineLimit(1).minimumScaleFactor(0.7)
-        .accessibilityElement(children: .ignore)
-        .accessibilityLabel(testMode ? "Test mode, heart rate and calories are not recorded"
-                            : (heartRate.map { "Heart rate \($0) beats per minute" } ?? "Heart rate unavailable")
-                                + ", \(energy) active calories")
-    }
-    private func vitalsRow(heartRate: String?, energy: String, units: Bool, testMode: Bool) -> some View {
-        HStack(alignment: .firstTextBaseline, spacing: 10) {
-            vital(heartRate ?? "—", unit: units ? "BPM" : nil, symbol: "heart.fill",
-                  color: heartRate == nil ? LiteweightTheme.secondaryText : LiteweightTheme.metricHeartRate)
-            vital(energy, unit: units ? "KCAL" : nil, symbol: "flame.fill", color: LiteweightTheme.metricEnergy)
-        }
-    }
-    private func vital(_ value: String, unit: String?, symbol: String, color: Color) -> some View {
-        HStack(alignment: .firstTextBaseline, spacing: 2) {
-            Image(systemName: symbol).font(.system(size: 15, weight: .semibold)).foregroundStyle(color)
-            Text(value).font(.liteweightMetric(.title3, weight: .semibold)).foregroundStyle(color)
-            if let unit { Text(unit).font(.footnote.bold()).foregroundStyle(LiteweightTheme.secondaryText) }
-        }
     }
     private var workload: Text {
         let unit = snapshot.weightUnit ?? store.preferredWeightUnit
@@ -2336,28 +2267,28 @@ private struct WatchVitalsLine: View {
     }
 
     var body: some View {
-        // Fit only the widest-value templates. The visible capsule hugs the
+        // Fit only the widest-value templates. The plain status line shows the
         // available readings, without changing the chosen form as sensors start.
         ViewThatFits(in: .horizontal) {
-            fittedPill(showsEnergy: true)
-            fittedPill(showsEnergy: false)
+            fittedLine(showsEnergy: true)
+            fittedLine(showsEnergy: false)
             Color.clear.frame(width: 0, height: 0).accessibilityHidden(true)
         }
-        .font(.liteweightMetric(.caption, weight: .semibold))
+        // caption2 lets both readings fit beside a back button on Ultra (≈85 of 88 pt).
+        .font(.liteweightMetric(.caption2, weight: .semibold))
         .monospacedDigit()
         .foregroundStyle(LiteweightTheme.primaryText)
         .lineLimit(1)
         .frame(maxWidth: availableWidth, alignment: .leading)
     }
 
-    private func fittedPill(showsEnergy: Bool) -> some View {
+    private func fittedLine(showsEnergy: Bool) -> some View {
         metrics(heartRate: "188", energy: "9.9k", showsEnergy: showsEnergy)
-            .padding(.horizontal, 4)
             .frame(height: 34)
             .fixedSize(horizontal: true, vertical: false)
             .hidden()
             .overlay(alignment: .leading) {
-                pill(horizontalPadding: !showsEnergy && heartRate == nil ? 8 : 4) {
+                plain {
                     metrics(heartRate: heartRate, energy: compactEnergy, showsEnergy: showsEnergy)
                 }
             }
@@ -2365,16 +2296,14 @@ private struct WatchVitalsLine: View {
             .accessibilityLabel(accessibilitySummary)
     }
 
-    private func pill<Content: View>(horizontalPadding: CGFloat, @ViewBuilder content: () -> Content) -> some View {
+    private func plain<Content: View>(@ViewBuilder content: () -> Content) -> some View {
         content()
-            .padding(.horizontal, horizontalPadding)
             .frame(height: 34)
             .fixedSize(horizontal: true, vertical: false)
-            .background(LiteweightTheme.glassFill, in: Capsule())
     }
 
     private func metrics(heartRate: String?, energy: String?, showsEnergy: Bool) -> some View {
-        HStack(alignment: .center, spacing: 6) {
+        HStack(alignment: .center, spacing: 5) {
             metric("heart.fill", reference: "188", value: heartRate, color: LiteweightTheme.metricHeartRate)
             if showsEnergy {
                 metric("flame.fill", reference: "9.9k", value: energy, color: LiteweightTheme.metricEnergy)
@@ -2383,9 +2312,9 @@ private struct WatchVitalsLine: View {
     }
 
     private func metric(_ symbol: String, reference: String, value: String?, color: Color) -> some View {
-        HStack(alignment: .center, spacing: 3) {
+        HStack(alignment: .center, spacing: 2) {
             Image(systemName: symbol)
-                .font(.system(size: 11, weight: .semibold))
+                .font(.system(size: 10, weight: .semibold))
                 .foregroundStyle(value == nil ? LiteweightTheme.secondaryText : color)
             if let value {
                 Text(reference).hidden().accessibilityHidden(true)
