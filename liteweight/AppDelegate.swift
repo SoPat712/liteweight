@@ -24,6 +24,7 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
         SettingsStore.resetHealthTestModeForRealUseIfNeeded()
         ExerciseStore.migrateHiddenExercisesToAppGroupIfNecessary()
         LiteweightSoundPlayer.shared.preload()
+        LiteweightTips.configure()
         
         #if DEBUG
         seedSampleDataIfRequested()

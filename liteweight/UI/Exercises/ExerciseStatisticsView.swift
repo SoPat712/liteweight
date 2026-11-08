@@ -10,6 +10,7 @@ import SwiftUI
 import Charts
 import CoreData
 import WorkoutDataKit
+import TipKit
 
 struct ExerciseStatisticsView: View {
     @EnvironmentObject private var settingsStore: SettingsStore
@@ -190,11 +191,22 @@ struct ExerciseInlineProgressView: View {
     @AppStorage("exerciseDetail.metric") private var storedSelection = Selection.oneRM.rawValue
     @AppStorage("exerciseDetail.range") private var storedRange = "3M"
     @State private var selectedPoint: ExerciseProgressPoint?
+    @ObservedObject private var pinnedChartsStore = PinnedChartsStore.shared
+    @AppStorage(LiteweightTips.generationKey) private var tipGeneration = 0
 
     let exercise: Exercise
 
     private enum Selection: String, CaseIterable {
         case oneRM = "1RM", weight = "Weight", volume = "Volume"
+
+        /// The Home chart for this metric. Top weight has no Home chart.
+        var pinnedMeasurement: WorkoutExerciseChartData.MeasurementType? {
+            switch self {
+            case .oneRM: return .oneRM
+            case .weight: return nil
+            case .volume: return .totalWeight
+            }
+        }
 
         var metric: ExerciseProgressMetric {
             switch self {
@@ -211,6 +223,43 @@ struct ExerciseInlineProgressView: View {
     }
 
     private var selection: Selection { Selection(rawValue: storedSelection) ?? .oneRM }
+
+    private var pin: PinnedChart? {
+        selection.pinnedMeasurement.map { PinnedChart(exerciseUuid: exercise.uuid, measurementType: $0) }
+    }
+
+    /// Pinning lives on the chart itself; Home's Pinned Charts card appears once something is pinned.
+    @ViewBuilder
+    private var pinButton: some View {
+        if let pin, !completedHistory.isEmpty {
+            let isPinned = pinnedChartsStore.pinnedCharts.contains(pin)
+            Button {
+                PinToHomeTip(generation: tipGeneration).invalidate(reason: .actionPerformed)
+                if isPinned {
+                    pinnedChartsStore.pinnedCharts.removeAll { $0 == pin }
+                } else {
+                    pinnedChartsStore.pinnedCharts.append(pin)
+                    LiteweightToastCenter.shared.show(LiteweightToast(
+                        title: "Pinned to Home", subtitle: exercise.title, systemImage: "pin.fill", style: .info))
+                }
+            } label: {
+                let label = Label(isPinned ? "Pinned" : "Pin to Home", systemImage: isPinned ? "pin.fill" : "pin")
+                    .font(.subheadline.weight(.semibold))
+                    .contentTransition(.symbolEffect(.replace))
+                // Accessibility sizes keep the metric menu's room; the button keeps its spoken label.
+                if dynamicTypeSize.isAccessibilitySize {
+                    label.labelStyle(.iconOnly)
+                } else {
+                    label
+                }
+            }
+            .buttonStyle(.bordered)
+            .buttonBorderShape(.capsule)
+            .tint(LiteweightTheme.accent)
+            .frame(minHeight: LiteweightTheme.controlHeight)
+            .accessibilityLabel(isPinned ? "Unpin \(selection.metric.title) from Home" : "Pin \(selection.metric.title) to Home")
+        }
+    }
     private var selectedTimeFrame: WorkoutExerciseChartData.TimeFrame {
         WorkoutExerciseChartData.TimeFrame.progressCases.first { $0.compactTitle == storedRange } ?? .threeMonths
     }
@@ -223,30 +272,37 @@ struct ExerciseInlineProgressView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            HStack {
-                Menu {
-                    Picker("Metric", selection: Binding(
-                        get: { selection }, set: { storedSelection = $0.rawValue }
-                    )) {
-                        ForEach(Selection.allCases, id: \.self) { metric in
-                            Text(metric.rawValue).tag(metric)
+            // Its own stack, so the hidden tip adds no gap under the header.
+            VStack(spacing: 0) {
+                HStack {
+                    Menu {
+                        Picker("Metric", selection: Binding(
+                            get: { selection }, set: { storedSelection = $0.rawValue }
+                        )) {
+                            ForEach(Selection.allCases, id: \.self) { metric in
+                                Text(metric.rawValue).tag(metric)
+                            }
                         }
+                    } label: {
+                        HStack(spacing: 6) {
+                            Text(selection.metric.title)
+                                .font(.title3.weight(.semibold))
+                            Image(systemName: "chevron.down")
+                                .font(.caption.weight(.semibold))
+                        }
+                        .foregroundStyle(LiteweightTheme.accent)
+                        .frame(minHeight: LiteweightTheme.controlHeight)
+                        .contentShape(Rectangle())
                     }
-                } label: {
-                    HStack(spacing: 6) {
-                        Text(selection.metric.title)
-                            .font(.title3.weight(.semibold))
-                        Image(systemName: "chevron.down")
-                            .font(.caption.weight(.semibold))
-                    }
-                    .foregroundStyle(LiteweightTheme.accent)
-                    .frame(minHeight: LiteweightTheme.controlHeight)
-                    .contentShape(Rectangle())
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("Chart metric")
+                    .accessibilityValue(selection.metric.title)
+                    Spacer(minLength: 0)
+                    pinButton
                 }
-                .buttonStyle(.plain)
-                .accessibilityLabel("Chart metric")
-                .accessibilityValue(selection.metric.title)
-                Spacer(minLength: 0)
+                if let pin, !pinnedChartsStore.pinnedCharts.contains(pin), !completedHistory.isEmpty {
+                    LiteweightInlineTip(tip: PinToHomeTip(generation: tipGeneration), arrowEdge: .top, topSpacing: 8)
+                }
             }
 
             rangePills

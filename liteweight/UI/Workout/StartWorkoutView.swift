@@ -11,6 +11,7 @@ import Combine
 import Charts
 import CoreData
 import WorkoutDataKit
+import TipKit
 
 struct WorkoutPlanEditorRoute: Identifiable {
     enum Kind {
@@ -482,6 +483,10 @@ enum WorkoutSuggestion {
 
         var label: String { WorkoutSuggestion.restLabel(days: days) }
         var needsRecovery: Bool { days.map { $0 < 2 } ?? false }
+        /// Amber while recovering, green once rested, gray if never trained.
+        var statusColor: Color {
+            days == nil ? LiteweightTheme.secondaryText : (needsRecovery ? LiteweightTheme.warning : LiteweightTheme.success)
+        }
         var title: String { HomeWeekSummary.displayName(group) }
         var speech: String {
             guard let days else { return "\(title) never trained" }
@@ -570,6 +575,7 @@ struct StartWorkoutView: View {
     @State private var deletedWorkoutCount = 0
     @State private var rankedSuggestions: [WorkoutSuggestion.Ranked<NSManagedObjectID>] = []
     @State private var suggestedExercises: [SuggestedWorkoutExercise] = []
+    @Namespace private var zoomNamespace
 
     static var fetchRequest: NSFetchRequest<WorkoutPlan> {
         let request: NSFetchRequest<WorkoutPlan> = WorkoutPlan.fetchRequest()
@@ -604,14 +610,19 @@ struct StartWorkoutView: View {
                 if currentWorkouts.isEmpty, watchConnection.watchWorkoutAwaitingOpen == nil,
                    let suggestion = rankedSuggestions.first {
                     Section {
+                        // Before history loads every workout looks unrested and never done, so the
+                        // ranking is a guess. Hold its shape as a placeholder until the real one lands.
                         MostRestedWorkoutCard(suggestion: suggestion, exercises: suggestedExercises) {
                             startSuggestedWorkout(suggestion.workout.id)
                         }
+                        .redacted(reason: historyStore.hasLoaded ? [] : .placeholder)
+                        .disabled(!historyStore.hasLoaded)
+                        .accessibilityHidden(!historyStore.hasLoaded)
+                        .animation(LiteweightMotion.preferred(LiteweightMotion.reveal, reduceMotion: reduceMotion),
+                                   value: historyStore.hasLoaded)
                     }
                     .listRowInsets(EdgeInsets(top: 16, leading: 16, bottom: 16, trailing: 16))
-                    .listRowBackground(LiteweightTheme.surface.clipShape(
-                        RoundedRectangle(cornerRadius: LiteweightTheme.heroCornerRadius, style: .continuous)
-                    ))
+                    .listRowBackground(mostRestedBackground(suggestion))
                 }
 
                 Section {
@@ -662,9 +673,12 @@ struct StartWorkoutView: View {
                                 onExport: { exportWorkout(plan) },
                                 canStartWorkout: currentWorkouts.isEmpty,
                                 isActiveWorkout: activeRoutineObjectID == plan.objectID,
-                                leastRestedMuscle: rankedSuggestions.first { $0.workout.id == plan.objectID }?.muscles.first,
+                                muscleRests: historyStore.hasLoaded
+                                    ? rankedSuggestions.first { $0.workout.id == plan.objectID }?.muscles ?? []
+                                    : [],
                                 onWorkoutStarted: onOpenCurrentWorkout,
-                                onFailure: { persistenceError = $0.localizedDescription }
+                                onFailure: { persistenceError = $0.localizedDescription },
+                                zoomNamespace: zoomNamespace
                             )
                             .liteweightStaggeredEntrance(index: index + 1)
                             .transition(reduceMotion ? .opacity : .opacity.combined(with: .scale(scale: 0.96)))
@@ -687,10 +701,10 @@ struct StartWorkoutView: View {
             .listStyle(.insetGrouped)
             .animation(LiteweightMotion.preferred(LiteweightMotion.collapse, reduceMotion: reduceMotion), value: plans.map(\.objectID))
             .contentMargins(.bottom, LiteweightTheme.floatingWorkoutBottomClearance, for: .scrollContent)
-            .navigationTitle("Workout")
-            .toolbarTitleDisplayMode(.inlineLarge)
+            .liteweightTabTitle("Workout")
             .navigationDestination(item: $selectedRecentWorkout) { workout in
                 WorkoutDetailView(workout: workout)
+                    .liteweightZoomDestination(id: workout.objectID, in: zoomNamespace)
             }
             .sheet(item: $planEditorRoute) { route in
                 WorkoutPlanEditorHost(
@@ -836,6 +850,26 @@ struct StartWorkoutView: View {
         }
     }
 
+    private var showsMostRested: Bool {
+        currentWorkouts.isEmpty && watchConnection.watchWorkoutAwaitingOpen == nil && rankedSuggestions.first != nil
+    }
+
+    /// The suggested workout's main muscle tints the card, fading into the surface.
+    private func mostRestedBackground(_ suggestion: WorkoutSuggestion.Ranked<NSManagedObjectID>) -> some View {
+        let counts = Dictionary(suggestion.workout.muscleGroups.map { ($0, 1) }, uniquingKeysWith: +)
+        let main = suggestion.workout.muscleGroups.first { counts[$0] == counts.values.max() }
+        let shape = RoundedRectangle(cornerRadius: LiteweightTheme.heroCornerRadius, style: .continuous)
+        return ZStack {
+            LiteweightTheme.surface
+            LinearGradient(
+                colors: [LiteweightTheme.muscle(main).opacity(historyStore.hasLoaded ? 0.30 : 0), .clear],
+                startPoint: .topLeading, endPoint: .center
+            )
+        }
+        .clipShape(shape)
+        .animation(LiteweightMotion.preferred(LiteweightMotion.reveal, reduceMotion: reduceMotion), value: historyStore.hasLoaded)
+    }
+
     private func startSuggestedWorkout(_ id: NSManagedObjectID) {
         guard currentWorkouts.isEmpty, watchConnection.watchWorkoutAwaitingOpen == nil,
               let plan = plans.first(where: { $0.objectID == id }) else { return }
@@ -950,14 +984,15 @@ struct StartWorkoutView: View {
                 if currentWorkouts.isEmpty { startEmptyWorkout() }
                 else { onOpenCurrentWorkout() }
             } label: {
-                Label(isWatchWorkout ? "Open on iPhone" : (currentWorkouts.isEmpty ? "Start Workout" : "Resume Workout"),
+                Label(isWatchWorkout ? "Open on iPhone"
+                        : (currentWorkouts.isEmpty ? (showsMostRested ? "Start Empty Workout" : "Start Workout") : "Resume Workout"),
                       systemImage: isWatchWorkout ? "iphone" : "play.fill")
                     .font(.headline)
                     .frame(maxWidth: .infinity)
             }
             .controlSize(.large)
             .buttonBorderShape(.capsule)
-            .buttonStyle(.borderedProminent)
+            .modifier(QuickStartButtonStyle(isSecondary: showsMostRested))
             .frame(minHeight: 50)
             .accessibilityHint(isWatchWorkout ? "Opens the same workout. Edits sync with Apple Watch." : "")
         }
@@ -974,6 +1009,7 @@ struct StartWorkoutView: View {
                     onViewDetails: { selectedRecentWorkout = workout },
                     onSaveAsWorkout: { saveAsWorkout(workout) }
                 )
+                .liteweightZoomSource(id: workout.objectID, in: zoomNamespace)
                 .liteweightStaggeredEntrance(index: plans.count + 1)
             } header: {
                 ViewThatFits(in: .horizontal) {
@@ -1157,6 +1193,23 @@ private enum WorkoutPlanTrendMetric: String, CaseIterable, Identifiable {
         case .volume: return "scalemass.fill"
         case .repetitions: return "arrow.triangle.2.circlepath"
         case .duration: return "timer"
+        }
+    }
+}
+
+/// One main action per page: when Most Rested shows its blue Start, the empty
+/// workout's start is a gray glass button of the same height.
+private struct QuickStartButtonStyle: ViewModifier {
+    let isSecondary: Bool
+
+    @ViewBuilder
+    func body(content: Content) -> some View {
+        if !isSecondary {
+            content.buttonStyle(.borderedProminent)
+        } else if #available(iOS 26, *) {
+            content.buttonStyle(.glass).tint(LiteweightTheme.primaryText).foregroundStyle(LiteweightTheme.primaryText)
+        } else {
+            content.buttonStyle(.bordered).tint(LiteweightTheme.primaryText).foregroundStyle(LiteweightTheme.primaryText)
         }
     }
 }
@@ -1650,7 +1703,9 @@ private struct WorkoutPlanDetailView: View {
 
 private struct MostRestedWorkoutCard: View {
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+    @Environment(\.isEnabled) private var isEnabled
     @EnvironmentObject private var settingsStore: SettingsStore
+    @AppStorage(LiteweightTips.generationKey) private var tipGeneration = 0
 
     let suggestion: WorkoutSuggestion.Ranked<NSManagedObjectID>
     let exercises: [SuggestedWorkoutExercise]
@@ -1710,19 +1765,34 @@ private struct MostRestedWorkoutCard: View {
             .accessibilityElement(children: .ignore)
             .accessibilityLabel(summaryLabel)
 
-            Button(action: onStart) {
-                Label("Start \(suggestion.workout.title)", systemImage: "play.fill")
-                    .font(.headline)
-                    .frame(maxWidth: .infinity)
+            // Inline, pointing at Start: a bubble anchored in this List row didn't present.
+            // Its own stack, so the hidden tip adds no gap. Waits for history: the
+            // placeholder card is disabled.
+            VStack(spacing: 0) {
+                if isEnabled {
+                    LiteweightInlineTip(tip: MostRestedTip(generation: tipGeneration), arrowEdge: .bottom, bottomSpacing: 10)
+                }
+                startButton
             }
-            .controlSize(.large)
-            .buttonBorderShape(.capsule)
-            .buttonStyle(.borderedProminent)
-            .frame(minHeight: 50)
-            .accessibilityLabel("Start \(suggestion.workout.title)")
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .accessibilityElement(children: .contain)
+    }
+
+    private var startButton: some View {
+        Button {
+            MostRestedTip(generation: tipGeneration).invalidate(reason: .actionPerformed)
+            onStart()
+        } label: {
+            Label("Start \(suggestion.workout.title)", systemImage: "play.fill")
+                .font(.headline)
+                .frame(maxWidth: .infinity)
+        }
+        .controlSize(.large)
+        .buttonBorderShape(.capsule)
+        .buttonStyle(.borderedProminent)
+        .frame(minHeight: 50)
+        .accessibilityLabel("Start \(suggestion.workout.title)")
     }
 
     @ViewBuilder
@@ -1748,19 +1818,7 @@ private struct MostRestedWorkoutCard: View {
     }
 
     private func restTag(_ muscle: WorkoutSuggestion.MuscleRest) -> some View {
-        HStack(spacing: 6) {
-            Circle()
-                .fill(muscle.days == nil ? LiteweightTheme.secondaryText : (muscle.needsRecovery ? LiteweightTheme.warning : LiteweightTheme.success))
-                .frame(width: 6, height: 6)
-            (Text(muscle.title + " ")
-             + Text(muscle.label).font(.liteweightMetric(.caption, weight: .semibold)))
-                .font(.caption.weight(.semibold))
-                .foregroundStyle(LiteweightTheme.secondaryText)
-        }
-        .padding(.horizontal, 8)
-        .padding(.vertical, 3)
-        .background(LiteweightTheme.field, in: Capsule())
-        .fixedSize(horizontal: false, vertical: true)
+        LiteweightMuscleChip(group: muscle.group, detail: muscle.label, status: muscle.statusColor)
     }
 
     @ViewBuilder
@@ -1831,9 +1889,11 @@ private struct SavedWorkoutRow: View {
     let onExport: () -> Void
     let canStartWorkout: Bool
     let isActiveWorkout: Bool
-    let leastRestedMuscle: WorkoutSuggestion.MuscleRest?
+    /// Rest per muscle, least rested first; empty until history has loaded.
+    let muscleRests: [WorkoutSuggestion.MuscleRest]
     let onWorkoutStarted: () -> Void
     let onFailure: (Error) -> Void
+    let zoomNamespace: Namespace.ID
 
     private var workoutExercises: [WorkoutRoutineExercise] {
         workout.workoutRoutineExercises?.array as? [WorkoutRoutineExercise] ?? []
@@ -1854,8 +1914,7 @@ private struct SavedWorkoutRow: View {
         for exercise in workoutExercises {
             guard let group = exercise.exercise(in: exerciseStore.exercises)?.muscleGroup,
                   !group.isEmpty, group.lowercased() != "other" else { continue }
-            let title = Exercise.displayName(forMuscleGroup: group)
-            if !groups.contains(title) { groups.append(title) }
+            if !groups.contains(group) { groups.append(group) }
         }
         return Array(groups.prefix(3))
     }
@@ -1865,21 +1924,8 @@ private struct SavedWorkoutRow: View {
     }
 
     private var metadata: Text {
-        var result = Text("\(workoutExercises.count)").font(.liteweightMetric(.subheadline, weight: .semibold))
-            + Text(" exercise\(workoutExercises.count == 1 ? "" : "s")")
-        if let muscle = leastRestedMuscle {
-            let rest: Text
-            if let days = muscle.days {
-                rest = days == 0 ? Text("today")
-                    : Text("\(days)").font(.liteweightMetric(.subheadline, weight: .semibold))
-                        + Text(days == 1 ? " day" : " days")
-            } else {
-                rest = Text("new")
-            }
-            result = result + Text(" · ") + (Text("\(muscle.title.lowercased()) ") + rest)
-                .foregroundColor(muscle.needsRecovery ? LiteweightTheme.warning : LiteweightTheme.secondaryText)
-        }
-        return result + Text(" · \(lastPerformed)")
+        Text("\(workoutExercises.count)").font(.liteweightMetric(.subheadline, weight: .semibold))
+            + Text(" exercise\(workoutExercises.count == 1 ? "" : "s") · \(lastPerformed)")
     }
 
     var body: some View {
@@ -1910,6 +1956,7 @@ private struct SavedWorkoutRow: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .contentShape(Rectangle())
                 .accessibilityElement(children: .combine)
+                .liteweightZoomSource(id: workout.objectID, in: zoomNamespace)
             }
             .buttonStyle(.plain)
             .accessibilityHint("Opens saved workout details.")
@@ -1923,6 +1970,7 @@ private struct SavedWorkoutRow: View {
                         onWorkoutStarted: onWorkoutStarted,
                         onFailure: onFailure
                     )
+                    .liteweightZoomDestination(id: workout.objectID, in: zoomNamespace)
                 } label: {
                     EmptyView()
                 }
@@ -1969,7 +2017,7 @@ private struct SavedWorkoutRow: View {
         }
         .buttonStyle(.bordered)
         .buttonBorderShape(.capsule)
-        .controlSize(.small)
+        .controlSize(.regular)
         .tint(LiteweightTheme.accent)
         .frame(minHeight: LiteweightTheme.controlHeight)
         .contentShape(Rectangle())
@@ -1977,22 +2025,17 @@ private struct SavedWorkoutRow: View {
         .accessibilityLabel(isActiveWorkout ? "Resume \(workout.displayTitle)" : "Start \(workout.displayTitle)")
     }
 
+    /// Each muscle with its rest, least rested first, in the Most Rested card's chips.
     private var muscleTags: some View {
-        let layout = dynamicTypeSize.isAccessibilitySize
-            ? AnyLayout(VStackLayout(alignment: .leading, spacing: 4))
-            : AnyLayout(HStackLayout(spacing: 4))
-        return ViewThatFits(in: .horizontal) {
-            layout {
-                ForEach(muscleGroups, id: \.self) { muscleTag($0) }
-            }
-            VStack(alignment: .leading, spacing: 4) {
-                ForEach(muscleGroups, id: \.self) { muscleTag($0) }
+        LiteweightChipFlow(spacing: 5) {
+            if muscleRests.isEmpty {
+                ForEach(muscleGroups, id: \.self) { LiteweightMuscleChip(group: $0) }
+            } else {
+                ForEach(Array(muscleRests.prefix(3)), id: \.group) { muscle in
+                    LiteweightMuscleChip(group: muscle.group, detail: muscle.label, status: muscle.statusColor)
+                }
             }
         }
-    }
-
-    private func muscleTag(_ title: String) -> some View {
-        ExerciseLibraryTag(title: title)
     }
 
     private func start() {
@@ -2035,14 +2078,19 @@ private struct RecentWorkoutRow: View {
             : AnyLayout(HStackLayout(spacing: 12))
         layout {
             Button(action: onViewDetails) {
-                VStack(alignment: .leading, spacing: 4) {
-                    Text(title)
-                        .font(.headline)
-                        .foregroundStyle(LiteweightTheme.primaryText)
-                    Text(metadata)
-                        .font(.subheadline)
-                        .foregroundStyle(LiteweightTheme.secondaryText)
-                    WorkoutPreviewMetricLine(workout: workout)
+                HStack(alignment: .top, spacing: 12) {
+                    LiteweightMuscleTile(group: workout.muscleGroups(in: exerciseStore.exercises)
+                        .first { LiteweightPalette.hasMuscleColor($0) })
+                        .padding(.top, 2)
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text(title)
+                            .font(.headline)
+                            .foregroundStyle(LiteweightTheme.primaryText)
+                        Text(metadata)
+                            .font(.subheadline)
+                            .foregroundStyle(LiteweightTheme.secondaryText)
+                        WorkoutPreviewMetricLine(workout: workout)
+                    }
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .contentShape(Rectangle())
@@ -2058,7 +2106,7 @@ private struct RecentWorkoutRow: View {
             }
             .buttonStyle(.bordered)
             .buttonBorderShape(.capsule)
-            .controlSize(.small)
+            .controlSize(.regular)
             .tint(LiteweightTheme.accent)
             .frame(minHeight: LiteweightTheme.controlHeight)
             .contentShape(Rectangle())

@@ -275,17 +275,25 @@ struct WatchContentList<Content: View>: View {
     }
 
     private var list: some View {
-        GeometryReader { proxy in
+        GeometryReader { _ in
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: 4) {
                     content
                 }
                 .padding(.horizontal, 2)
-                .padding(.bottom, (clearsPageDots ? 30 : proxy.size.width < 180 ? 8 : 14) + extraBottomInset)
+                .padding(.bottom, (clearsPageDots ? 30 : Self.cornerClearance) + extraBottomInset)
             }
             .scrollIndicators(.hidden)
         }
         .ignoresSafeArea(.container, edges: clearsPageDots ? [] : .bottom)
+    }
+
+    /// Room under the last row so its rounded platter scrolls clear of the display's
+    /// corners. Display radii from the simulator device profiles: Ultra 54–57 pt,
+    /// 46 mm 50, 45 mm 42.5, 42 mm 44, 44 mm 34, 41 mm 38.5, 40 mm 28.
+    private static var cornerClearance: CGFloat {
+        let width = WKInterfaceDevice.current().screenBounds.width
+        return width >= 205 ? 28 : width >= 185 ? 18 : width >= 176 ? 14 : 8
     }
 }
 
@@ -296,6 +304,7 @@ struct WatchVitalsInset: ViewModifier {
     var showsTrailingButton = false
     @EnvironmentObject private var store: WorkoutSessionManagerStore
     @Environment(\.isLuminanceReduced) private var reducedLuminance
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.dismiss) private var dismiss
     // "12:59" / "23:59" measure 40–42 pt at the default text size (2026-11-07). Fixed on purpose:
     // at larger sizes the vitals grow with the text and fall back to heart rate before the clock.
@@ -351,6 +360,8 @@ struct WatchVitalsInset: ViewModifier {
                                 }
                                 .buttonStyle(.plain)
                                 .accessibilityLabel("Back")
+                                // Swiping to the controls page slides the button in and pushes the vitals over.
+                                .transition(.move(edge: .leading).combined(with: .opacity))
                             }
                             // A trailing button moves the clock into the overflow area; hide vitals.
                             if !showsTrailingButton {
@@ -368,6 +379,7 @@ struct WatchVitalsInset: ViewModifier {
                                     }
                             }
                         }
+                        .animation(LiteweightMotion.preferred(LiteweightMotion.snappy, reduceMotion: reduceMotion), value: showsBack)
                     }
                 }
             }

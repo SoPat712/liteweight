@@ -21,6 +21,7 @@ struct ContentView : View {
     @EnvironmentObject private var exerciseStore: ExerciseStore
     @ObservedObject private var importController = HevyImportController.shared
     @ObservedObject private var watchConnection = WatchConnectionManager.shared
+    @ObservedObject private var welcomeGuide = WelcomeGuideController.shared
     @FetchRequest(fetchRequest: Workout.currentWorkoutFetchRequest) private var currentWorkouts
 
     #if DEBUG
@@ -136,6 +137,20 @@ struct ContentView : View {
             )) {
                 Button("OK", role: .cancel) { watchOpenError = nil }
             } message: { Text(watchOpenError ?? "Please try again.") }
+            .fullScreenCover(item: welcomeBinding, onDismiss: welcomeGuide.didDismiss) { mode in
+                WelcomeGuideView(mode: mode) {
+                    welcomeGuide.finish()
+                    sceneState.selectedTab = .workout
+                }
+                .productionEnvironment()
+                .preferredColorScheme(settingsStore.appearance.colorScheme)
+            }
+            .task { welcomeGuide.presentIfNeeded(context: managedObjectContext) }
+    }
+
+    /// The welcome waits while a workout is open, so it never covers the logger.
+    private var welcomeBinding: Binding<WelcomeGuideController.Mode?> {
+        Binding(get: { currentWorkouts.isEmpty ? welcomeGuide.mode : nil }, set: { _ in })
     }
 
     private var restoreBackupConfirmation: some View {
@@ -248,10 +263,9 @@ struct ContentView : View {
                     .productionEnvironment()
             }
         } else if ProcessInfo.processInfo.arguments.contains("-liteweightInspectUnits") {
-            NavigationStack {
-                UnitsSettingsView()
-                    .productionEnvironment()
-            }
+            // Units moved onto the Settings list.
+            SettingsView()
+                .productionEnvironment()
         } else if ProcessInfo.processInfo.arguments.contains("-liteweightInspectSounds") {
             NavigationStack {
                 SoundsSettingsView()

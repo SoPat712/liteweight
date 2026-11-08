@@ -128,6 +128,7 @@ struct ExerciseMuscleGroupsView : View {
     @State private var selectedEquipment: String? = nil
     @State private var showingCreateExercise = false
     @StateObject private var catalogSearch = ExerciseCatalogSearch()
+    @Namespace private var zoomNamespace
 
     private var hasActiveFilter: Bool {
         selectedMuscleGroup != nil || selectedEquipment != nil
@@ -275,8 +276,12 @@ struct ExerciseMuscleGroupsView : View {
 
     private func exerciseRows(_ exercises: [Exercise]) -> some View {
         ForEach(exercises) { exercise in
-            NavigationLink(destination: ExerciseDetailView(exercise: exercise)) {
+            NavigationLink {
+                ExerciseDetailView(exercise: exercise)
+                    .liteweightZoomDestination(id: exercise.uuid, in: zoomNamespace)
+            } label: {
                 ExerciseLibraryRow(exercise: exercise)
+                    .liteweightZoomSource(id: exercise.uuid, in: zoomNamespace)
             }
         }
     }
@@ -387,9 +392,8 @@ struct ExerciseMuscleGroupsView : View {
 private struct ExerciseLibraryScrollEdge: ViewModifier {
     @ViewBuilder func body(content: Content) -> some View {
         if #available(iOS 26, *) {
-            content.scrollEdgeEffectStyle(.hard, for: .top)
-        } else if #available(iOS 16, *) {
-            content.toolbarBackground(.visible, for: .navigationBar)
+            // Translucent: rows soften under the pinned search instead of meeting a solid band.
+            content.scrollEdgeEffectStyle(.soft, for: .top)
         } else {
             content
         }

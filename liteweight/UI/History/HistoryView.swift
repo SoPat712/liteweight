@@ -8,6 +8,8 @@
 import SwiftUI
 import CoreData
 import WorkoutDataKit
+import TipKit
+import MuscleMap
 
 struct HistoryView: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
@@ -18,38 +20,19 @@ struct HistoryView: View {
     @ObservedObject private var historyStore = TrainingHistoryStore.shared
 
     @State private var activityItems: [Any]?
-    @State private var workoutToDelete: Workout?
+    /// Deleted rows hide at once and are removed for good when the Undo toast expires.
+    @State private var pendingDeletions: Set<NSManagedObjectID> = []
     @State private var showingRepeatBlocked = false
     @State private var showingShareUnavailable = false
     @State private var persistenceError: String?
     @State private var searchText = ""
+    @AppStorage(LiteweightTips.generationKey) private var tipGeneration = 0
+    @State private var showsSwipeTip = false
     @Namespace private var workoutDetailNamespace
 
     var body: some View {
         navigationContent
-        .confirmationDialog(
-            "Delete this workout?",
-            isPresented: Binding(
-                get: { workoutToDelete != nil },
-                set: { if !$0 { workoutToDelete = nil } }
-            ),
-            titleVisibility: .visible
-        ) {
-            Button("Delete Workout", role: .destructive) {
-                guard let workout = workoutToDelete else { return }
-                workoutToDelete = nil
-                do {
-                    try workout.delete()
-                } catch {
-                    persistenceError = "The workout was not deleted. \(error.localizedDescription)"
-                }
-            }
-            Button("Cancel", role: .cancel) {
-                workoutToDelete = nil
-            }
-        } message: {
-            Text("This removes the workout, its logged sets, and liteweight’s matching Apple Health workout.")
-        }
+        .animation(LiteweightMotion.preferred(LiteweightMotion.collapse, reduceMotion: reduceMotion), value: pendingDeletions)
         .sheet(isPresented: $showingRepeatBlocked) {
             LiteweightStatusSheet(
                 headerTitle: "Workout in progress",
@@ -106,6 +89,7 @@ struct HistoryView: View {
             }
         }
         .listStyle(.insetGrouped)
+        .liteweightTracksTip(HistorySwipeTip(generation: tipGeneration), isShowing: $showsSwipeTip)
         .modifier(HistoryScrollEdge())
         .modifier(HistoryScrollClearance())
         .navigationTitle("History")
@@ -120,7 +104,7 @@ struct HistoryView: View {
 
     private var matchingSessions: [TrainingSessionSnapshot] {
         let terms = searchTerms
-        return historyStore.snapshot.sessions.filter { session in
+        return visibleSessions.filter { session in
             // Search only immutable history and the in-memory catalog, never managed objects.
             let titles = [session.displayTitle] + session.exercises.compactMap {
                 $0.uuid.flatMap { exerciseStore.exercisesByUUID[$0]?.title }
@@ -131,9 +115,14 @@ struct HistoryView: View {
         }.sorted { $0.date > $1.date }
     }
 
+    private var visibleSessions: [TrainingSessionSnapshot] {
+        guard !pendingDeletions.isEmpty else { return historyStore.snapshot.sessions }
+        return historyStore.snapshot.sessions.filter { !pendingDeletions.contains($0.id) }
+    }
+
     @ViewBuilder
     private var workoutHistoryContent: some View {
-        let completed = historyStore.snapshot.sessions
+        let completed = visibleSessions
         let records = historyStore.snapshot.recordSetIDs
         if !searchText.isEmpty {
             let matches = matchingSessions
@@ -150,6 +139,10 @@ struct HistoryView: View {
             }
         } else {
             let weeks = HistoryWorkoutWeek.group(completed)
+            // Swipes only make sense once there's more than one workout to act on.
+            if completed.count >= 2, showsSwipeTip {
+                LiteweightTipSection(tip: HistorySwipeTip(generation: tipGeneration))
+            }
             ForEach(weeks) { week in
                 Section {
                     ForEach(week.workouts) { session in
@@ -205,22 +198,54 @@ struct HistoryView: View {
                 WorkoutHistoryRow(session: session, workout: workout, recordSetIDs: recordSetIDs)
             }
         }
-        .swipeActions(edge: .trailing, allowsFullSwipe: false) {
-            Button(role: .destructive) {
-                workoutToDelete = workout
-            } label: { Label("Delete", systemImage: "trash") }
+        .swipeActions(edge: .leading) {
+            Button { repeatWorkout(workout, blank: false) } label: { Label("Repeat", systemImage: "arrow.clockwise") }
+                .tint(LiteweightTheme.accent)
+        }
+        .swipeActions(edge: .trailing) {
+            Button(role: .destructive) { delete(session, workout: workout) } label: { Label("Delete", systemImage: "trash.fill") }
             Button {
                 share(workout)
             } label: { Label("Share", systemImage: "square.and.arrow.up") }
             .tint(LiteweightTheme.secondaryText)
         }
         .contextMenu {
-            Button { share(workout) } label: { Label("Share Workout", systemImage: "square.and.arrow.up") }
             Button { repeatWorkout(workout, blank: false) } label: { Label("Repeat Workout", systemImage: "arrow.clockwise") }
             Button { repeatWorkout(workout, blank: true) } label: { Label("Repeat with Blank Sets", systemImage: "doc") }
+            Button { share(workout) } label: { Label("Share Workout", systemImage: "square.and.arrow.up") }
             Divider()
-            Button(role: .destructive) { workoutToDelete = workout } label: { Label("Delete Workout", systemImage: "trash") }
+            Button(role: .destructive) { delete(session, workout: workout) } label: { Label("Delete Workout", systemImage: "trash") }
+        } preview: {
+            HistoryWorkoutPreview(session: session)
+                .environmentObject(settingsStore)
+                .environmentObject(exerciseStore)
         }
+    }
+
+    /// Hides the row now and deletes when the toast expires, so Undo needs no restore.
+    /// Deleting also removes liteweight's matching Apple Health workout, which is why it waits.
+    private func delete(_ session: TrainingSessionSnapshot, workout: Workout) {
+        HistorySwipeTip(generation: tipGeneration).invalidate(reason: .actionPerformed)
+        let id = session.id
+        pendingDeletions.insert(id)
+        LiteweightToastCenter.shared.show(LiteweightToast(
+            title: "Workout Deleted",
+            subtitle: session.displayTitle,
+            systemImage: "trash.fill",
+            style: .info,
+            duration: 5,
+            actionTitle: "Undo",
+            action: { pendingDeletions.remove(id) },
+            onExpire: {
+                // The id stays hidden until the background snapshot drops the deleted row.
+                do {
+                    if !workout.isDeleted { try workout.delete() }
+                } catch {
+                    pendingDeletions.remove(id)
+                    persistenceError = "The workout was not deleted. \(error.localizedDescription)"
+                }
+            }
+        ))
     }
 
     private func share(_ workout: Workout) {
@@ -235,6 +260,7 @@ struct HistoryView: View {
     }
 
     private func repeatWorkout(_ workout: Workout, blank: Bool) {
+        HistorySwipeTip(generation: tipGeneration).invalidate(reason: .actionPerformed)
         do {
             let didStart: Bool
             if blank {
@@ -274,6 +300,7 @@ private struct HistoryWorkoutWeek: Identifiable {
 }
 
 private struct WorkoutHistoryRow: View {
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @EnvironmentObject private var settingsStore: SettingsStore
     @EnvironmentObject private var exerciseStore: ExerciseStore
     let session: TrainingSessionSnapshot
@@ -320,6 +347,24 @@ private struct WorkoutHistoryRow: View {
 
     var body: some View {
         let records = recordCount
+        let groups = session.muscleGroups(in: exerciseStore.exercisesByUUID)
+        HStack(alignment: .top, spacing: 12) {
+            // The figure leads the row in place of the tile: it carries the same colors and
+            // shows every muscle. Accessibility sizes keep the tile and the named chips.
+            if !groups.isEmpty, !dynamicTypeSize.isAccessibilitySize {
+                HistoryMuscleFigure(session: session)
+            } else {
+                LiteweightMuscleTile(group: groups.first)
+                    .padding(.top, 2)
+            }
+            details(records: records, groups: groups)
+        }
+        .padding(.vertical, 4)
+        .accessibilityElement(children: .combine)
+        .accessibilityValue(groups.prefix(3).map { HomeWeekSummary.displayName($0) }.joined(separator: ", "))
+    }
+
+    private func details(records: Int, groups: [String]) -> some View {
         VStack(alignment: .leading, spacing: 6) {
             HStack(alignment: .firstTextBaseline, spacing: 8) {
                 Text(workout.displayTitle(in: exerciseStore.exercises))
@@ -337,22 +382,171 @@ private struct WorkoutHistoryRow: View {
                 .font(.subheadline)
                 .foregroundStyle(LiteweightTheme.secondaryText)
                 .fixedSize(horizontal: false, vertical: true)
-            Text(exerciseSummary)
-                .font(.footnote)
-                .foregroundStyle(LiteweightTheme.secondaryText)
-                .lineLimit(1)
+            if groups.isEmpty {
+                Text(exerciseSummary)
+                    .font(.footnote)
+                    .foregroundStyle(LiteweightTheme.secondaryText)
+                    .lineLimit(1)
+            } else if dynamicTypeSize.isAccessibilitySize {
+                // The figure is too small to read at these sizes; name the groups instead.
+                LiteweightChipFlow(spacing: 5) {
+                    ForEach(groups.prefix(3), id: \.self) { LiteweightMuscleChip(group: $0) }
+                }
+            }
         }
-        .padding(.vertical, 4)
-        .accessibilityElement(children: .combine)
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+}
+
+/// Front and back, each trained muscle in its group's color: primary movers solid,
+/// helpers faint. The owner asked for this in place of the group chips.
+private struct HistoryMuscleFigure: View {
+    @EnvironmentObject private var exerciseStore: ExerciseStore
+    let session: TrainingSessionSnapshot
+
+    static let height: CGFloat = 52
+    /// MuscleMap draws each side in a 727 × 1280 box.
+    static let aspect: CGFloat = 727 / 1280
+
+    private struct Highlights {
+        var primary: [String: [Muscle]] = [:]
+        var secondary: [String: [Muscle]] = [:]
+    }
+
+    private var highlights: Highlights {
+        var result = Highlights()
+        var seen = Set<Muscle>()
+        // A muscle the group table doesn't name takes its exercise's group when it's a primary mover.
+        func add(_ names: [String], fallback: String?, to keyPath: WritableKeyPath<Highlights, [String: [Muscle]]>) {
+            for name in names {
+                guard let muscle = liteweightMapMuscle(name), !seen.contains(muscle),
+                      let group = Exercise.muscleGroup(for: name.lowercased()) ?? fallback,
+                      LiteweightPalette.hasMuscleColor(group) else { continue }
+                seen.insert(muscle)
+                result[keyPath: keyPath][group, default: []].append(muscle)
+            }
+        }
+        let exercises = session.exercises.compactMap { $0.uuid.flatMap { exerciseStore.exercisesByUUID[$0] } }
+        for exercise in exercises { add(exercise.primaryMuscle, fallback: exercise.muscleGroup, to: \.primary) }
+        for exercise in exercises { add(exercise.secondaryMuscle, fallback: nil, to: \.secondary) }
+        return result
+    }
+
+    var body: some View {
+        let highlights = highlights
+        HStack(spacing: 1) {
+            figure(.front, highlights)
+                .frame(width: Self.height * Self.aspect, height: Self.height)
+            figure(.back, highlights)
+                .frame(width: Self.height * Self.aspect, height: Self.height)
+        }
+        .allowsHitTesting(false)
+        .accessibilityHidden(true)
+    }
+
+    private func figure(_ side: BodySide, _ highlights: Highlights) -> some View {
+        let style = BodyViewStyle(
+            defaultFillColor: Color(.tertiaryLabel).opacity(0.35),
+            strokeColor: Color(.separator),
+            strokeWidth: 0.5,
+            selectionColor: LiteweightTheme.accent,
+            selectionStrokeColor: LiteweightTheme.accent,
+            selectionStrokeWidth: 1,
+            headColor: Color(.tertiaryLabel).opacity(0.45),
+            hairColor: Color(.quaternaryLabel)
+        )
+        var view = BodyView(gender: .male, side: side, style: style)
+        for (group, muscles) in highlights.secondary {
+            view = view.highlight(muscles, color: LiteweightTheme.muscle(group), opacity: 0.42)
+        }
+        for (group, muscles) in highlights.primary {
+            view = view.highlight(muscles, color: LiteweightTheme.muscle(group))
+        }
+        return view
+    }
+}
+
+extension TrainingSessionSnapshot {
+    /// The colored muscle groups this session trained, most sets first.
+    func muscleGroups(in catalog: [UUID: Exercise]) -> [String] {
+        var sets: [String: Int] = [:]
+        var order: [String] = []
+        for item in exercises {
+            guard let group = item.uuid.flatMap({ catalog[$0]?.muscleGroup }),
+                  LiteweightPalette.hasMuscleColor(group) else { continue }
+            if sets[group] == nil { order.append(group) }
+            sets[group, default: 0] += max(item.setCount, 1)
+        }
+        return order.enumerated()
+            .sorted { (sets[$0.element] ?? 0, -$0.offset) > (sets[$1.element] ?? 0, -$1.offset) }
+            .map(\.element)
+    }
+}
+
+/// The long-press preview: what was done, so a workout can be picked to repeat
+/// without opening it.
+private struct HistoryWorkoutPreview: View {
+    @EnvironmentObject private var settingsStore: SettingsStore
+    @EnvironmentObject private var exerciseStore: ExerciseStore
+    let session: TrainingSessionSnapshot
+
+    var body: some View {
+        let groups = session.muscleGroups(in: exerciseStore.exercisesByUUID)
+        VStack(alignment: .leading, spacing: 12) {
+            HStack(alignment: .top, spacing: 12) {
+                LiteweightMuscleTile(group: groups.first, size: 40)
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(session.displayTitle)
+                        .font(.headline)
+                        .foregroundStyle(LiteweightTheme.primaryText)
+                    Text(LiteweightFormat.listDate(session.date))
+                        .font(.subheadline)
+                        .foregroundStyle(LiteweightTheme.secondaryText)
+                }
+            }
+            LiteweightWorkoutMetricLine(
+                duration: LiteweightFormat.duration(session.duration), sets: session.setCount,
+                volume: WeightUnit.convert(weight: session.volume, from: .metric, to: settingsStore.weightUnit)
+                    .formatted(.number.precision(.fractionLength(0))),
+                unit: settingsStore.weightUnit.unit.symbol
+            )
+            Divider()
+            VStack(alignment: .leading, spacing: 8) {
+                ForEach(Array(session.exercises.prefix(8).enumerated()), id: \.offset) { _, item in
+                    let exercise = item.uuid.flatMap { exerciseStore.exercisesByUUID[$0] }
+                    HStack(spacing: 8) {
+                        Circle()
+                            .fill(LiteweightTheme.muscle(exercise?.muscleGroup))
+                            .frame(width: 8, height: 8)
+                        Text(exercise?.title ?? "Unknown Exercise")
+                            .font(.subheadline)
+                            .foregroundStyle(LiteweightTheme.primaryText)
+                            .lineLimit(1)
+                        Spacer(minLength: 8)
+                        (Text("\(item.setCount)").font(.liteweightMetric(.subheadline, weight: .semibold))
+                         + Text(item.setCount == 1 ? " set" : " sets"))
+                            .font(.subheadline)
+                            .foregroundStyle(LiteweightTheme.secondaryText)
+                    }
+                }
+                if session.exercises.count > 8 {
+                    Text("+\(session.exercises.count - 8) more")
+                        .font(.footnote)
+                        .foregroundStyle(LiteweightTheme.secondaryText)
+                }
+            }
+        }
+        .padding(16)
+        .frame(width: 320, alignment: .leading)
+        .background(LiteweightTheme.surface)
     }
 }
 
 private struct HistoryScrollEdge: ViewModifier {
     @ViewBuilder func body(content: Content) -> some View {
         if #available(iOS 26, *) {
-            content.scrollEdgeEffectStyle(.hard, for: .top)
-        } else if #available(iOS 16, *) {
-            content.toolbarBackground(.visible, for: .navigationBar)
+            // Translucent: rows soften under the pinned search instead of meeting a solid band.
+            content.scrollEdgeEffectStyle(.soft, for: .top)
         } else {
             content
         }

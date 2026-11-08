@@ -7,6 +7,10 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		D1E1C0DE0000000000000003 /* LiteweightTips.swift in Sources */ = {isa = PBXBuildFile; fileRef = D1E1C0DE0000000000000002 /* LiteweightTips.swift */; };
+		D1E1C0DE0000000000000005 /* WelcomeGuide.swift in Sources */ = {isa = PBXBuildFile; fileRef = D1E1C0DE0000000000000004 /* WelcomeGuide.swift */; };
+		D1E1C0DE0000000000000007 /* WelcomeGuideView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D1E1C0DE0000000000000006 /* WelcomeGuideView.swift */; };
+		D1E1C0DE0000000000000009 /* WatchTips.swift in Sources */ = {isa = PBXBuildFile; fileRef = D1E1C0DE0000000000000008 /* WatchTips.swift */; };
 		A70E20261107000000000001 /* LegacyIdentifiers.swift in Sources */ = {isa = PBXBuildFile; fileRef = A70E20261107000000000000 /* LegacyIdentifiers.swift */; };
 		A70E20261107000000000002 /* LegacyIdentifiers.swift in Sources */ = {isa = PBXBuildFile; fileRef = A70E20261107000000000000 /* LegacyIdentifiers.swift */; };
 		A70E20261107000000000003 /* LegacyIdentifiers.swift in Sources */ = {isa = PBXBuildFile; fileRef = A70E20261107000000000000 /* LegacyIdentifiers.swift */; };
@@ -590,6 +594,10 @@
 /* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
+		D1E1C0DE0000000000000002 /* LiteweightTips.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LiteweightTips.swift; sourceTree = "<group>"; };
+		D1E1C0DE0000000000000004 /* WelcomeGuide.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WelcomeGuide.swift; sourceTree = "<group>"; };
+		D1E1C0DE0000000000000006 /* WelcomeGuideView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WelcomeGuideView.swift; sourceTree = "<group>"; };
+		D1E1C0DE0000000000000008 /* WatchTips.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "liteweight Watch Extension/UI/WatchTips.swift"; sourceTree = SOURCE_ROOT; };
 		A70E20261107000000000000 /* LegacyIdentifiers.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LegacyIdentifiers.swift; sourceTree = "<group>"; };
 		C0D3A1012FE2000000000027 /* LiteweightToast.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LiteweightToast.swift; sourceTree = "<group>"; };
 		C7A3B94FE6504D1A9E7026B1 /* TrainingInsightsCards.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TrainingInsightsCards.swift; sourceTree = "<group>"; };
@@ -950,6 +958,16 @@
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
+		D1E1C0DE0000000000000001 /* Welcome */ = {
+			isa = PBXGroup;
+			children = (
+				D1E1C0DE0000000000000004 /* WelcomeGuide.swift */,
+				D1E1C0DE0000000000000006 /* WelcomeGuideView.swift */,
+				D1E1C0DE0000000000000002 /* LiteweightTips.swift */,
+			);
+			path = Welcome;
+			sourceTree = "<group>";
+		};
 		F70000000000000000000010 /* Sounds */ = {
 			isa = PBXGroup;
 			children = (
@@ -1339,6 +1357,7 @@
 			children = (
 				1BF6706D25BB203D4411E45C /* WatchLibraryCatalog.swift */,
 				FA6DDBBA1A9B78AECE577BC0 /* WatchDesign.swift */,
+				D1E1C0DE0000000000000008 /* WatchTips.swift */,
 				EFFE00000000000000000005 /* WatchEffortViews.swift */,
 				06023808AD3EFE83BE8954DA /* WatchExerciseCatalog.json */,
 				1EF9663B4976A6A2945481DC /* WatchCompanionSyncTests.swift */,
@@ -1608,6 +1627,7 @@
 				8A1D989422C7C6690071225D /* Workout */,
 				8ABB4C6422CE059E0075CCE6 /* Exercises */,
 				8A56A47D22D7C91B0076E99A /* Settings */,
+				D1E1C0DE0000000000000001 /* Welcome */,
 				8AA8BE7A24367C87005CAD86 /* ActivitySheet.swift */,
 				8A744EEF25154E6B007361EC /* SwiftUISupport.swift */,
 			);
@@ -2048,6 +2068,7 @@
 				EFFE00000000000000000003 /* SlantedBarShape.swift in Sources */,
 				EFFE00000000000000000006 /* WatchEffortViews.swift in Sources */,
 				76780A1A5D9557513FCA53A2 /* WatchDesign.swift in Sources */,
+				D1E1C0DE0000000000000009 /* WatchTips.swift in Sources */,
 				F559802ABBBC33C723B3F675 /* WatchLibraryCatalog.swift in Sources */,
 				8A58807A23776004007F31A1 /* WorkoutSessionView.swift in Sources */,
 				8A141CAF239C7DFF00993A61 /* Benchmark.swift in Sources */,
@@ -2231,6 +2252,9 @@
 			buildActionMask = 2147483647;
 			files = (
 				C0D3A1012FE2000000000028 /* LiteweightToast.swift in Sources */,
+				D1E1C0DE0000000000000003 /* LiteweightTips.swift in Sources */,
+				D1E1C0DE0000000000000005 /* WelcomeGuide.swift in Sources */,
+				D1E1C0DE0000000000000007 /* WelcomeGuideView.swift in Sources */,
 				C7A3B94FE6504D1A9E7026B2 /* TrainingInsightsCards.swift in Sources */,
 				C0D3A1012FE2000000000026 /* ExerciseMediaSheet.swift in Sources */,
 				C0D3A1012FE200000000001C /* AppSettingsArchive.swift in Sources */,
@@ -2584,7 +2608,7 @@
 				CODE_SIGN_ENTITLEMENTS = liteweightIntents/liteweightIntents.entitlements;
 				CODE_SIGN_IDENTITY = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 106;
+				CURRENT_PROJECT_VERSION = 111;
 				DEVELOPMENT_TEAM = CSNM446KVY;
 				INFOPLIST_FILE = liteweightIntents/Info.plist;
 				IPHONEOS_DEPLOYMENT_TARGET = 15.1;
@@ -2611,7 +2635,7 @@
 				CODE_SIGN_ENTITLEMENTS = liteweightIntents/liteweightIntents.entitlements;
 				CODE_SIGN_IDENTITY = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 106;
+				CURRENT_PROJECT_VERSION = 111;
 				DEVELOPMENT_TEAM = CSNM446KVY;
 				INFOPLIST_FILE = liteweightIntents/Info.plist;
 				IPHONEOS_DEPLOYMENT_TARGET = 15.1;
@@ -2639,7 +2663,7 @@
 				CODE_SIGN_ENTITLEMENTS = liteweightIntentsUI/liteweightIntentsUI.entitlements;
 				CODE_SIGN_IDENTITY = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 106;
+				CURRENT_PROJECT_VERSION = 111;
 				DEVELOPMENT_TEAM = CSNM446KVY;
 				INFOPLIST_FILE = liteweightIntentsUI/Info.plist;
 				IPHONEOS_DEPLOYMENT_TARGET = 15.1;
@@ -2666,7 +2690,7 @@
 				CODE_SIGN_ENTITLEMENTS = liteweightIntentsUI/liteweightIntentsUI.entitlements;
 				CODE_SIGN_IDENTITY = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 106;
+				CURRENT_PROJECT_VERSION = 111;
 				DEVELOPMENT_TEAM = CSNM446KVY;
 				INFOPLIST_FILE = liteweightIntentsUI/Info.plist;
 				IPHONEOS_DEPLOYMENT_TARGET = 15.1;
@@ -2812,7 +2836,7 @@
 				"CODE_SIGN_ENTITLEMENTS[sdk=iphonesimulator*]" = liteweight/liteweightSimulator.entitlements;
 				CODE_SIGN_IDENTITY = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 106;
+				CURRENT_PROJECT_VERSION = 111;
 				DEVELOPMENT_TEAM = CSNM446KVY;
 				INFOPLIST_FILE = liteweight/Info.plist;
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
@@ -2837,7 +2861,7 @@
 				CODE_SIGN_ENTITLEMENTS = liteweight/liteweight.entitlements;
 				CODE_SIGN_IDENTITY = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 106;
+				CURRENT_PROJECT_VERSION = 111;
 				DEVELOPMENT_TEAM = CSNM446KVY;
 				INFOPLIST_FILE = liteweight/Info.plist;
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
@@ -2911,7 +2935,7 @@
 				CODE_SIGN_ENTITLEMENTS = "liteweight Watch Extension/liteweight Watch Extension.entitlements";
 				CODE_SIGN_IDENTITY = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 106;
+				CURRENT_PROJECT_VERSION = 111;
 				DEVELOPMENT_TEAM = CSNM446KVY;
 				DEVELOPMENT_ASSET_PATHS = "\"liteweight Watch Extension/Preview Content\"";
 				ENABLE_PREVIEWS = YES;
@@ -2948,7 +2972,7 @@
 				CODE_SIGN_ENTITLEMENTS = "liteweight Watch Extension/liteweight Watch Extension.entitlements";
 				CODE_SIGN_IDENTITY = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 106;
+				CURRENT_PROJECT_VERSION = 111;
 				DEVELOPMENT_TEAM = CSNM446KVY;
 				DEVELOPMENT_ASSET_PATHS = "\"liteweight Watch Extension/Preview Content\"";
 				ENABLE_PREVIEWS = YES;
@@ -2980,7 +3004,7 @@
 				CLANG_ENABLE_OBJC_WEAK = YES;
 				CODE_SIGN_ENTITLEMENTS = "liteweight Watch Extension/liteweight Watch Extension.entitlements";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 106;
+				CURRENT_PROJECT_VERSION = 111;
 				DEVELOPMENT_ASSET_PATHS = "\"liteweight Watch Extension/Preview Content\"";
 				DEVELOPMENT_TEAM = CSNM446KVY;
 				ENABLE_PREVIEWS = YES;
@@ -3017,7 +3041,7 @@
 				CLANG_ENABLE_OBJC_WEAK = YES;
 				CODE_SIGN_ENTITLEMENTS = "liteweight Watch Extension/liteweight Watch Extension.entitlements";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 106;
+				CURRENT_PROJECT_VERSION = 111;
 				DEVELOPMENT_ASSET_PATHS = "\"liteweight Watch Extension/Preview Content\"";
 				DEVELOPMENT_TEAM = CSNM446KVY;
 				ENABLE_PREVIEWS = YES;
@@ -3057,7 +3081,7 @@
 				"CODE_SIGN_ENTITLEMENTS[sdk=iphonesimulator*]" = liteweightWidget/liteweightWidgetSimulator.entitlements;
 				CODE_SIGN_IDENTITY = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 106;
+				CURRENT_PROJECT_VERSION = 111;
 				DEVELOPMENT_TEAM = CSNM446KVY;
 				INFOPLIST_FILE = liteweightWidget/Info.plist;
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
@@ -3087,7 +3111,7 @@
 				CODE_SIGN_ENTITLEMENTS = liteweightWidget/liteweightWidget.entitlements;
 				CODE_SIGN_IDENTITY = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 106;
+				CURRENT_PROJECT_VERSION = 111;
 				DEVELOPMENT_TEAM = CSNM446KVY;
 				INFOPLIST_FILE = liteweightWidget/Info.plist;
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;

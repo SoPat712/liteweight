@@ -15,6 +15,7 @@ struct LiteweightApp: App {
         #if DEBUG && targetEnvironment(simulator)
         WatchFocusDemo.seedIfRequested()
         #endif
+        WatchTips.configure()
     }
 
     @SceneBuilder var body: some Scene {

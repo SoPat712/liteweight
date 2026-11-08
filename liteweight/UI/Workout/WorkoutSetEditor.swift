@@ -810,6 +810,7 @@ struct PlateCalculatorView: View {
                     BarbellLoadDiagram(platesPerSide: platesPerSide, unit: unit, loadout: loadout)
                     Text(platesPerSide.isEmpty ? emptyTitle : "\(weightTitle(solution.plateWeightPerSide)) \(unit.unit.symbol) \(loadout.loadedSides == .both ? "per side" : "on one side")")
                         .font(.footnote.weight(.medium)).foregroundStyle(LiteweightTheme.secondaryText)
+                        .contentTransition(reduceMotion ? .opacity : .numericText())
                 }
                 .frame(maxWidth: .infinity).padding(.vertical, 8)
                 .listRowSeparator(.hidden)
@@ -818,7 +819,7 @@ struct PlateCalculatorView: View {
                           onDecrement: targetWeight <= 0 ? nil : { adjustTarget(by: -targetStep) })
             } footer: {
                 VStack(alignment: .leading, spacing: 4) {
-                    Text("Target moves in \(weightTitle(targetStep)) \(unit.unit.symbol) steps and includes any bar or machine starting weight. Done saves a changed target; swipe down to leave the set as it was.")
+                    Text("Includes the bar or machine. Done saves a changed target.")
                     if targetWeight < loadout.baseWeight {
                         Text("Your target is lighter than the \(mode == .machine ? "machine’s starting weight" : "bar on its own").")
                     } else if solution.shortfall > 0.001 {
@@ -839,11 +840,13 @@ struct PlateCalculatorView: View {
                                 HStack(spacing: 8) {
                                     LiteweightMetricValue(value: weightTitle(plate.weight), unit: unit.unit.symbol, style: .title2).fixedSize()
                                     Spacer(minLength: 4)
-                                    Text("× \(plate.count)").font(.liteweightMetric(.title2)).foregroundStyle(LiteweightTheme.secondaryText).fixedSize()
+                                    Text("× \(plate.count)").font(.liteweightMetric(.title2)).foregroundStyle(LiteweightTheme.secondaryText)
+                                        .contentTransition(reduceMotion ? .opacity : .numericText(value: Double(plate.count))).fixedSize()
                                 }
                                 VStack(alignment: .leading, spacing: 4) {
                                     LiteweightMetricValue(value: weightTitle(plate.weight), unit: unit.unit.symbol, style: .title2)
                                     Text("× \(plate.count)").font(.liteweightMetric(.title2)).foregroundStyle(LiteweightTheme.secondaryText)
+                                        .contentTransition(reduceMotion ? .opacity : .numericText(value: Double(plate.count)))
                                 }
                             }
                         }
@@ -879,13 +882,13 @@ struct PlateCalculatorView: View {
                     Text("One Side").tag(PlateLoadout.LoadedSides.one)
                 }
             } header: { Text("Setup") } footer: {
-                Text("Machine starting weight includes the sled or carriage. One Side suits a landmine or single-side T-bar.\(exerciseKey == nil ? "" : " Setup is saved for this exercise.")")
+                Text(exerciseKey == nil ? "One Side suits a landmine." : "Saved for this exercise. One Side suits a landmine.")
             }
 
             Section {
                 PlateInventoryRows(unit: unit, inventory: $inventory)
             } header: { Text("Available Plates") } footer: {
-                Text("Enable the plates at your gym. This inventory is used for every exercise on this device. Plate counts are unlimited.")
+                Text("The plates at your gym, for every exercise.")
                 if inventory.enabledPlates(for: unit.plateLoadUnit).isEmpty {
                     Text("No plates enabled. Only the starting weight can be loaded.")
                 }

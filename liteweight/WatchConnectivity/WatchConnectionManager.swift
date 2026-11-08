@@ -141,6 +141,14 @@ class WatchConnectionManager: NSObject, ObservableObject {
     }
     private var pendingPrepareRequest: PendingPrepareRequest?
 
+    /// Workouts whose phone changes went to WatchConnectivity while the Watch was
+    /// out of reach, and when it went out of reach. Main queue only; they decide
+    /// the logger's out-of-sync warning, never what is sent.
+    private var queuedWatchWorkoutIDs = Set<UUID>()
+    private var watchUnreachableSince: Date?
+    private var watchSyncWarningCheck: DispatchWorkItem?
+    static let watchSyncWarningDelay: TimeInterval = 30
+
     private static let libraryTransferMarker = "liteweightWorkoutLibrary"
     private static let libraryFilePrefix = "liteweight-watch-library-"
     private static let snapshotTransferMarker = "liteweightWorkoutSnapshot"
@@ -369,6 +377,7 @@ extension WatchConnectionManager: WCSessionDelegate {
         os_log("Session activation completed isActivated=%@ error=%@", log: .watch, type: .info, String(describing: activationState == .activated), error?.localizedDescription ?? "nil") // printing activationState directly doesn't work
         publishConnectionStatus()
         DispatchQueue.main.async {
+            self.noteWatchReachability(activationState == .activated && session.isReachable)
             guard activationState == .activated else {
                 if let pending = self.pendingPrepareRequest {
                     self.pendingPrepareRequest = nil
@@ -470,6 +479,7 @@ extension WatchConnectionManager: WCSessionDelegate {
         let reachable = session.activationState == .activated && session.isReachable
         os_log("Session reachability did change isReachable=%@", log: .watch, type: .debug, String(describing: reachable))
         publishConnectionStatus()
+        DispatchQueue.main.async { self.noteWatchReachability(reachable) }
         guard reachable else { return }
         DispatchQueue.main.async {
             self.preferenceSync.requestSync()
@@ -659,6 +669,7 @@ extension WatchConnectionManager {
             return
         }
         if pendingSnapshot?.workoutID == workoutID { pendingSnapshot = nil }
+        queuedWatchWorkoutIDs.remove(workoutID)
         if currentWatchWorkoutUuid == workoutID {
             pendingSnapshotBuild?.cancel()
             pendingSnapshotBuild = nil
@@ -2257,6 +2268,7 @@ extension WatchConnectionManager {
     private func sendWorkoutSnapshot(_ snapshot: WatchWorkoutSnapshot) {
         dispatchPrecondition(condition: .onQueue(.main))
         pendingSnapshot = snapshot
+        noteQueuedWatchChange(for: snapshot.workoutID)
         let catalog = ExerciseStore.shared.exercises
         let healthTestModePreference = SettingsStore.shared.healthTestMode
         connectivityQueue.async {
@@ -2670,5 +2682,58 @@ extension WatchConnectionManager {
         selectedSetCancellable = workoutSet?.objectWillChange
             .map { _ in (workoutSet, uuid) }
             .subscribe(selectedSetChangePublisher)
+    }
+}
+
+// MARK: - Out-of-sync warning
+
+extension WatchConnectionManager {
+    /// True once this workout's phone changes have waited 30 s for a Watch that's
+    /// out of reach, and only when the Watch is part of the workout: it started
+    /// it, or has sent an edit for it. A Watch nobody is using never warns.
+    func hasStalledWatchChanges(for workout: Workout) -> Bool {
+        dispatchPrecondition(condition: .onQueue(.main))
+        guard let id = workout.uuid, queuedWatchWorkoutIDs.contains(id), !isReachable,
+              let since = watchUnreachableSince,
+              Date().timeIntervalSince(since) >= Self.watchSyncWarningDelay else { return false }
+        return wasStartedOnWatch(workout) || eventLedger.latestSequenceByWorkout?[id.uuidString] != nil
+    }
+
+    fileprivate func noteWatchReachability(_ reachable: Bool) {
+        dispatchPrecondition(condition: .onQueue(.main))
+        if reachable {
+            // Reconnecting resends the current snapshot by message right away.
+            watchUnreachableSince = nil
+            queuedWatchWorkoutIDs.removeAll()
+            watchSyncWarningCheck?.cancel()
+            watchSyncWarningCheck = nil
+        } else if watchUnreachableSince == nil {
+            watchUnreachableSince = Date()
+            scheduleWatchSyncWarningCheck()
+        }
+    }
+
+    fileprivate func noteQueuedWatchChange(for workoutID: UUID) {
+        dispatchPrecondition(condition: .onQueue(.main))
+        guard !isReachable else {
+            queuedWatchWorkoutIDs.remove(workoutID)
+            return
+        }
+        if watchUnreachableSince == nil { watchUnreachableSince = Date() }
+        if queuedWatchWorkoutIDs.insert(workoutID).inserted { scheduleWatchSyncWarningCheck() }
+    }
+
+    /// Redraws the logger when the 30 s mark passes, since nothing else changes then.
+    private func scheduleWatchSyncWarningCheck() {
+        guard let since = watchUnreachableSince, !queuedWatchWorkoutIDs.isEmpty else { return }
+        watchSyncWarningCheck?.cancel()
+        let check = DispatchWorkItem { [weak self] in
+            guard let self else { return }
+            self.watchSyncWarningCheck = nil
+            self.connectionRevision &+= 1
+        }
+        watchSyncWarningCheck = check
+        let delay = max(0, Self.watchSyncWarningDelay - Date().timeIntervalSince(since)) + 0.1
+        DispatchQueue.main.asyncAfter(deadline: .now() + delay, execute: check)
     }
 }

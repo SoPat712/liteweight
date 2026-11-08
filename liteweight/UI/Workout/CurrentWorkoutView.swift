@@ -14,6 +14,7 @@ import UIKit
 import CoreData
 import MuscleMap
 import WorkoutDataKit
+import TipKit
 
 private struct PersonalRecordBanner: Identifiable, Equatable {
     let id = UUID()
@@ -83,6 +84,124 @@ private struct WorkoutWatchMetricsView: View {
     }
 }
 
+// MARK: - Session summary, shared with a finished workout
+
+/// One number in the session summary. The live logger and a finished workout
+/// both use it, so Duration, Volume and Sets read the same before and after.
+struct WorkoutSummaryMetric: View {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    let label: String
+    let value: String
+    let tint: Color
+    var unit: String? = nil
+    var systemImage: String? = nil
+    /// The running clock. A clock that springs every second keeps the screen redrawing.
+    var ticks = false
+    /// Lets the digits roll up or down with the change.
+    var numericValue: Double? = nil
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 5) {
+            HStack(spacing: 4) {
+                Text(label)
+                if let systemImage {
+                    Image(systemName: systemImage)
+                        .font(.system(size: 8, weight: .semibold))
+                }
+            }
+            .font(.caption.weight(.semibold))
+            .foregroundStyle(tint)
+            .lineLimit(1)
+            .minimumScaleFactor(0.85)
+            LiteweightMetricValue(value: value, unit: unit, tint: tint)
+                .contentTransition(reduceMotion ? .opacity : numericValue.map { ContentTransition.numericText(value: $0) } ?? .numericText())
+                .animation(ticks ? nil : LiteweightMotion.preferred(LiteweightMotion.snappy, reduceMotion: reduceMotion), value: value)
+                .lineLimit(1)
+                .minimumScaleFactor(0.85)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+}
+
+/// The summary at accessibility text sizes: label leading, number trailing.
+struct WorkoutSummaryAccessibleRow: View {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @ScaledMetric(relativeTo: .subheadline) private var rowHeight: CGFloat = 24
+    let label: String
+    let value: String
+    let tint: Color
+
+    var body: some View {
+        HStack(alignment: .firstTextBaseline, spacing: 12) {
+            Text(label).foregroundStyle(LiteweightTheme.secondaryText)
+            Spacer(minLength: 0)
+            Text(value).font(.liteweightMetric(.subheadline)).foregroundStyle(tint)
+                .contentTransition(reduceMotion ? .opacity : .numericText())
+        }
+        .font(.subheadline)
+        .lineLimit(1)
+        .minimumScaleFactor(0.85)
+        .frame(minHeight: max(rowHeight, LiteweightTheme.controlHeight))
+        .accessibilityElement(children: .combine)
+    }
+}
+
+/// Front and back figures with the muscles of completed sets in accent (§3.4).
+struct WorkoutSummaryMuscleFigure: View {
+    let muscles: (primary: [Muscle], secondary: [Muscle])
+    var height: CGFloat = 54
+
+    static func muscles(in workoutExercises: [WorkoutExercise],
+                        catalog: [Exercise]) -> (primary: [Muscle], secondary: [Muscle]) {
+        var primary: [Muscle] = []
+        var secondary: [Muscle] = []
+        for workoutExercise in workoutExercises {
+            let sets = workoutExercise.workoutSets?.array as? [WorkoutSet] ?? []
+            guard sets.contains(where: \.isCompleted),
+                  let exercise = workoutExercise.exercise(in: catalog) else { continue }
+            for muscle in exercise.primaryMuscle.compactMap(liteweightMapMuscle) where !primary.contains(muscle) {
+                primary.append(muscle)
+            }
+            for muscle in exercise.secondaryMuscle.compactMap(liteweightMapMuscle)
+                where !primary.contains(muscle) && !secondary.contains(muscle) {
+                secondary.append(muscle)
+            }
+        }
+        return (primary, secondary)
+    }
+
+    var body: some View {
+        HStack(spacing: 2) {
+            figure(side: .front)
+            figure(side: .back)
+        }
+        .frame(height: height)
+        .allowsHitTesting(false)
+        .accessibilityRepresentation {
+            Text(muscles.primary.isEmpty && muscles.secondary.isEmpty
+                 ? "No muscles logged yet"
+                 : "Muscles trained in completed sets")
+                .accessibilityAddTraits(.isImage)
+        }
+    }
+
+    private func figure(side: BodySide) -> some View {
+        let style = BodyViewStyle(
+            defaultFillColor: Color(.tertiaryLabel).opacity(0.35),
+            strokeColor: Color(.separator),
+            strokeWidth: 0.5,
+            selectionColor: LiteweightTheme.accent,
+            selectionStrokeColor: LiteweightTheme.accent,
+            selectionStrokeWidth: 1,
+            headColor: Color(.tertiaryLabel).opacity(0.45),
+            hairColor: Color(.quaternaryLabel)
+        )
+        return BodyView(gender: .male, side: side, style: style)
+            .highlight(muscles.secondary, color: LiteweightTheme.accent, opacity: 0.42)
+            .highlight(muscles.primary, color: LiteweightTheme.accent)
+    }
+}
+
 struct CurrentWorkoutView: View {
     @Environment(\.managedObjectContext) private var managedObjectContext
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
@@ -91,6 +210,7 @@ struct CurrentWorkoutView: View {
     @EnvironmentObject private var restTimerStore: RestTimerStore
     @EnvironmentObject private var exerciseStore: ExerciseStore
     @EnvironmentObject private var settingsStore: SettingsStore
+    @AppStorage(LiteweightTips.generationKey) private var tipGeneration = 0
 
     @ObservedObject var workout: Workout
     @ObservedObject private var trackingPreferencesCache = SetTrackingPreferences.cache
@@ -277,8 +397,34 @@ struct CurrentWorkoutView: View {
         return usesAccessibilityHeaderLayout ? accessibleSyncBannerHeight : 56
     }
 
-    private var showsWatchSyncBanner: Bool {
+    private var usesWatchForWorkout: Bool {
         (settingsStore.watchCompanion || workout.wasStartedOnWatch) && watchConnection.isPaired
+    }
+
+    /// Live heart rate and energy while the Watch is in reach.
+    private var showsWatchMetrics: Bool {
+        usesWatchForWorkout && watchConnection.isWatchAppInstalled && watchConnection.isReachable
+    }
+
+    /// Only after 30 s of queued changes for a Watch that's in this workout.
+    private var showsWatchSyncWarning: Bool {
+        usesWatchForWorkout && watchConnection.hasStalledWatchChanges(for: workout)
+    }
+
+    /// The line above the summary holds live readings or the out-of-sync
+    /// warning. Otherwise a Watch symbol in the summary row shows the connection.
+    private var showsWatchSyncBanner: Bool {
+        showsWatchMetrics || showsWatchSyncWarning
+    }
+
+    /// The summary row's Watch symbol while the line above is hidden, or nil.
+    private var watchStatusSymbol: (systemImage: String, tint: Color, value: String)? {
+        guard usesWatchForWorkout, !showsWatchSyncBanner else { return nil }
+        guard watchConnection.isWatchAppInstalled else {
+            return ("applewatch.slash", LiteweightTheme.warning, "liteweight isn't installed on Apple Watch")
+        }
+        return ("applewatch", LiteweightTheme.secondaryText,
+                watchConnection.isActivated ? "Out of reach. Changes sync when it's back." : "Connecting")
     }
 
     private let muscleMapHeight: CGFloat = 54
@@ -976,32 +1122,11 @@ struct CurrentWorkoutView: View {
     }
 
     private var watchSyncColor: Color {
-        guard settingsStore.watchCompanion || workout.wasStartedOnWatch else { return LiteweightTheme.secondaryText }
-        guard watchConnection.isPaired else { return LiteweightTheme.secondaryText }
-        guard watchConnection.isWatchAppInstalled else { return LiteweightTheme.warning }
-        return watchConnection.isReachable ? LiteweightTheme.success : LiteweightTheme.warning
+        showsWatchMetrics ? LiteweightTheme.success : LiteweightTheme.warning
     }
 
     private var watchSyncTitle: String {
-        if workout.wasStartedOnWatch {
-            return watchConnection.isReachable ? "Also on Apple Watch" : "Apple Watch offline · changes queued"
-        }
-        guard settingsStore.watchCompanion else { return "Saved locally on this iPhone" }
-        guard watchConnection.isPaired else { return "Saved on iPhone · Watch not paired" }
-        guard watchConnection.isWatchAppInstalled else { return "Saved on iPhone · Install liteweight on Watch" }
-        if watchConnection.isReachable { return "Live Sync Active" }
-        return watchConnection.isActivated
-            ? "Watch offline · changes queued"
-            : "Watch sync preparing"
-    }
-
-    private var watchSyncSystemImage: String {
-        guard settingsStore.watchCompanion || workout.wasStartedOnWatch,
-              watchConnection.isPaired,
-              watchConnection.isWatchAppInstalled else {
-            return "iphone"
-        }
-        return "applewatch"
+        workout.wasStartedOnWatch ? "Apple Watch offline · changes queued" : "Watch offline · changes queued"
     }
 
     private var workoutSummaryKey: String {
@@ -1027,8 +1152,7 @@ struct CurrentWorkoutView: View {
 
     private var watchSyncBanner: some View {
         let color = watchSyncColor
-        let showsMetrics = (settingsStore.watchCompanion || workout.wasStartedOnWatch) && watchConnection.isPaired
-            && watchConnection.isWatchAppInstalled && watchConnection.isReachable
+        let showsMetrics = showsWatchMetrics
 
         return HStack(spacing: 9) {
             Circle()
@@ -1045,7 +1169,7 @@ struct CurrentWorkoutView: View {
             }
             Spacer()
             if !showsMetrics {
-                Image(systemName: watchSyncSystemImage)
+                Image(systemName: "applewatch")
                     .font(.caption.weight(.semibold))
                     .foregroundStyle(color)
                     .accessibilityHidden(true)
@@ -1075,7 +1199,10 @@ struct CurrentWorkoutView: View {
             if usesAccessibilityHeaderLayout {
                 VStack(spacing: 6) {
                     workoutDurationSummary
-                    accessibleSummaryRow(workoutWorkLabel, value: workoutVolumeTitle, tint: workoutWorkTint)
+                    HStack(spacing: 8) {
+                        accessibleSummaryRow(workoutWorkLabel, value: workoutVolumeTitle, tint: workoutWorkTint)
+                        watchStatusBadge
+                    }
                     workoutSetsSummary
                 }
             } else {
@@ -1087,12 +1214,15 @@ struct CurrentWorkoutView: View {
                     HStack(alignment: .top, spacing: 12) {
                         workoutDurationSummary
                             .frame(width: metricWidth * 0.43)
-                        summaryValue(workoutWorkLabel, workoutVolumeNumber, tint: workoutWorkTint, unit: workoutWorkUnit)
+                        summaryValue(workoutWorkLabel, workoutVolumeNumber, tint: workoutWorkTint, unit: workoutWorkUnit,
+                                     numericValue: workoutWorkLabel == "Volume" ? workout.trackedCompletedVolume : nil)
                             .frame(width: metricWidth * 0.41)
                         workoutSetsSummary
                             .frame(width: metricWidth * 0.16)
                         liveMuscleMap
                             .frame(width: mapWidth)
+                            // In the summary's side margin, clear of the figures.
+                            .overlay(alignment: .topTrailing) { watchStatusBadge.offset(x: 12, y: -2) }
                     }
                     .frame(height: proxy.size.height, alignment: .top)
                 }
@@ -1133,7 +1263,8 @@ struct CurrentWorkoutView: View {
             } else {
                 summaryValue(
                     "Sets", "\(workout.numberOfCompletedSets ?? 0)", tint: LiteweightTheme.metricSets,
-                    systemImage: showsWatchSyncBanner ? nil : "chevron.up"
+                    systemImage: showsWatchSyncBanner ? nil : "chevron.up",
+                    numericValue: Double(workout.numberOfCompletedSets ?? 0)
                 )
                 .frame(minHeight: LiteweightTheme.controlHeight)
                 .contentShape(Rectangle())
@@ -1162,16 +1293,7 @@ struct CurrentWorkoutView: View {
     }
 
     private func accessibleSummaryRow(_ title: String, value: String, tint: Color) -> some View {
-        HStack(alignment: .firstTextBaseline, spacing: 12) {
-            Text(title).foregroundStyle(LiteweightTheme.secondaryText)
-            Spacer(minLength: 0)
-            Text(value).font(.liteweightMetric(.subheadline)).foregroundStyle(tint)
-        }
-        .font(.subheadline)
-        .lineLimit(1)
-        .minimumScaleFactor(0.85)
-        .frame(minHeight: max(accessibleSummaryRowHeight, LiteweightTheme.controlHeight))
-        .accessibilityElement(children: .combine)
+        WorkoutSummaryAccessibleRow(label: title, value: value, tint: tint)
     }
 
     private var collapsedWorkoutSummaryPill: some View {
@@ -1328,83 +1450,32 @@ struct CurrentWorkoutView: View {
         tint: Color,
         unit: String? = nil,
         systemImage: String? = nil,
-        ticks: Bool = false
+        ticks: Bool = false,
+        numericValue: Double? = nil
     ) -> some View {
-        VStack(alignment: .leading, spacing: 5) {
-            HStack(spacing: 4) {
-                Text(label)
-                if let systemImage {
-                    Image(systemName: systemImage)
-                        .font(.system(size: 8, weight: .semibold))
-                }
-            }
-            .font(.caption.weight(.semibold))
-            .foregroundStyle(tint)
-            .lineLimit(1)
-            .minimumScaleFactor(0.85)
-            LiteweightMetricValue(value: value, unit: unit, tint: tint)
-            .contentTransition(reduceMotion ? .opacity : .numericText())
-            // A clock that springs every second keeps the screen redrawing.
-            .animation(ticks ? nil : LiteweightMotion.preferred(LiteweightMotion.snappy, reduceMotion: reduceMotion), value: value)
-            .lineLimit(1)
-            .minimumScaleFactor(0.85)
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
+        WorkoutSummaryMetric(label: label, value: value, tint: tint, unit: unit,
+                             systemImage: systemImage, ticks: ticks, numericValue: numericValue)
     }
 
     private var completedExerciseMuscles: (primary: [Muscle], secondary: [Muscle]) {
-        var primary: [Muscle] = []
-        var secondary: [Muscle] = []
-
-        for workoutExercise in workoutExercises {
-            guard workoutSets(for: workoutExercise).contains(where: \.isCompleted),
-                  let exercise = workoutExercise.exercise(in: exerciseStore.exercises) else { continue }
-
-            for muscle in exercise.primaryMuscle.compactMap(liteweightMapMuscle) where !primary.contains(muscle) {
-                primary.append(muscle)
-            }
-            for muscle in exercise.secondaryMuscle.compactMap(liteweightMapMuscle)
-                where !primary.contains(muscle) && !secondary.contains(muscle) {
-                secondary.append(muscle)
-            }
-        }
-
-        return (primary, secondary)
+        WorkoutSummaryMuscleFigure.muscles(in: workoutExercises, catalog: exerciseStore.exercises)
     }
 
     private var liveMuscleMap: some View {
-        let muscles = completedExerciseMuscles
-        return HStack(spacing: 2) {
-            liveMuscleBody(side: .front, muscles: muscles)
-            liveMuscleBody(side: .back, muscles: muscles)
-        }
-        .frame(height: muscleMapHeight)
-        .allowsHitTesting(false)
-        .accessibilityRepresentation {
-            Text(muscles.primary.isEmpty && muscles.secondary.isEmpty
-                 ? "No muscles logged yet"
-                 : "Muscles trained in completed sets")
-                .accessibilityAddTraits(.isImage)
-        }
+        WorkoutSummaryMuscleFigure(muscles: completedExerciseMuscles, height: muscleMapHeight)
     }
 
-    private func liveMuscleBody(
-        side: BodySide,
-        muscles: (primary: [Muscle], secondary: [Muscle])
-    ) -> some View {
-        let style = BodyViewStyle(
-            defaultFillColor: Color(.tertiaryLabel).opacity(0.35),
-            strokeColor: Color(.separator),
-            strokeWidth: 0.5,
-            selectionColor: LiteweightTheme.accent,
-            selectionStrokeColor: LiteweightTheme.accent,
-            selectionStrokeWidth: 1,
-            headColor: Color(.tertiaryLabel).opacity(0.45),
-            hairColor: Color(.quaternaryLabel)
-        )
-        return BodyView(gender: .male, side: side, style: style)
-            .highlight(muscles.secondary, color: LiteweightTheme.accent, opacity: 0.42)
-            .highlight(muscles.primary, color: LiteweightTheme.accent)
+    /// The Watch's state while the line above the summary is hidden.
+    @ViewBuilder
+    private var watchStatusBadge: some View {
+        if let status = watchStatusSymbol {
+            Image(systemName: status.systemImage)
+                .font(.caption2.weight(.semibold))
+                .foregroundStyle(status.tint)
+                .accessibilityElement()
+                .accessibilityLabel("Apple Watch")
+                .accessibilityValue(status.value)
+        }
     }
 
     @ViewBuilder
@@ -2138,9 +2209,13 @@ struct CurrentWorkoutView: View {
 
     private var activeRestTimerContent: some View {
         VStack(spacing: 10) {
-            activeRestTimerStrip
-                .scaleEffect(reduceMotion || !restStripHighlighted ? 1 : 1.03)
-                .opacity(reduceMotion && restStripHighlighted ? 0.7 : 1)
+            VStack(spacing: 0) {
+                activeRestTimerStrip
+                    .scaleEffect(reduceMotion || !restStripHighlighted ? 1 : 1.03)
+                    .opacity(reduceMotion && restStripHighlighted ? 0.7 : 1)
+                // In the layout, not a bubble: right after Log Set the RPE sheet may be up.
+                LiteweightInlineTip(tip: RestTimerTip(generation: tipGeneration), arrowEdge: .top, topSpacing: 8)
+            }
             if showsRunningRestRuler {
                 RestLengthRuler(value: Binding(
                     get: { restTimerStore.restTimerDuration ?? 90 }, set: { _ in }
@@ -2193,6 +2268,7 @@ struct CurrentWorkoutView: View {
     private func activeRestTimerReadout(remaining: TimeInterval, duration: TimeInterval, countdown: String) -> some View {
         Button {
             actionFeedback += 1
+            RestTimerTip(generation: tipGeneration).invalidate(reason: .actionPerformed)
             withAnimation(LiteweightMotion.preferred(LiteweightMotion.collapse, reduceMotion: reduceMotion)) {
                 showsRunningRestRuler.toggle()
             }
@@ -4221,6 +4297,7 @@ struct InlineWorkoutSetRow: View {
     @ObservedObject private var plateInventoryCache = PlateCalculatorStorageKeys.inventoryCache
     @ObservedObject private var plateLoadoutsCache = PlateCalculatorStorageKeys.loadoutsCache
     @ScaledMetric(relativeTo: .footnote) private var previousFontSize: CGFloat = 13
+    @AppStorage(LiteweightTips.generationKey) private var tipGeneration = 0
 
     let index: Int
     let trackingType: SetTrackingType
@@ -4819,16 +4896,26 @@ struct InlineWorkoutSetRow: View {
                 }
             }
 
-            Button(action: toggleCompletion) {
-                Label("Log Set", systemImage: "checkmark")
-                    .font(.headline)
-                    .foregroundStyle(LiteweightTheme.onAccent)
-                    .frame(maxWidth: .infinity)
-                    .frame(minHeight: 52)
-                    .background(LiteweightTheme.accent, in: Capsule())
+            // Its own stack, so the hidden tip adds no gap. Only the live logger;
+            // editing a past workout has no tip.
+            VStack(spacing: 0) {
+                if onCompletionFlow != nil {
+                    LiteweightInlineTip(tip: LogSetTip(generation: tipGeneration), arrowEdge: .bottom, bottomSpacing: 8)
+                }
+                Button {
+                    LogSetTip(generation: tipGeneration).invalidate(reason: .actionPerformed)
+                    toggleCompletion()
+                } label: {
+                    Label("Log Set", systemImage: "checkmark")
+                        .font(.headline)
+                        .foregroundStyle(LiteweightTheme.onAccent)
+                        .frame(maxWidth: .infinity)
+                        .frame(minHeight: 52)
+                        .background(LiteweightTheme.accent, in: Capsule())
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("Log set \(index + 1)")
             }
-            .buttonStyle(.plain)
-            .accessibilityLabel("Log set \(index + 1)")
         }
         .padding(10)
         .background(LiteweightTheme.raisedSurface, in: RoundedRectangle(cornerRadius: LiteweightTheme.heroCornerRadius, style: .continuous))

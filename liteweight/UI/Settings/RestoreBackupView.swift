@@ -58,7 +58,7 @@ struct RestoreBackupView: View {
             } header: {
                 Text("From Files")
             } footer: {
-                Text("Moving to a new liteweight app: in the old app, Share Full Backup and save it to Files, then choose it here.")
+                Text("Pick a backup you saved to Files or got by AirDrop.")
             }
 
             Section {

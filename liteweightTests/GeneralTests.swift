@@ -1698,6 +1698,47 @@ final class TrainingHistorySnapshotTests: XCTestCase {
         snapshot.trainedWeeks.insert(thisWeek)
         XCTAssertEqual(snapshot.streak(now: now, calendar: calendar), 3)
     }
+
+    func testLaunchCacheRoundTripsAndRejectsDeletedWorkoutsAndOtherVersions() throws {
+        let container = setUpInMemoryNSPersistentContainer()
+        let context = container.viewContext
+        let exerciseID = UUID()
+        var workouts: [Workout] = []
+        for day in 0..<2 {
+            let workout = Workout.create(context: context)
+            workout.start = Date(timeIntervalSince1970: 1_000_000 + Double(day) * 86_400)
+            workout.end = workout.start!.addingTimeInterval(1_800)
+            let exercise = WorkoutExercise.create(context: context)
+            exercise.exerciseUuid = exerciseID
+            let set = WorkoutSet.create(context: context)
+            set.isCompleted = true
+            set.weightValue = 50 + Double(day) * 10
+            set.repetitionsValue = 5
+            exercise.workoutSets = NSOrderedSet(array: [set])
+            workout.workoutExercises = NSOrderedSet(array: [exercise])
+            workouts.append(workout)
+        }
+        try context.save()
+        let built = TrainingHistorySnapshot.build(from: Array(workouts.reversed()))
+        let data = try XCTUnwrap(TrainingHistoryCache.encode(built, now: workouts[1].start!))
+        let restored = try XCTUnwrap(TrainingHistoryCache.decode(data, in: context))
+        XCTAssertEqual(restored.sessions.map(\.id), built.sessions.map(\.id))
+        XCTAssertEqual(restored.sessions.map(\.volume), built.sessions.map(\.volume))
+        XCTAssertEqual(restored.sessions.first?.exercises.first?.uuid, exerciseID)
+        XCTAssertEqual(restored.exerciseTotals[exerciseID]?.sessions, 2)
+        XCTAssertEqual(restored.byDay.count, built.byDay.count)
+        XCTAssertEqual(restored.recordSetIDs, built.recordSetIDs)
+        XCTAssertEqual(restored.recordEvents.map(\.id), built.recordEvents.map(\.id))
+
+        let otherVersion = String(decoding: data, as: UTF8.self)
+            .replacingOccurrences(of: "\"version\":\(TrainingHistoryCache.version)", with: "\"version\":0")
+        XCTAssertNil(TrainingHistoryCache.decode(Data(otherVersion.utf8), in: context))
+
+        // Screens open cached workout IDs directly, so a deleted one voids the cache.
+        context.delete(workouts[0])
+        try context.save()
+        XCTAssertNil(TrainingHistoryCache.decode(data, in: context))
+    }
 }
 
 final class RestLengthRulerScaleTests: XCTestCase {

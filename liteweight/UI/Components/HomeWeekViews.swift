@@ -54,7 +54,7 @@ enum HomeSection: String, CaseIterable, Identifiable {
         case .recent: return "Your latest workouts, ready to repeat."
         case .muscles: return "Weekly sets for each muscle group against your target."
         case .body: return "Body weight trend and measurements."
-        case .pinned: return "Exercise charts you pinned."
+        case .pinned: return "Charts you pin from an exercise. Shows once one is pinned."
         case .records: return "New personal records from the last 30 days."
         case .nextWorkout: return "The saved workout that's up next, ready to start."
         case .trainingTrend: return "Duration, volume or reps by week or month."
@@ -827,15 +827,9 @@ struct WeeklySetsChart: View {
                 }
             }
 
-            HStack(spacing: 18) {
-                HStack(spacing: 6) {
-                    Capsule().fill(LiteweightTheme.metricSets).frame(width: 14, height: 8)
-                    Text("Your weekly average")
-                }
-                HStack(spacing: 6) {
-                    bandShape.frame(width: 14, height: 12)
-                    Text("\(target.lowerBound)–\(target.upperBound) sets")
-                }
+            HStack(spacing: 6) {
+                bandShape.frame(width: 14, height: 12)
+                Text("Target, \(target.lowerBound)–\(target.upperBound) sets")
             }
             .font(.footnote)
             .foregroundStyle(LiteweightTheme.secondaryText)
@@ -904,7 +898,7 @@ struct WeeklySetsChart: View {
                         .frame(width: high - low)
                         .offset(x: low)
                     Capsule()
-                        .fill(LiteweightTheme.metricSets)
+                        .fill(LiteweightTheme.muscle(row.group))
                         .frame(width: hasAppeared || reduceMotion ? max(width * row.sets / scaleMax, row.sets > 0 ? 8 : 0) : 0, height: 8)
                 }
                 .frame(width: width, height: proxy.size.height, alignment: .leading)
@@ -913,6 +907,8 @@ struct WeeklySetsChart: View {
             Text(Self.format(row.sets))
                 .font(.liteweightMetric(.body, weight: .semibold))
                 .foregroundStyle(LiteweightTheme.primaryText)
+                .contentTransition(reduceMotion ? .opacity : .numericText(value: row.sets))
+                .animation(LiteweightMotion.preferred(LiteweightMotion.snappy, reduceMotion: reduceMotion), value: row.sets)
                 .frame(width: valueWidth, alignment: .trailing)
         }
         .accessibilityElement(children: .ignore)

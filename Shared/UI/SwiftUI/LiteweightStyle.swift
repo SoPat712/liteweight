@@ -87,6 +87,23 @@ enum LiteweightPalette {
         onAccent: .white
     )
 
+    private static let muscleColors: [String: UIColor] = [
+        "legs": UIColor(red: 0x22 / 255, green: 0xA9 / 255, blue: 0x9A / 255, alpha: 1),
+        "chest": UIColor(red: 0xE8 / 255, green: 0x52 / 255, blue: 0x4A / 255, alpha: 1),
+        "back": UIColor(red: 0x6C / 255, green: 0x69 / 255, blue: 0xF0 / 255, alpha: 1),
+        "shoulders": UIColor(red: 0xCF / 255, green: 0x7C / 255, blue: 0x0C / 255, alpha: 1),
+        "arms": UIColor(red: 0xB0 / 255, green: 0x64 / 255, blue: 0xE0 / 255, alpha: 1),
+        "abdominals": UIColor(red: 0x7F / 255, green: 0x9E / 255, blue: 0x22 / 255, alpha: 1),
+    ]
+
+    static func hasMuscleColor(_ group: String?) -> Bool {
+        group.map { muscleColors[$0.lowercased()] != nil } ?? false
+    }
+
+    static func muscle(_ group: String?) -> UIColor {
+        group.flatMap { muscleColors[$0.lowercased()] } ?? .systemGray
+    }
+
     static func uiColor(_ role: KeyPath<LiteweightPaletteColors, UIColor>) -> UIColor {
         semantic[keyPath: role]
     }
@@ -130,6 +147,21 @@ enum LiteweightTheme {
         case .failure: return (setFailureTint, 0.12, 0.20)
         case nil: return (accent, 0.12, 0.24)
         }
+    }
+
+    /// One color per muscle group, kept everywhere the group appears: chips,
+    /// workout-row tiles, Muscle Focus bars, calendar days and Most Rested.
+    /// Checked for color-blind separation and contrast on both surfaces.
+    /// `group` is `Exercise.muscleGroup` ("legs", "chest", "back",
+    /// "shoulders", "arms", "abdominals"); anything else is neutral.
+    static func muscle(_ group: String?) -> Color {
+        Color(LiteweightPalette.muscle(group))
+    }
+
+    /// Soft fill behind a muscle chip or tile; text on it stays `primaryText`.
+    static func muscleContainer(_ group: String?) -> Color {
+        guard LiteweightPalette.hasMuscleColor(group) else { return field }
+        return muscle(group).opacity(0.22)
     }
 
     static let success = LiteweightPalette.color(\.success)

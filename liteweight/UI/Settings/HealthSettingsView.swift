@@ -90,8 +90,9 @@ struct HealthSettingsView: View {
         List {
             Section {
                 SettingsConnectionHeader(title: "Apple Health", systemImage: "heart.fill", tint: LiteweightTheme.metricEffort,
-                                         status: accessState == .ready ? "Connected" : "Not Connected",
-                                         isGood: accessState == .ready) {
+                                         status: accessState.connectionTitle,
+                                         isGood: accessState == .ready,
+                                         detail: accessState.connectionDetail) {
                     if accessState == .notDetermined {
                         Button(action: requestAccess) {
                             HStack(spacing: 8) {
@@ -112,21 +113,9 @@ struct HealthSettingsView: View {
                         .disabled(accessState == .unavailable)
                     }
                 }
-            } footer: {
-                Text("You control access in Apple Health, and liteweight never shares your health data socially.")
             }
 
             Section {
-                LabeledContent {
-                    Text(accessState.permissionStatus)
-                } label: {
-                    SettingsRowLabel("Write Access", systemImage: "square.and.pencil", tint: LiteweightTheme.accent)
-                }
-                LabeledContent {
-                    Text("Workouts & Body")
-                } label: {
-                    SettingsRowLabel("Data Types", systemImage: "list.bullet", tint: LiteweightTheme.metricBody)
-                }
                 Button(action: updateWorkouts) {
                     SettingsActionLabel("Sync Past Workouts", systemImage: "arrow.triangle.2.circlepath",
                                         tint: LiteweightTheme.metricVolume, trailingSymbol: "arrow.clockwise",
@@ -134,10 +123,8 @@ struct HealthSettingsView: View {
                 }
                 .accessibilityLabel(updating ? "Syncing workout history" : "Sync Past Workouts")
                 .disabled(updating || accessState != .ready)
-            } header: {
-                Text("Details")
             } footer: {
-                Text("Sync Past Workouts adds completed liteweight workouts without duplicates; imported workouts are never sent to Apple Health.")
+                Text("Imported workouts are never sent to Apple Health.")
             }
 
             #if DEBUG
@@ -152,7 +139,7 @@ struct HealthSettingsView: View {
             } header: {
                 Text("Testing")
             } footer: {
-                Text("Test workouts skip heart rate, calories, and Apple Health, so your rings don’t move.")
+                Text("Skips heart rate, calories and Health, so rings don’t move.")
             }
             #endif
         }
@@ -243,12 +230,22 @@ struct HealthSettingsView: View {
 }
 
 private extension HealthManager.AccessState {
-    var permissionStatus: String {
+    var connectionTitle: String {
         switch self {
         case .unavailable: return "Unavailable"
-        case .notDetermined: return "Not Set"
+        case .notDetermined: return "Not Connected"
         case .needsReview: return "Needs Review"
-        case .ready: return "Ready"
+        case .ready: return "Connected"
+        }
+    }
+
+    /// The connection and what it shares, in one line under the badge.
+    var connectionDetail: String {
+        switch self {
+        case .unavailable: return "Apple Health isn't available on this device."
+        case .notDetermined: return "Connect to save workouts and sync body measurements."
+        case .needsReview: return "Some categories are off. Turn them on in Health."
+        case .ready: return "Saves your workouts and syncs body measurements."
         }
     }
 }

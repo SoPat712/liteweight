@@ -13,6 +13,7 @@ import Combine
 import PhotosUI
 import UIKit
 import WorkoutDataKit
+import TipKit
 
 struct FeedView : View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
@@ -34,7 +35,10 @@ struct FeedView : View {
     @State private var showingChartEditor = false
     @State private var showingCustomize = false
     @State private var persistenceError: String?
+    @AppStorage(LiteweightTips.generationKey) private var tipGeneration = 0
+    @State private var showsEditTip = false
     @State private var selectedVolumeDayID: Date?
+    @Namespace private var zoomNamespace
     @State private var selectedPinnedDates: [PinnedChart: Date] = [:]
     @AppStorage(HomeSection.cardsKey) private var storedCards: String?
     @AppStorage(WeeklySetTarget.lowKey) private var setTargetLow = WeeklySetTarget.defaultLow
@@ -266,10 +270,7 @@ struct FeedView : View {
     }
 
     private func muscleFocusFooter(_ summary: HomeWeekSummary, target: ClosedRange<Int>) -> String {
-        let isDefault = target == WeeklySetTarget.defaultLow...WeeklySetTarget.defaultHigh
-        let guideline = isDefault
-            ? "Many lifters aim for 10–20 sets a week per muscle. Change your target in Customize Home."
-            : "Your target is \(target.lowerBound)–\(target.upperBound) sets a week per muscle."
+        let guideline = "Change the target in Customize Home."
         guard let lowest = HomeWeekSummary.muscleGroups.min(by: { (summary.weeklyAverages[$0] ?? 0) < (summary.weeklyAverages[$1] ?? 0) }),
               let sets = summary.weeklyAverages[lowest], sets < Double(target.lowerBound) else {
             return "Every group reaches \(target.lowerBound) sets a week. " + guideline
@@ -356,7 +357,7 @@ struct FeedView : View {
             bodyWeightTrend
                 .listRowSeparator(.hidden)
 
-            ForEach(homeMeasurementKinds, id: \.self) { kind in
+            ForEach(homeRowKinds, id: \.self) { kind in
                 let layout = dynamicTypeSize.isAccessibilitySize
                     ? AnyLayout(VStackLayout(alignment: .leading, spacing: 6))
                     : AnyLayout(HStackLayout(alignment: .center, spacing: 12))
@@ -435,6 +436,11 @@ struct FeedView : View {
 
     private var homeMeasurementKinds: [BodyMeasurementKind] {
         [.bodyWeight, .bodyFat, .waist]
+    }
+
+    /// Weight is the card's headline and chart, so the rows below list the rest.
+    private var homeRowKinds: [BodyMeasurementKind] {
+        homeMeasurementKinds.filter { $0 != .bodyWeight }
     }
 
     private func measurementChangeLabel(_ change: Double) -> some View {
@@ -538,6 +544,7 @@ struct FeedView : View {
                 ForEach(recentWorkouts.prefix(3)) { workout in
                     NavigationLink {
                         WorkoutDetailView(workout: managedObjectContext.object(with: workout.id) as! Workout)
+                            .liteweightZoomDestination(id: workout.id, in: zoomNamespace)
                     } label: {
                         VStack(alignment: .leading, spacing: 4) {
                             HStack(alignment: .firstTextBaseline) {
@@ -558,6 +565,7 @@ struct FeedView : View {
                             )
                         }
                         .padding(.vertical, 2)
+                        .liteweightZoomSource(id: workout.id, in: zoomNamespace)
                     }
                     .accessibilityLabel("Open \(workout.displayTitle(in: exerciseStore))")
                     .accessibilityValue(workoutAccessibilityValue(workout))
@@ -605,13 +613,17 @@ struct FeedView : View {
             } else {
                 ForEach(records) { record in
                     NavigationLink {
-                        if let exercise = exerciseStore.find(with: record.exerciseID) {
-                            ExerciseDetailView(exercise: exercise)
-                        } else {
-                            WorkoutDetailView(workout: managedObjectContext.object(with: record.workoutID) as! Workout)
+                        Group {
+                            if let exercise = exerciseStore.find(with: record.exerciseID) {
+                                ExerciseDetailView(exercise: exercise)
+                            } else {
+                                WorkoutDetailView(workout: managedObjectContext.object(with: record.workoutID) as! Workout)
+                            }
                         }
+                        .liteweightZoomDestination(id: record.id, in: zoomNamespace)
                     } label: {
                         recordRow(record)
+                            .liteweightZoomSource(id: record.id, in: zoomNamespace)
                     }
                     .accessibilityLabel("Open record for \(exerciseStore.find(with: record.exerciseID)?.title ?? "Exercise")")
                     .accessibilityValue(recordAccessibilityValue(record))
@@ -923,8 +935,13 @@ struct FeedView : View {
                 if let error = historyStore.error {
                     Section { Button("Retry Loading Training") { historyStore.refresh() } } footer: { Text(error) }
                 }
-                let cards = homeCards
+                // Pinned Charts waits for a pin (made from an exercise's chart) instead of showing empty.
+                let cards = homeCards.filter { $0 != .pinned || !pinnedChartsStore.pinnedCharts.isEmpty }
                 let firstWeekCard = cards.first(where: \.isWeekCard)
+                // After the first finished workout, when Home has something worth arranging.
+                if !completedWorkouts.isEmpty, showsEditTip {
+                    LiteweightTipSection(tip: EditHomeTip(generation: tipGeneration))
+                }
                 ForEach(cards) { section in
                     homeSection(section, summary: summary, isFirstWeekCard: section == firstWeekCard)
                         .modifier(HomeCardAccessibilityContainer(isSingleElement: section == .muscles))
@@ -932,14 +949,19 @@ struct FeedView : View {
                 }
             }
             .listStyle(.insetGrouped)
+            .liteweightTracksTip(EditHomeTip(generation: tipGeneration), isShowing: $showsEditTip)
             .contentMargins(.bottom, LiteweightTheme.floatingWorkoutBottomClearance, for: .scrollContent)
             .task { historyStore.observe(in: managedObjectContext) }
-            .navigationTitle("Home")
-            .toolbarTitleDisplayMode(.inlineLarge)
+            .liteweightTabTitle("Home")
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
-                    Button("Edit") { showingCustomize = true }
-                        .accessibilityLabel("Edit Home")
+                    Button {
+                        EditHomeTip(generation: tipGeneration).invalidate(reason: .actionPerformed)
+                        showingCustomize = true
+                    } label: {
+                        Image(systemName: "pencil")
+                    }
+                    .accessibilityLabel("Edit Home")
                 }
             }
             .navigationDestination(isPresented: $showingMeasurements) {
@@ -994,6 +1016,7 @@ private struct HomeWorkoutStartErrorFeedback: ViewModifier {
 /// calendar keeps its existing implementation and navigation.
 private struct HomeTrainingCalendar: View {
     @Environment(\.calendar) private var calendar
+    @EnvironmentObject private var exerciseStore: ExerciseStore
     @ScaledMetric(relativeTo: .subheadline) private var dayDiameter: CGFloat = 34
     let workoutsByDay: [Date: [TrainingSessionSnapshot]]
     @State private var selectedDay: TrainingDay?
@@ -1054,22 +1077,24 @@ private struct HomeTrainingCalendar: View {
     private func dayCell(_ day: Date) -> some View {
         let sessions = workouts(on: day)
         let date = day.formatted(date: .complete, time: .omitted)
+        let group = sessions.max { $0.setCount < $1.setCount }?.muscleGroups(in: exerciseStore.exercisesByUUID).first
         Button { selectedDay = TrainingDay(date: day) } label: {
-            dayCircle(day, trained: !sessions.isEmpty)
+            dayCircle(day, trained: !sessions.isEmpty, group: group)
                 .frame(width: cellSize, height: cellSize)
                 .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
-        .accessibilityLabel("\(date), \(sessions.isEmpty ? "rest day" : "\(sessions.count) workout\(sessions.count == 1 ? "" : "s")")")
+        .accessibilityLabel("\(date), \(sessions.isEmpty ? "rest day" : "\(sessions.count) workout\(sessions.count == 1 ? "" : "s")")"
+            + (group.map { ", mostly \(HomeWeekSummary.displayName($0).lowercased())" } ?? ""))
         .accessibilityHint("Opens the daily recap")
     }
 
-    private func dayCircle(_ day: Date, trained: Bool) -> some View {
+    private func dayCircle(_ day: Date, trained: Bool, group: String?) -> some View {
         Text("\(calendar.component(.day, from: day))")
             .font(.liteweightMetric(.subheadline))
             .foregroundStyle(trained ? LiteweightTheme.onAccent : LiteweightTheme.secondaryText)
             .frame(width: dayDiameter, height: dayDiameter)
-            .background(trained ? LiteweightTheme.accent : LiteweightTheme.tertiaryFill, in: Circle())
+            .background(trained ? (group.map { LiteweightTheme.muscle($0) } ?? LiteweightTheme.accent) : LiteweightTheme.tertiaryFill, in: Circle())
             .overlay {
                 if !trained && calendar.isDateInToday(day) {
                     Circle().strokeBorder(LiteweightTheme.accent, lineWidth: 1.5)

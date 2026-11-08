@@ -141,6 +141,7 @@ enum LiteweightFormat {
 /// The same number/unit hierarchy for summary columns, data rows and chart headlines.
 /// A single Text keeps the unit baseline aligned and lets it wrap at accessibility sizes.
 struct LiteweightMetricValue: View {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     let value: String
     var unit: String? = nil
     var style: Font.TextStyle = .title2
@@ -149,9 +150,13 @@ struct LiteweightMetricValue: View {
     var tint: Color = LiteweightTheme.primaryText
 
     var body: some View {
+        // Every in-place number change rolls its digits; Reduce Motion fades.
         (Text(value).font(.liteweightMetric(style, weight: weight)).foregroundColor(tint)
          + Text(unit.map { " " + $0 } ?? "")
             .font(.system(unitStyle).weight(.semibold)).foregroundColor(LiteweightTheme.secondaryText))
+            .contentTransition(reduceMotion ? .opacity : .numericText())
+            .animation(LiteweightMotion.preferred(LiteweightMotion.snappy, reduceMotion: reduceMotion), value: value)
+            .animation(LiteweightMotion.preferred(LiteweightMotion.snappy, reduceMotion: reduceMotion), value: unit)
     }
 }
 
@@ -166,12 +171,19 @@ extension String {
 
 /// Shared inline summary for the same workout wherever it appears in a list.
 struct LiteweightWorkoutMetricLine: View {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     let duration: String
     let sets: Int
     let volume: String
     let unit: String
 
     var body: some View {
+        line
+            .contentTransition(reduceMotion ? .opacity : .numericText())
+            .animation(LiteweightMotion.preferred(LiteweightMotion.snappy, reduceMotion: reduceMotion), value: "\(duration)|\(sets)|\(volume)|\(unit)")
+    }
+
+    private var line: some View {
         (Text(duration).foregroundColor(LiteweightTheme.primaryText)
          + Text(" · ").foregroundColor(LiteweightTheme.secondaryText)
          + Text("\(sets)").foregroundColor(LiteweightTheme.primaryText)
@@ -1191,12 +1203,58 @@ enum LiteweightDurationFormat {
     }
 }
 
+private struct LiteweightTabTitle: ViewModifier {
+    let title: String
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @State private var scrolled = false
+
+    @ViewBuilder func body(content: Content) -> some View {
+        if #available(iOS 26, *) {
+            content
+                // Kept for the back button and app switcher; the bar shows the leading text instead.
+                .navigationTitle(title)
+                .toolbarTitleDisplayMode(.inline)
+                .toolbar(removing: .title)
+                .toolbar {
+                    ToolbarItem(placement: .topBarLeading) {
+                        Text(title)
+                            .font(.largeTitle.bold())
+                            .foregroundStyle(LiteweightTheme.primaryText)
+                            .fixedSize()
+                            .opacity(scrolled ? 0 : 1)
+                            .accessibilityAddTraits(.isHeader)
+                            .accessibilityHidden(scrolled)
+                    }
+                    .sharedBackgroundVisibility(.hidden)
+                }
+                .onScrollGeometryChange(for: Bool.self) { geometry in
+                    geometry.contentOffset.y + geometry.contentInsets.top > 12
+                } action: { _, isScrolled in
+                    withAnimation(LiteweightMotion.preferred(LiteweightMotion.fade, reduceMotion: reduceMotion)) {
+                        scrolled = isScrolled
+                    }
+                }
+                .scrollEdgeEffectStyle(.soft, for: .top)
+        } else {
+            content
+                .navigationTitle(title)
+                .toolbarTitleDisplayMode(.inlineLarge)
+        }
+    }
+}
+
 // MARK: - Native pull-down actions
 
 extension View {
     func liteweightScreen() -> some View {
         self
             .accentColor(LiteweightTheme.accent)
+    }
+
+    /// A tab root's title: large beside the toolbar buttons, then gone once the list
+    /// scrolls, so only the floating buttons stay over a translucent edge.
+    func liteweightTabTitle(_ title: String) -> some View {
+        modifier(LiteweightTabTitle(title: title))
     }
 
     @ViewBuilder
@@ -1379,5 +1437,142 @@ private struct LiteweightChartScrubber: UIViewRepresentable {
             default: break
             }
         }
+    }
+}
+
+// MARK: - Muscle colors
+
+/// A muscle group's chip: its color as a soft fill, the name in primary text, and an
+/// optional rest detail ("today", "3d") led by a status dot (amber still recovering,
+/// green rested). The same chip on Most Rested, saved workouts and History.
+struct LiteweightMuscleChip: View {
+    let group: String
+    var detail: String?
+    var status: Color?
+
+    var body: some View {
+        HStack(spacing: 5) {
+            if let status {
+                Circle().fill(status).frame(width: 7, height: 7)
+            }
+            (Text(HomeWeekSummary.displayName(group))
+             + (detail.map { Text(" " + $0).font(.liteweightMetric(.footnote, weight: .semibold)) } ?? Text("")))
+                .font(.footnote.weight(.semibold))
+                .foregroundStyle(LiteweightTheme.primaryText)
+        }
+        .padding(.horizontal, 9)
+        .padding(.vertical, 4)
+        .background(LiteweightTheme.muscleContainer(group), in: Capsule())
+        .fixedSize(horizontal: false, vertical: true)
+    }
+}
+
+/// The leading tile on a workout row, in the color of the muscle group it trained most.
+struct LiteweightMuscleTile: View {
+    let group: String?
+    var size: CGFloat = 34
+
+    /// Core and Chest share a letter, so Core keeps two.
+    private var initial: String {
+        guard let group else { return "" }
+        return String(HomeWeekSummary.displayName(group).prefix(group == "abdominals" ? 2 : 1))
+    }
+
+    var body: some View {
+        RoundedRectangle(cornerRadius: size * 0.27, style: .continuous)
+            .fill(LiteweightTheme.muscle(group).gradient)
+            .frame(width: size, height: size)
+            .overlay {
+                Text(initial)
+                    .font(.system(size: size * (initial.count > 1 ? 0.38 : 0.46), weight: .bold))
+                    .foregroundStyle(LiteweightTheme.onAccent)
+            }
+            .accessibilityHidden(true)
+    }
+}
+
+/// Wraps chips onto as many lines as they need.
+struct LiteweightChipFlow: Layout {
+    var spacing: CGFloat = 6
+
+    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
+        let rows = arrange(width: proposal.width ?? .infinity, subviews: subviews)
+        let width = rows.map(\.width).max() ?? 0
+        let height = rows.reduce(0) { $0 + $1.height } + spacing * CGFloat(max(rows.count - 1, 0))
+        return CGSize(width: proposal.width.map { min($0, width) } ?? width, height: height)
+    }
+
+    func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
+        var y = bounds.minY
+        for row in arrange(width: bounds.width, subviews: subviews) {
+            var x = bounds.minX
+            for index in row.indices {
+                let size = subviews[index].sizeThatFits(.init(width: bounds.width, height: nil))
+                subviews[index].place(at: CGPoint(x: x, y: y), proposal: .init(width: min(size.width, bounds.width), height: size.height))
+                x += min(size.width, bounds.width) + spacing
+            }
+            y += row.height + spacing
+        }
+    }
+
+    private struct Row { var indices: [Int] = []; var width: CGFloat = 0; var height: CGFloat = 0 }
+
+    private func arrange(width: CGFloat, subviews: Subviews) -> [Row] {
+        var rows: [Row] = []
+        var row = Row()
+        for index in subviews.indices {
+            let size = subviews[index].sizeThatFits(.init(width: width, height: nil))
+            let itemWidth = min(size.width, width)
+            if !row.indices.isEmpty, row.width + spacing + itemWidth > width {
+                rows.append(row)
+                row = Row()
+            }
+            row.width += (row.indices.isEmpty ? 0 : spacing) + itemWidth
+            row.height = max(row.height, size.height)
+            row.indices.append(index)
+        }
+        if !row.indices.isEmpty { rows.append(row) }
+        return rows
+    }
+}
+
+// MARK: - Zoom navigation
+
+/// The tapped row grows into the page it opens and shrinks back on close (iOS 18).
+/// Older iOS and Reduce Motion keep the standard push.
+private struct LiteweightZoomSource<ID: Hashable>: ViewModifier {
+    let id: ID
+    let namespace: Namespace.ID
+
+    @ViewBuilder func body(content: Content) -> some View {
+        if #available(iOS 18.0, *) {
+            content.matchedTransitionSource(id: id, in: namespace)
+        } else {
+            content
+        }
+    }
+}
+
+private struct LiteweightZoomDestination<ID: Hashable>: ViewModifier {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    let id: ID
+    let namespace: Namespace.ID
+
+    @ViewBuilder func body(content: Content) -> some View {
+        if #available(iOS 18.0, *), !reduceMotion {
+            content.navigationTransition(.zoom(sourceID: id, in: namespace))
+        } else {
+            content
+        }
+    }
+}
+
+extension View {
+    func liteweightZoomSource<ID: Hashable>(id: ID, in namespace: Namespace.ID) -> some View {
+        modifier(LiteweightZoomSource(id: id, namespace: namespace))
+    }
+
+    func liteweightZoomDestination<ID: Hashable>(id: ID, in namespace: Namespace.ID) -> some View {
+        modifier(LiteweightZoomDestination(id: id, namespace: namespace))
     }
 }

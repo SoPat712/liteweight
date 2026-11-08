@@ -71,7 +71,8 @@ struct WatchSettingsView: View {
         List {
             Section {
                 SettingsConnectionHeader(title: "Apple Watch", systemImage: "applewatch", tint: LiteweightTheme.mediaBackdrop,
-                                         status: statusTitle, isGood: !connectionState.needsSetup) {
+                                         status: statusTitle, isGood: !connectionState.needsSetup,
+                                         detail: connectionState.needsSetup ? nil : "Paired and installed") {
                     if connectionState.needsSetup {
                         Button(action: openWatchSetup) {
                             Label(shownStatus.isPaired ? "Install liteweight on Watch" : "Pair in Watch App",
@@ -82,37 +83,28 @@ struct WatchSettingsView: View {
                         .accessibilityHint("Opens the Watch app on this iPhone")
                     }
                 }
-            } footer: {
-                Text(connectionState.needsSetup
-                     ? "Pair your watch and install liteweight using the Watch app on iPhone."
-                     : "liteweight on your watch is ready for workouts.")
             }
 
-            Section {
-                LabeledContent {
-                    Text(shownStatus.isPaired ? "Yes" : "No")
-                } label: {
-                    SettingsRowLabel("Paired", systemImage: "applewatch.radiowaves.left.and.right", tint: LiteweightTheme.accent)
+            // When everything works the header says so; the checks only appear to show what failed.
+            if connectionState.needsSetup {
+                Section {
+                    LabeledContent {
+                        statusValue(shownStatus.isPaired)
+                    } label: {
+                        SettingsRowLabel("Paired", systemImage: "applewatch.radiowaves.left.and.right", tint: LiteweightTheme.accent)
+                    }
+                    LabeledContent {
+                        statusValue(shownStatus.isInstalled)
+                    } label: {
+                        SettingsRowLabel("liteweight Installed", systemImage: "app.badge.checkmark", tint: LiteweightTheme.metricVolume)
+                    }
+                } header: {
+                    Text("Status")
+                } footer: {
+                    Text(shownStatus.isPaired
+                         ? "In the Watch app, find liteweight under Available Apps and tap Install."
+                         : "Open the Watch app on this iPhone and pair your Apple Watch.")
                 }
-                LabeledContent {
-                    Text(shownStatus.isInstalled ? "Yes" : "No")
-                } label: {
-                    SettingsRowLabel("liteweight Installed", systemImage: "app.badge.checkmark", tint: LiteweightTheme.metricVolume)
-                }
-                LabeledContent {
-                    Text(shownStatus.isReachable ? "Live" : "Standby")
-                        .foregroundStyle(shownStatus.isReachable ? LiteweightTheme.success : LiteweightTheme.secondaryText)
-                } label: {
-                    SettingsRowLabel("Connection", systemImage: "dot.radiowaves.left.and.right", tint: LiteweightTheme.metricTime)
-                }
-                Button { refreshConnectionStatus(announce: true) } label: {
-                    SettingsActionLabel("Refresh Status", systemImage: "arrow.clockwise", tint: LiteweightTheme.accent,
-                                        trailingSymbol: "arrow.clockwise.circle", isPreparing: isRefreshing)
-                }
-                .accessibilityLabel(isRefreshing ? "Checking watch status" : "Refresh Status")
-                .disabled(isRefreshing)
-            } header: {
-                Text("Details")
             }
 
             Section {
@@ -141,6 +133,21 @@ struct WatchSettingsView: View {
         }
         .navigationTitle("Apple Watch")
         .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            ToolbarItem(placement: .topBarTrailing) {
+                Button { refreshConnectionStatus(announce: true) } label: {
+                    if isRefreshing {
+                        ProgressView()
+                    } else {
+                        Image(systemName: "arrow.clockwise")
+                    }
+                }
+                .accessibilityLabel(isRefreshing ? "Checking watch status" : "Refresh Status")
+                .disabled(isRefreshing)
+            }
+        }
+        .animation(LiteweightMotion.preferred(LiteweightMotion.fade, reduceMotion: UIAccessibility.isReduceMotionEnabled),
+                   value: connectionState.needsSetup)
         .liteweightScreen()
         .onAppear { refreshConnectionStatus(announce: false) }
         .onChange(of: scenePhase) { _, phase in
@@ -167,19 +174,24 @@ struct WatchSettingsView: View {
         }
     }
 
+    private func statusValue(_ isOK: Bool) -> some View {
+        Text(isOK ? "Yes" : "No")
+            .foregroundStyle(isOK ? LiteweightTheme.secondaryText : LiteweightTheme.danger)
+    }
+
     private var companionDetail: String {
         #if DEBUG
         if settingsStore.healthTestMode {
-            return "In test mode, Watch workouts skip heart rate, calories, and Apple Health."
+            return "Test mode: no heart rate, calories or Apple Health."
         }
         #endif
         if !isCompanionAvailable {
-            return "Pair an Apple Watch and install liteweight before enabling the workout companion."
+            return "Needs a paired Apple Watch with liteweight installed."
         }
         if displayedWatchCompanion {
-            return "Heart rate and active energy are recorded by Apple Watch and remain available in Apple Health."
+            return "Apple Watch records heart rate and calories."
         }
-        return "You can keep logging on iPhone, but liteweight will not automatically begin a watch workout."
+        return "iPhone workouts won't start a Watch workout."
     }
 
     @State private var announcesRefresh = false

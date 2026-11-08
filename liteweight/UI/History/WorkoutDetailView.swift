@@ -54,7 +54,8 @@ struct WorkoutDetailView: View {
     @State private var showingShareUnavailable = false
     @State private var persistenceError: String?
     @State private var isNavigationTitleVisible = false
-    @ScaledMetric(relativeTo: .title) private var summaryHeight: CGFloat = 68
+    /// Matches the logger's summary row (its muscle figure height).
+    private let summaryHeight: CGFloat = 54
 
     private var workoutExercises: [WorkoutExercise] {
         workout.workoutExercises?.array as? [WorkoutExercise] ?? []
@@ -278,32 +279,46 @@ struct WorkoutDetailView: View {
             .padding(.bottom, 4)
     }
 
+    /// The logger's summary, kept after finishing: the same metric colors,
+    /// columns and body figure, on a card.
     private var summarySection: some View {
-        Group {
+        let sets = workout.numberOfCompletedSets ?? 0
+        return Group {
             if dynamicTypeSize.isAccessibilitySize {
                 VStack(spacing: 6) {
-                    summaryMetric("Duration", value: workoutDurationTitle, index: 0)
-                    summaryMetric(workoutWorkLabel, value: workoutVolumeTitle, unit: workoutWorkUnit, index: 1)
-                    summaryMetric("Sets", value: "\(workout.numberOfCompletedSets ?? 0)", index: 2)
+                    WorkoutSummaryAccessibleRow(label: "Duration", value: workoutDurationTitle, tint: LiteweightTheme.metricTime)
+                        .liteweightStaggeredEntrance(index: 0)
+                    WorkoutSummaryAccessibleRow(label: workoutWorkLabel,
+                                                value: [workoutVolumeTitle, workoutWorkUnit].compactMap { $0 }.joined(separator: " "),
+                                                tint: workoutWorkTint)
+                        .liteweightStaggeredEntrance(index: 1)
+                    WorkoutSummaryAccessibleRow(label: "Sets", value: "\(sets)", tint: LiteweightTheme.metricSets)
+                        .liteweightStaggeredEntrance(index: 2)
                 }
             } else {
                 GeometryReader { proxy in
-                    let metricWidth = max(0, proxy.size.width - 64 - 36)
+                    let mapWidth: CGFloat = 64
+                    let metricWidth = max(0, proxy.size.width - mapWidth - 36)
                     HStack(alignment: .top, spacing: 12) {
-                        summaryMetric("Duration", value: workoutDurationTitle, index: 0)
+                        summaryMetric("Duration", value: workoutDurationTitle, tint: LiteweightTheme.metricTime, index: 0)
                             .frame(width: metricWidth * 0.43)
-                        summaryMetric(workoutWorkLabel, value: workoutVolumeTitle, unit: workoutWorkUnit, index: 1)
+                        summaryMetric(workoutWorkLabel, value: workoutVolumeTitle, unit: workoutWorkUnit, tint: workoutWorkTint,
+                                      numericValue: workoutWorkLabel == "Volume" ? workout.trackedCompletedVolume : nil, index: 1)
                             .frame(width: metricWidth * 0.41)
-                        summaryMetric("Sets", value: "\(workout.numberOfCompletedSets ?? 0)", index: 2)
+                        summaryMetric("Sets", value: "\(sets)", tint: LiteweightTheme.metricSets,
+                                      numericValue: Double(sets), index: 2)
                             .frame(width: metricWidth * 0.16)
-                        liveMuscleMap
-                            .frame(width: 64)
+                        WorkoutSummaryMuscleFigure(muscles: WorkoutSummaryMuscleFigure.muscles(
+                            in: workoutExercises, catalog: exerciseStore.exercises), height: summaryHeight)
+                            .frame(width: mapWidth)
                     }
+                    .frame(height: proxy.size.height, alignment: .top)
                 }
                 .frame(height: summaryHeight)
             }
         }
-        .padding(16)
+        .padding(.horizontal, 16)
+        .padding(.vertical, 12)
         .background(LiteweightTheme.surface, in: RoundedRectangle(cornerRadius: 24, style: .continuous))
     }
 
@@ -336,6 +351,9 @@ struct WorkoutDetailView: View {
         if completedTrackingSets.contains(where: { $0.trackingType.usesDuration }) { return "Set Time" }
         return "Reps"
     }
+    private var workoutWorkTint: Color {
+        workoutWorkLabel == "Volume" ? LiteweightTheme.metricVolume : (workoutWorkLabel == "Reps" ? LiteweightTheme.metricSets : LiteweightTheme.metricTime)
+    }
     private var workoutWorkUnit: String? {
         switch workoutWorkLabel {
         case "Volume": return settingsStore.weightUnit.unit.symbol
@@ -359,81 +377,11 @@ struct WorkoutDetailView: View {
     }
 
     private func summaryMetric(
-        _ title: String, value: String, unit: String? = nil, index: Int
+        _ title: String, value: String, unit: String? = nil, tint: Color, numericValue: Double? = nil, index: Int
     ) -> some View {
-        Group {
-            if dynamicTypeSize.isAccessibilitySize {
-                HStack(alignment: .firstTextBaseline, spacing: 12) {
-                    Text(title)
-                        .font(.subheadline)
-                        .foregroundStyle(LiteweightTheme.secondaryText)
-                    Spacer(minLength: 0)
-                    LiteweightMetricValue(value: value, unit: unit, style: .subheadline, tint: LiteweightTheme.primaryText)
-                        .multilineTextAlignment(.trailing)
-                }
-                .frame(minHeight: LiteweightTheme.controlHeight)
-            } else {
-                VStack(alignment: .leading, spacing: 4) {
-                    Text(title)
-                        .font(.subheadline.weight(.semibold))
-                        .foregroundStyle(LiteweightTheme.secondaryText)
-                    LiteweightMetricValue(value: value, unit: unit, style: .title, tint: LiteweightTheme.primaryText)
-                }
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .lineLimit(1)
-                .minimumScaleFactor(0.65)
-            }
-        }
-        .accessibilityElement(children: .combine)
-        .liteweightStaggeredEntrance(index: index)
-    }
-
-    private var completedExerciseMuscles: (primary: [Muscle], secondary: [Muscle]) {
-        var primary: [Muscle] = []
-        var secondary: [Muscle] = []
-        for workoutExercise in workoutExercises {
-            guard workoutSets(for: workoutExercise).contains(where: \.isCompleted),
-                  let exercise = workoutExercise.exercise(in: exerciseStore.exercises) else { continue }
-            for muscle in exercise.primaryMuscle.compactMap(liteweightMapMuscle) where !primary.contains(muscle) {
-                primary.append(muscle)
-            }
-            for muscle in exercise.secondaryMuscle.compactMap(liteweightMapMuscle)
-                where !primary.contains(muscle) && !secondary.contains(muscle) {
-                secondary.append(muscle)
-            }
-        }
-        return (primary, secondary)
-    }
-
-    private var liveMuscleMap: some View {
-        let muscles = completedExerciseMuscles
-        return HStack(spacing: 2) {
-            liveMuscleBody(side: .front, muscles: muscles)
-            liveMuscleBody(side: .back, muscles: muscles)
-        }
-        .frame(height: 64)
-        .allowsHitTesting(false)
-        .accessibilityRepresentation {
-            Text(muscles.primary.isEmpty && muscles.secondary.isEmpty
-                 ? "No muscles logged yet" : "Muscles trained in completed sets")
-                .accessibilityAddTraits(.isImage)
-        }
-    }
-
-    private func liveMuscleBody(side: BodySide, muscles: (primary: [Muscle], secondary: [Muscle])) -> some View {
-        let style = BodyViewStyle(
-            defaultFillColor: Color(.tertiaryLabel).opacity(0.35),
-            strokeColor: Color(.separator),
-            strokeWidth: 0.5,
-            selectionColor: LiteweightTheme.accent,
-            selectionStrokeColor: LiteweightTheme.accent,
-            selectionStrokeWidth: 1,
-            headColor: Color(.tertiaryLabel).opacity(0.45),
-            hairColor: Color(.quaternaryLabel)
-        )
-        return BodyView(gender: .male, side: side, style: style)
-            .highlight(muscles.secondary, color: LiteweightTheme.accent, opacity: 0.42)
-            .highlight(muscles.primary, color: LiteweightTheme.accent)
+        WorkoutSummaryMetric(label: title, value: value, tint: tint, unit: unit, numericValue: numericValue)
+            .accessibilityElement(children: .combine)
+            .liteweightStaggeredEntrance(index: index)
     }
 
     private func sectionCaption(_ title: String) -> some View {
@@ -538,9 +486,12 @@ struct WorkoutDetailView: View {
                     if healthSyncState == .syncing {
                         ProgressView()
                     } else {
-                        Button("Retry", action: syncWorkoutToHealth)
+                        Button(action: syncWorkoutToHealth) {
+                            Text("Retry")
+                                .frame(minWidth: LiteweightTheme.controlHeight, minHeight: LiteweightTheme.controlHeight)
+                                .contentShape(Rectangle())
+                        }
                             .buttonStyle(.borderless)
-                            .controlSize(.small)
                             .foregroundStyle(LiteweightTheme.accent)
                     }
                 }

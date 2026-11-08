@@ -36,8 +36,7 @@ struct SettingsView: View {
     var body: some View {
         NavigationStack {
             settingsRoot
-            .navigationTitle("Settings")
-            .toolbarTitleDisplayMode(.inlineLarge)
+            .liteweightTabTitle("Settings")
             .sheet(item: $actionAlert) { alert in
                 LiteweightStatusSheet(
                     headerTitle: "liteweight",
@@ -79,7 +78,8 @@ struct SettingsView: View {
                 }
             }
 
-            Section("General") {
+            Section {
+                WeightUnitSettingsRow(icon: SettingsSubpageIconTile(systemImage: "scalemass.fill", style: .orange))
                 settingsLink(
                     "Appearance",
                     detail: settingsStore.appearance.title,
@@ -87,15 +87,12 @@ struct SettingsView: View {
                     tile: .indigo,
                     destination: AppearanceSettingsView()
                 )
-                settingsLink(
-                    "Units",
-                    detail: settingsStore.weightUnit.title,
-                    icon: "scalemass.fill",
-                    tile: .orange,
-                    destination: UnitsSettingsView()
-                )
                 settingsLink("Workout Preferences", icon: "slider.horizontal.3", tile: .blue, destination: GeneralSettingsView())
                 settingsLink("Sounds & Haptics", icon: "speaker.wave.2.fill", tile: .pink, destination: SoundsSettingsView())
+            } header: {
+                Text("General")
+            } footer: {
+                Text("The weight unit applies to workouts, charts, plates and exports.")
             }
 
             Section("Connections") {
@@ -111,6 +108,17 @@ struct SettingsView: View {
                 settingsLink("Import & Export", icon: "arrow.up.arrow.down", tile: .green, destination: BackupAndExportView())
             }
 
+            Section("Help") {
+                Button { WelcomeGuideController.shared.replay() } label: {
+                    settingsRow("Welcome Guide", icon: "questionmark", tile: .blue)
+                }
+                .accessibilityHint("Shows the welcome pages again.")
+                Button(action: showTipsAgain) {
+                    settingsRow("Show Tips Again", icon: "lightbulb.fill", tile: .orange)
+                }
+                .accessibilityHint("Brings back every tip you've closed.")
+            }
+
             Section {
                 Button(action: sendFeedback) {
                     settingsRow("Send Feedback", icon: "paperplane.fill", tile: .blue)
@@ -119,8 +127,6 @@ struct SettingsView: View {
                 Button(action: openReview) {
                     settingsRow("Rate liteweight", icon: "star.fill", tile: .yellow)
                 }
-
-                settingsLink("About liteweight", icon: "info.circle.fill", tile: .gray, destination: AboutView())
             } header: {
                 Text("Support")
             } footer: {
@@ -225,6 +231,13 @@ struct SettingsView: View {
 
     private func sendFeedback() {
         feedbackPresentation = MFMailComposeViewController.canSendMail() ? .composer : .options
+    }
+
+    private func showTipsAgain() {
+        LiteweightTips.showAgain()
+        LiteweightToastCenter.shared.show(LiteweightToast(
+            title: "Tips Are Back", subtitle: "Each one shows the next time you reach it.",
+            systemImage: "lightbulb.fill", style: .info))
     }
 }
 
@@ -385,7 +398,7 @@ private struct FeedbackOptionsSheet: View {
                         Text("No email app could open this message; copy the address instead.")
                             .foregroundStyle(LiteweightTheme.danger)
                     } else {
-                        Text("Open another email app or copy our support address when Apple Mail isn’t configured.")
+                        Text("Mail isn’t set up. Use another app or copy the address.")
                     }
                 }
             }
@@ -748,9 +761,10 @@ struct WorkoutCalendarView: View {
 
     @ViewBuilder private func calendarDay(_ date: Date?) -> some View {
         if let date {
-            let count = history.snapshot.byDay[Calendar.current.startOfDay(for: date)]?.count ?? 0
+            let sessions = history.snapshot.byDay[Calendar.current.startOfDay(for: date)] ?? []
+            let group = sessions.max { $0.setCount < $1.setCount }?.muscleGroups(in: exerciseStore.exercisesByUUID).first
             Button { selectedDay = TrainingDay(date: date) } label: {
-                calendarDayContent(date, workoutCount: count)
+                calendarDayContent(date, workoutCount: sessions.count, group: group)
             }
             .buttonStyle(.borderless)
             .accessibilityHint("Opens the daily recap")
@@ -759,12 +773,13 @@ struct WorkoutCalendarView: View {
         }
     }
 
-    private func calendarDayContent(_ date: Date, workoutCount: Int) -> some View {
+    /// A trained day wears the color of the muscle group it trained most.
+    private func calendarDayContent(_ date: Date, workoutCount: Int, group: String?) -> some View {
         let isToday = Calendar.current.isDateInToday(date)
 
         return ZStack {
             if workoutCount > 0 {
-                Circle().fill(LiteweightTheme.accent)
+                Circle().fill(group.map { LiteweightTheme.muscle($0) } ?? LiteweightTheme.accent)
             } else if isToday {
                 Circle().strokeBorder(LiteweightTheme.accent, lineWidth: 1.5)
             }
@@ -778,6 +793,7 @@ struct WorkoutCalendarView: View {
         .contentShape(Rectangle())
         .accessibilityLabel(
             "\(date.formatted(date: .long, time: .omitted)), \(workoutCount) workout\(workoutCount == 1 ? "" : "s")"
+                + (group.map { ", mostly \(HomeWeekSummary.displayName($0).lowercased())" } ?? "")
         )
     }
 }

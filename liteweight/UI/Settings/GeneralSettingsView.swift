@@ -60,7 +60,7 @@ struct GeneralSettingsView: View {
         } header: {
             Text("Rest Timer")
         } footer: {
-            Text("Dumbbell and barbell exercises use their own rest; everything else uses Default. Count Past Zero shows overtime in red.")
+            Text("Count Past Zero shows overtime in red.")
         }
     }
 
@@ -75,7 +75,7 @@ struct GeneralSettingsView: View {
         } header: {
             Text("Logging")
         } footer: {
-            Text("RPE records effort; Carry Over fills in your last weight and reps. Timed sets can use a tap-to-run stopwatch.")
+            Text("Carry Over fills in last time's weight and reps.")
         }
     }
 
@@ -92,8 +92,6 @@ struct GeneralSettingsView: View {
                            isOn: $settingsStore.showWarmUpCalculator)
         } header: {
             Text("Calculators")
-        } footer: {
-            Text("Calculate loads with your available plates and build warm-up sets below your working weight.")
         }
     }
 
@@ -106,7 +104,7 @@ struct GeneralSettingsView: View {
         } header: {
             Text("During a Workout")
         } footer: {
-            Text("Advance after each superset set; keeping iPhone awake during workouts uses more battery.")
+            Text("Keeping the screen awake uses more battery.")
         }
     }
 
@@ -200,8 +198,8 @@ struct AvailablePlatesSettingsView: View {
                 Text("Available Plates · \(unit.unit.symbol)")
             } footer: {
                 Text(inventory.enabledPlates(for: unit.plateLoadUnit).isEmpty
-                     ? "No plates enabled; only the bar or machine starting weight can be loaded."
-                     : "Enabled plates are available in unlimited quantities for every exercise on this device.")
+                     ? "No plates on: only the bar or machine weight loads."
+                     : "Each plate that's on counts as unlimited.")
             }
         }
         .safeAreaInset(edge: .bottom) {
@@ -216,41 +214,41 @@ struct AvailablePlatesSettingsView: View {
     }
 }
 
-struct UnitsSettingsView: View {
+/// The weight unit lives on the Settings list itself; a page holding one switch was a dead end.
+struct WeightUnitSettingsRow<Icon: View>: View {
     @EnvironmentObject var settingsStore: SettingsStore
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @State private var selectionFeedback = 0
+    let icon: Icon
 
     var body: some View {
-        Form {
-            Section {
-                HStack(spacing: 12) {
-                    SettingsRowLabel("Weight", systemImage: "scalemass.fill", tint: LiteweightTheme.metricSets)
-                    Picker("Weight", selection: Binding(
-                        get: { settingsStore.weightUnit },
-                        set: {
-                            guard settingsStore.weightUnit != $0 else { return }
-                            settingsStore.weightUnit = $0
-                            selectionFeedback += 1
-                        }
-                    )) {
-                        Text("kg").tag(WeightUnit.metric).accessibilityLabel("Kilograms")
-                        Text("lb").tag(WeightUnit.imperial).accessibilityLabel("Pounds")
-                    }
-                    .pickerStyle(.segmented)
-                    .fixedSize()
-                }
-            } footer: {
-                Text("Used for workout weights, charts, plates, and exports.")
+        let layout = dynamicTypeSize.isAccessibilitySize
+            ? AnyLayout(VStackLayout(alignment: .leading, spacing: 10))
+            : AnyLayout(HStackLayout(spacing: 14))
+        layout {
+            HStack(spacing: 14) {
+                icon
+                Text("Weight Unit")
             }
+            if !dynamicTypeSize.isAccessibilitySize { Spacer(minLength: 8) }
+            Picker("Weight Unit", selection: Binding(
+                get: { settingsStore.weightUnit },
+                set: {
+                    guard settingsStore.weightUnit != $0 else { return }
+                    settingsStore.weightUnit = $0
+                    selectionFeedback += 1
+                }
+            )) {
+                Text("kg").tag(WeightUnit.metric).accessibilityLabel("Kilograms")
+                Text("lb").tag(WeightUnit.imperial).accessibilityLabel("Pounds")
+            }
+            .pickerStyle(.segmented)
+            .controlSize(.large)
+            .frame(width: dynamicTypeSize.isAccessibilitySize ? nil : 128)
         }
-        .formStyle(.grouped)
-        .safeAreaInset(edge: .bottom) {
-            Color.clear.frame(height: LiteweightTheme.floatingWorkoutBottomClearance - 36)
-        }
-        .navigationTitle("Units")
+        .font(.body)
+        .foregroundStyle(LiteweightTheme.primaryText)
         .sensoryFeedback(.selection, trigger: selectionFeedback) { _, _ in settingsStore.workoutHaptics }
-        .navigationBarTitleDisplayMode(.inline)
-        .liteweightScreen()
     }
 }
 
@@ -527,7 +525,8 @@ struct SettingsStatusBadge: View {
 }
 
 /// The top of a connection page (Apple Health, Apple Watch): a large icon, the name,
-/// a status badge, and the one action that matters now as a real button.
+/// a status badge with one line of detail, and the one action that matters now as a
+/// real button. The detail line replaces rows of "Yes" when everything works.
 struct SettingsConnectionHeader<Action: View>: View {
     @ScaledMetric(relativeTo: .title) private var iconSize: CGFloat = 56
     let title: String
@@ -535,6 +534,7 @@ struct SettingsConnectionHeader<Action: View>: View {
     let tint: Color
     let status: String
     let isGood: Bool
+    var detail: String? = nil
     @ViewBuilder let action: () -> Action
 
     var body: some View {
@@ -554,6 +554,12 @@ struct SettingsConnectionHeader<Action: View>: View {
                         .font(.title3.weight(.semibold))
                         .foregroundStyle(LiteweightTheme.primaryText)
                     SettingsStatusBadge(text: status, isGood: isGood)
+                    if let detail {
+                        Text(detail)
+                            .font(.subheadline)
+                            .foregroundStyle(LiteweightTheme.secondaryText)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
             }

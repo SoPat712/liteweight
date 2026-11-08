@@ -179,6 +179,8 @@ private struct WatchNowSet: View {
             .watchReturnsCrown(afterEditing: focus != nil)
             .digitalCrownAccessory(.hidden)
         }
+        // Once, on the first set ever shown on the Watch.
+        .watchTipSheet(WatchCrownTip())
         .onChange(of: crown) { persistCrown() }
         .onChange(of: editingValue) { if !editingValue { endEditing() } }
         .onChange(of: reducedLuminance) { if reducedLuminance { endEditing() } }
@@ -2270,6 +2272,9 @@ private struct WatchVitalsLine: View {
     let heartRate: String?
     let energy: Double?
     let availableWidth: CGFloat?
+    // Widest-value template widths at the current text size.
+    @State private var bothWidth: CGFloat = 0
+    @State private var heartWidth: CGFloat = 0
     private var validEnergy: Double? {
         guard let energy, energy.isFinite, energy >= 0 else { return nil }
         return energy
@@ -2293,11 +2298,27 @@ private struct WatchVitalsLine: View {
     var body: some View {
         // Fit only the widest-value templates. The plain status line shows the
         // available readings, without changing the chosen form as sensors start.
-        ViewThatFits(in: .horizontal) {
-            fittedLine(showsEnergy: true)
-            fittedLine(showsEnergy: false)
-            Color.clear.frame(width: 0, height: 0).accessibilityHidden(true)
+        // One line whose energy reading comes and goes, rather than a ViewThatFits
+        // swap, so a back button appearing slides the heart rate instead of jumping it.
+        let room = availableWidth ?? .infinity
+        let fits = heartWidth <= room
+        plain {
+            metrics(heartRate: heartRate, energy: compactEnergy, showsEnergy: bothWidth <= room, keepsEnergySlot: true)
         }
+        .opacity(fits ? 1 : 0)
+        .background {
+            ZStack {
+                template(showsEnergy: true)
+                    .onGeometryChange(for: CGFloat.self, of: { $0.size.width }) { bothWidth = $0 }
+                template(showsEnergy: false)
+                    .onGeometryChange(for: CGFloat.self, of: { $0.size.width }) { heartWidth = $0 }
+            }
+            .hidden()
+            .accessibilityHidden(true)
+        }
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(accessibilitySummary)
+        .accessibilityHidden(!fits)
         // caption2 lets both readings fit beside a back button on Ultra (≈85 of 88 pt).
         .font(.liteweightMetric(.caption2, weight: .semibold))
         .monospacedDigit()
@@ -2306,18 +2327,9 @@ private struct WatchVitalsLine: View {
         .frame(maxWidth: availableWidth, alignment: .leading)
     }
 
-    private func fittedLine(showsEnergy: Bool) -> some View {
+    private func template(showsEnergy: Bool) -> some View {
         metrics(heartRate: "188", energy: "9.9k", showsEnergy: showsEnergy)
-            .frame(height: 34)
             .fixedSize(horizontal: true, vertical: false)
-            .hidden()
-            .overlay(alignment: .leading) {
-                plain {
-                    metrics(heartRate: heartRate, energy: compactEnergy, showsEnergy: showsEnergy)
-                }
-            }
-            .accessibilityElement(children: .ignore)
-            .accessibilityLabel(accessibilitySummary)
     }
 
     private func plain<Content: View>(@ViewBuilder content: () -> Content) -> some View {
@@ -2326,11 +2338,14 @@ private struct WatchVitalsLine: View {
             .fixedSize(horizontal: true, vertical: false)
     }
 
-    private func metrics(heartRate: String?, energy: String?, showsEnergy: Bool) -> some View {
+    private func metrics(heartRate: String?, energy: String?, showsEnergy: Bool,
+                         keepsEnergySlot: Bool = false) -> some View {
         HStack(alignment: .center, spacing: 5) {
             metric("heart.fill", reference: "188", value: heartRate, color: LiteweightTheme.metricHeartRate)
-            if showsEnergy {
+            // The live line keeps energy in place and fades it, so it travels with the heart rate.
+            if showsEnergy || keepsEnergySlot {
                 metric("flame.fill", reference: "9.9k", value: energy, color: LiteweightTheme.metricEnergy)
+                    .opacity(showsEnergy ? 1 : 0)
             }
         }
     }

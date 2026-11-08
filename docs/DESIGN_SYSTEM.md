@@ -121,8 +121,9 @@ screenshots and canvas boards; never write them in code.
 - Units ("lb", "kg", "sets") are smaller and `secondaryText`, even when the number is colored.
 - One metric, one color, everywhere: Home, History, logger, finish, widgets, Watch and Live Activity.
 - **Green never paints completed sets.** Completion is blue. Green only ever means volume or success.
-- Muscle-group text tags are **neutral** (`secondarySystemFill` with `secondaryLabel`). Muscles are
-  never color-coded by group. The anatomical muscle map uses accent only (§8.9).
+- Muscle groups have their own colors (§3.5), used only where a muscle *group* is named or
+  summarized. The anatomical muscle map uses accent everywhere except History rows, where each
+  muscle takes its group's color (§8.9, §15.3).
 
 ### 3.3 Set-state colors (live logger)
 
@@ -138,6 +139,28 @@ screenshots and canvas boards; never write them in code.
 The owner likes the current blue fill on normal completed sets. **Do not change it.** Set-type
 fills must be *softer* than the blue, never saturated slabs with white text. Use
 `LiteweightTheme.setFill(for:)` once it exists (backlog B4).
+
+### 3.5 Muscle group colors (build 110, owner's pick "C")
+
+One color per muscle group, the same everywhere the group appears. Values live in
+`LiteweightPalette.muscle(_:)`; screens call `LiteweightTheme.muscle(group)` and
+`LiteweightTheme.muscleContainer(group)` (the color at 0.22, or `field` for groups without a color).
+They passed the dataviz validator (color-blind separation, contrast) on light and dark surfaces.
+
+| Group (`Exercise.muscleGroup`) | Color |
+| --- | --- |
+| legs | `#22A99A` teal |
+| chest | `#E8524A` red |
+| back | `#6C69F0` indigo |
+| shoulders | `#CF7C0C` amber |
+| arms | `#B064E0` violet |
+| abdominals ("Core") | `#7F9E22` olive |
+
+Where it goes: `LiteweightMuscleChip` (soft fill, primary text, optional rest detail with an amber or
+green status dot), `LiteweightMuscleTile` (the leading tile on History, Last Workout and preview rows,
+with the group's initial; Core shows "Co"), Muscle Focus bars, trained calendar days (Home and the full
+calendar), and the Most Rested card's background tint. Numbers stay neutral; never put muscle colors
+on metric values or body text.
 
 ### 3.4 Muscle map colors
 
@@ -170,7 +193,7 @@ default "Large" content size.
 
 | Style | pt / weight | Used for |
 | --- | --- | --- |
-| `.largeTitle.bold()` | 34 bold | Root tab titles (Home, History, Workout, Exercises, Settings) |
+| `.largeTitle.bold()` | 34 bold | Root tab titles (Home, History, Workout, Exercises, Settings). On iOS 26, Home, Workout and Settings draw it with `liteweightTabTitle`: beside the toolbar buttons, fading out on scroll with no bar band; search tabs keep the system title |
 | `.title.bold()` | 28 bold | Hero headers (finish screen workout name, exercise detail title) |
 | `.title2` | 22 | Big standalone numbers (`liteweightMetric(.title2)`) |
 | `.title3.weight(.semibold)` | 20 semibold | Card titles inside screens ("Session", "How hard was it?", "Target") |
@@ -388,6 +411,7 @@ The approved local package lives at `Packages/MuscleMap` (1.6.4, MIT; provenance
 `LITEWEIGHT_CHANGES.md`). `MuscleHitTester.muscle(at:in:gender:side:)` exposes the renderer's existing
 hit testing for the app's hold-gated overlay. Do not duplicate the anatomical paths.
 - **Live workout:** a 54 pt tall pair, not interactive (`allowsHitTesting(false)`).
+- **History rows:** a 58 pt pair, not interactive, muscles in their group colors (§3.5).
 - **Exercise detail:** a pair about 190 pt tall that is interactive (press-and-hold tooltip,
   §9.8).
 - Map names with `liteweightMapMuscle(_:)`. Never hand-draw bodies.
@@ -480,6 +504,14 @@ the target, and the tooltip sits above the touch point, clamped inside the card.
   that then becomes a drag, never an always-on `DragGesture(minimumDistance: 0)`.
 - **Never** a sheet or modal.
 
+### 9.8.1 Swipe actions and Undo (History, saved workouts)
+History rows swipe right to **Repeat** (accent) and left to **Delete** (full swipe) or **Share**.
+Delete has no dialog: the row hides at once and a `LiteweightToast` with **Undo** shows for 5 s
+(10 s with VoiceOver). The workout, and liteweight's matching Apple Health workout, are deleted when
+the toast expires, so Undo needs no restore. Long-press shows a preview (tile, metric line, exercises
+with set counts) with Repeat, Repeat with Blank Sets, Share and Delete. Saved workouts swipe right to
+Start and left to Delete or Edit. A toast with an action takes touches on its own capsule only.
+
 ### 9.9 Swipe to delete (custom rows)
 The row slides left and a **separate** red capsule appears in the space it leaves, with an
 **8 pt gap** between the row's trailing edge and the action. The action never sits under the
@@ -546,8 +578,9 @@ without a spatial animation.
 | Complete a set | Fill sweep (§8.3), check bounce plus `.symbolEffect(.replace)`, success haptic and `setComplete` sound (`setRecord` for a PR) |
 | Log Set (focused editor) | Haptic on tap. The editor closes into its row (`collapse`) while the row still looks unlogged; after 340 ms the fill, badge and check fade in (`reveal`, no sweep); RPE opens as the fade ends. Without an RPE prompt the logger then moves to the next set |
 | Next set becomes current | The focused editor expands from the compact row (`collapse`). The previous card collapses into its completed row |
-| Counters | `.contentTransition(.numericText())` plus `snappy` |
+| Counters | `.contentTransition(.numericText())` plus `snappy`. `LiteweightMetricValue` and `LiteweightWorkoutMetricLine` roll on their own, so any number built from them rolls on a value or unit change; Reduce Motion fades |
 | Elapsed clocks | Tick without animation. A spring every second kept the logger redrawing about 85% of the time while idle |
+| Watch back button beside the vitals | Swiping to the controls page slides the back button in from the leading edge and pushes the vitals right (`snappy`); swiping away reverses it. Where only heart rate fits, energy fades while travelling with it |
 | Rest starts | The strip inserts under the triggering set with `.move(edge: .top).combined(with: .opacity)` and `collapse` |
 | Rest ticks | The ring drains continuously and the digits roll down (`numericText(countsDown: true)`) |
 | Rest ends | The ring pulses once (scale 1.12), the strip folds away, plus a light-impact haptic and the `restComplete` sound |
@@ -555,6 +588,7 @@ without a spatial animation.
 | Delete set | The row slides out, then collapses (`collapse`) with an opacity plus scale 0.96 transition |
 | Header collapse | The summary is swapped for the glass pill (`collapse`), and labels never squash |
 | Open or minimize the workout | Zoom from the tab accessory (`matchedTransitionSource` plus `.navigationTransition(.zoom)`); fade under Reduce Motion |
+| Open a row's page | The tapped row zooms into its page and shrinks back on close (`liteweightZoomSource` / `liteweightZoomDestination`, iOS 18+): History, Last Workout, saved workouts, Exercises, Home's recent workouts and records. Older iOS and Reduce Motion push |
 | Finish screen | Metrics rise in staggered (`liteweightStaggeredEntrance`), session bars grow per exercise, trophies bounce |
 | Effort and RPE | Bars fill while dragging, with a selection haptic per step |
 | Charts | Grow on first appearance; cross-fade when the metric or range changes |
@@ -686,13 +720,18 @@ no Core Data change. Default cards, in order:
 4. Recent Training rows: the title with the date at the trailing edge, then the shared
    `LiteweightWorkoutMetricLine` (duration, sets, volume).
 5. **Muscle Focus**: average sets a week per tracked group over the last four weeks, ranked,
-   as `metricSets` bars over a shaded target band (default 10–20, set in Customize Home).
-   Header "N of 6 groups reach 10 sets a week"; the footer names the lowest group. Every
+   as bars in each group's muscle color (§3.5) over a shaded target band (default 10–20, set in
+   Customize Home); the legend only explains the band. Header "N of 6 groups reach 10 sets a
+   week"; the footer names the lowest group in one line. Every
    row lays out its own name, so nothing collides at large text sizes.
 6. Body and Pinned Charts use headline row names and the shared metric/unit
    hierarchy. Recent dates use subheadline metadata. Body rows use native List spacing and
-   reflow vertically at accessibility sizes; never add a second minimum row height. Pinned
-   chart titles use headline and chart axes use footnote.
+   reflow vertically at accessibility sizes; never add a second minimum row height. Body's
+   headline and 30-day chart carry body weight, so its rows list only the other measurements
+   (body fat, waist). Pinned chart titles use headline and chart axes use footnote. Pinned
+   Charts stays off Home until something is pinned; pinning is the "Pin to Home" button on an
+   exercise's chart (1RM and Volume; top weight has no Home chart). The Home calendar's trained
+   days take their main muscle's color.
 7. A **Customize Home** button ends the list. The sheet is always in edit mode: "On Home"
    lists the cards with delete and reorder controls, "Add to Home" lists the rest with a
    `success` plus, then the weekly set target steppers and Restore Default Layout.
@@ -700,8 +739,13 @@ no Core Data change. Default cards, in order:
 ### 15.3 History (`liteweight/UI/History/HistoryView.swift`)
 Board: *Round 3 → History*, revised 2026-10-26. A segmented control (Workouts · Insights).
 The cached Exercise Progress index lives in the toolbar's options menu. Workouts are
-grouped by week, with headers showing the count in accent and volume in green. Each row has the
-title, PR and RPE badges, "date · muscles" metadata and the metric line. The detail view has Repeat in its toolbar menu.
+grouped by week, with headers showing the count in accent and volume in green. Each row (build 110)
+leads with a muscle tile in its main group's color, then the title and PR trophy, the
+"date · time · sets · volume" line, and on the trailing side a 58 pt front-and-back muscle figure
+(the owner's request in place of the group chips): each trained muscle in its group's color, primary
+movers solid and helpers at 0.42. Accessibility sizes show the group chips instead of the figure,
+and the exercise names show when no exercise has a colored group. Swipes, Undo and the long-press preview follow §9.8.1.
+The detail view has Repeat in its toolbar menu.
 
 Chart controls and their chart belong in one continuous grouped row: metric selector above,
 chart and headline together, and a labelled Period menu below. Never insert a transparent
@@ -713,6 +757,10 @@ Home, History and calendar summaries read the shared `TrainingHistoryStore` back
 snapshot. Never traverse all workout relationships or search the catalog from a view body.
 Use `ExerciseStore.exercisesByUUID` for catalog lookups. Snapshot refreshes follow history
 saves, day/time-zone changes and app activation; changing a filter does not rescan Core Data.
+Since build 110 the store starts from `TrainingHistoryCache` (a versioned JSON file in Application
+Support, excluded from backup): up to 256 KB loads before the first frame, larger files off the main
+thread. The cache is discarded if its version or store differs or any workout in it is gone, and
+the first refresh replaces it. Exercise bests aren't cached.
 
 ### 15.4 Workout tab (`liteweight/UI/Workout/StartWorkoutView.swift`)
 Quick Start, Recent Workouts with one-tap Repeat, and Saved Workouts. Recent rows put the title,
@@ -720,6 +768,13 @@ metadata and metric line on the left and a bold text Repeat button, with the com
 rounded-rectangle border shape, on the right. Tapping the row opens details; holding it opens Save
 as Workout, Repeat with Blank Sets and View Details. Save as Workout opens an isolated, prefilled
 editor; Cancel preserves the source and Create saves a new copy.
+
+Build 110: one main action per page. When the Most Rested card shows, it keeps the blue Start and
+the empty-workout card's button becomes a gray glass "Start Empty Workout" of the same height (blue
+again when there's no suggestion). Most Rested's background takes its main muscle's color (§3.5).
+Saved workout rows show each muscle as a chip with its rest ("Chest today" with an amber dot,
+"Back 3d" with green), least rested first; the metadata line is just exercises and last done.
+Start and Repeat use the regular bordered height. Last Workout leads with a muscle tile.
 
 ### 15.5 Exercises (`liteweight/UI/Exercises/*`)
 - **Library** (`ExerciseMuscleGroupsView`): search sits under the title and moves into the
@@ -752,8 +807,11 @@ Top to bottom:
    between exercises and a 1 pt gap between sets. It stays visible even when the header collapses.
    It belongs to the same `.bar` header surface as the toolbar and expanded metrics. Use fill only:
    no segment outline, separate panel fill or divider rules.
-3. **Session header** (expanded by default, controlled by the user): the watch-sync banner (dot, status text such as
-   "Saved on iPhone · Install liteweight on Watch", device glyph, collapse chevron), then a summary row
+3. **Session header** (expanded by default, controlled by the user): the line above the summary shows
+   only live heart rate and energy while the Watch is in reach, or the out-of-sync warning once this
+   workout's phone changes have waited 30 s for a Watch that started it or edited it
+   (`hasStalledWatchChanges(for:)`). Otherwise a small `applewatch` symbol in the summary shows the
+   connection (`applewatch.slash` in `warning` when the Watch app isn't installed). Then a summary row
    with **Duration** (`metricTime`, tap to edit), **Volume** (`metricVolume` plus unit),
    **Sets** (`metricSets`) and the **live muscle map** (54 pt front and back, completed sets
    only). Give duration/volume explicit columns with 12 pt gutters; sets use a narrower
@@ -827,6 +885,12 @@ switch beside its wrapping title. `SettingsActionLabel` adds a trailing action s
 replaced by a spinner and "Preparing…" while working. `SettingsStatusBadge` pairs a status word
 with a green check or red exclamation; `SettingsConnectionHeader` combines the large connection
 icon, name, badge and primary button on Health and Watch pages. Keep one short footer per group.
+
+Connection pages state status in the header: a badge plus one detail line
+(`SettingsConnectionHeader(detail:)`), e.g. "Ready · Paired and installed". Check rows (Paired,
+Installed) appear only when one fails, with a footer saying what to do. Watch Refresh is a toolbar
+button. About has one unheaded Links group (Source Code, Built on Iron, Licenses), and the top
+liteweight card is the only way into About. Footers are one short line, or none where the row says it.
 
 "Import & Export" holds the Hevy CSV import, backups and exports.
 The "Imported Data" section follows Import: Hevy count/date range, "Replace with New Export…",
@@ -1090,7 +1154,7 @@ A lane that took "native first" literally removed Log Set, gave vitals their own
 
 ### 22.1 Fill the screen; design boldly
 - The first screen of every Watch page uses the whole display: no empty bands and no floating controls.
-- Primary button: **44 pt** tall at width < 180 pt, **50–52 pt** larger. Bottom clearance **6 pt** at width < 180 pt, **10 pt** larger, **16 pt** where page dots show. `WatchContentList` uses 8/14 pt from the screen edge, and Home adds 6 pt to that; a list on a dotted page passes `clearsPageDots: true`.
+- Primary button: **44 pt** tall at width < 180 pt, **50–52 pt** larger. Bottom clearance **6 pt** at width < 180 pt, **10 pt** larger, **16 pt** where page dots show. `WatchContentList` leaves room under the last row for the display corners, by screen width: 8 pt below 176 pt, 14 pt below 185 pt, 18 pt below 205 pt and 28 pt on Ultra-size screens (display radii 28–57 pt from the simulator device profiles; Ultra showed clipped platter corners at 14 pt). Home adds 6 pt to that; a list on a dotted page passes `clearsPageDots: true`.
 - Size hero values from the height **left over** after fixed rows; never use a fixed cap, except the value-tile rule above.
 - Graphs and scales are bands at least **16 pt** tall (40 mm) and about **30 pt** (larger), never slivers.
 - Prefer one bold element over several timid ones. When unsure, make the main thing bigger, not smaller.
@@ -1126,3 +1190,55 @@ Fixtures are gated by `DEBUG && targetEnvironment(simulator)` in `LiteweightApp.
 
 Routes: `home`, `active`, `now`, `controls`, `exercises`, `exercise`, `set`, `options`, `catalog`, `tracking-type`, `set-type`, `superset`, `notes`, `plates`, `rest`, `rest-picker`, `warmup`, `rpe`, `rpe-manual`, `rpe-auto`, `effort`, `finish`, `discard`, `saved`, `saved-detail`, `saved-editor`, `history`, `history-detail`, `summary`, `empty`, `complete`, `after-log`, `after-rest`, `after-final-rest`.
 
+
+## 23. Welcome and tips (approved 2026-11-08, build 110)
+
+Approved on the Welcome Guide review page (claude.ai/artifact/ViXqmAnnwVropAvzdfteUd), every part.
+Code: `liteweight/UI/Welcome/` (`WelcomeGuide.swift`, `WelcomeGuideView.swift`, `LiteweightTips.swift`)
+and `liteweight Watch Extension/UI/WatchTips.swift`.
+
+**Welcome.** A full-screen cover from `ContentView`, one page at a time in a `NavigationStack`.
+Page 1 has only Continue; every later page has Back and Skip (top right). Pages scroll at large
+text and keep their actions pinned at the bottom. Large bold title, `body` subtitle in
+`secondaryText`, one blue capsule primary button per page, plain secondary ("Not Now").
+1. **Welcome:** app tile and four feature rows (accent SF Symbols, headline plus subheadline).
+2. **Kilograms or pounds?** Two selectable cards writing `SettingsStore.weightUnit` (accent
+   border and check when selected); it starts on the current unit, which defaults from the region.
+3. **How do you want to start?** One card of rows: Use a starter plan, Import from Hevy, Restore
+   a backup, Start from scratch. Picked files open after the welcome closes, through the same
+   `.ImportHevyCSV` / `.RestoreFromBackup` paths a file opened from Files uses.
+4. **Pick a plan** (only after "Use a starter plan"): Full Body, Upper / Lower, Push / Pull /
+   Legs, with muscle chips (§3.5); the selected card lists its workouts. "Add <plan>" creates
+   one saved workout per day in the first saved-workout folder, 3 sets of 8–12 (holds 3 × 45 s).
+5. **Apple Health:** the same request as Settings › Apple Health; Not Now moves on. Skipped
+   when Health is unavailable, and for returning people when it's already connected.
+6. **Apple Watch:** only when a Watch is paired; says how to install when the app isn't on it.
+   "Start Training" closes the welcome on the Workout tab.
+
+New installs see every page. People who already have a completed workout see it once after
+updating, without pages 2–4. Completion is `welcome.completedVersion` in `UserDefaults`.
+Settings › Help › Welcome Guide replays every page. The welcome never shows over an open
+workout, under `-liteweightInspect*`, `-liteweightSeed*`, `-liteweightDemo*` or
+`-liteweightSkipWelcome`, or in the unit-test host; `-liteweightShowWelcome` forces it (DEBUG).
+
+**Tips.** Standard TipKit tips, shown once beside what they explain, closed with ✕ or by using
+the feature (`invalidate(reason: .actionPerformed)`), at most three displays each. One tip per
+screen. No tip opens while the welcome is up (`LiteweightTipState.isReady`). IDs carry
+`tips.generation`; Settings › Help › Show Tips Again bumps it, so every tip returns the next
+time its screen appears.
+Every tip sits in the layout, never in a bubble: on iOS 27 a popover tip sized itself before its
+text and clipped the message, and a bubble anchored in a List row sometimes never presented.
+Inside a card use `LiteweightInlineTip` in its own zero-spacing stack; in a List use
+`LiteweightTipSection`, added only while `liteweightTracksTip` (on the List) says the tip is due.
+- T1 inside the Most Rested card, pointing down at Start (waits for history). T2 above the live
+  logger's Log Set, pointing down at it.
+- T3 under the rest strip.
+- T4 a section above History's weeks once there are two workouts. T5 a section at the top of Home
+  after the first finished workout. T6 under an exercise chart's metric and Pin to Home row.
+- T7 Watch: "Turn the Digital Crown" as a short sheet over the first set, once. watchOS has no
+  tip bubbles and the Now page has no spare room. Watch tips are per device; Show Tips Again
+  resets the iPhone's.
+
+Use `liteweightPopoverTip(_:arrowEdge:)` for bubbles and `LiteweightInlineTip` for tips in the
+layout (it takes no space while hidden). Tips never configure in screenshot or test runs;
+`-liteweightShowTips` forces them on (DEBUG).

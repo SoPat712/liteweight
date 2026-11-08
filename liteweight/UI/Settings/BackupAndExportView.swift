@@ -55,7 +55,7 @@ struct BackupAndExportView: View {
         if case .unavailable(let message) = backupStore.loadState {
             return message
         }
-        return "Automatic backups are attempted when liteweight closes, keeping the latest backup each day in iCloud Drive."
+        return "When liteweight closes, it saves that day's backup to iCloud Drive."
     }
 
     var body: some View {

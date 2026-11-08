@@ -6,7 +6,57 @@ Builds are installed with `~/.local/share/liteweight/tools/install-NN.sh`. Lane 
 
 **Checkpoint commit `1607275`** (2026-11-06) contains every entry below dated up to and including build 97. Those entries can't be reverted one by one with git. Use each entry's "Roll back" steps instead. Entries added after this checkpoint each get their own commit.
 
+**Builds 107–111** (2026-11-08) landed in one commit, because they changed the same files. Reverting that commit undoes all five; to undo one entry, change its parts back by hand.
+
 ---
+
+## 2026-11-08
+
+### Muscle figure on History rows; every tip inline (build 111)
+- **Asked** (relayed from the Aloud session, 12:56): "in history maybe instead of legs arms chest we should show a little muscle diagram?" and "the tip text is kinda broken and disjointed in places! Like the pencil edit button tip like goes inside of the button!" His screenshot showed the History tip bubble clipping its message.
+- **Decided:**
+  - History rows replace the group chips with a front-and-back muscle figure on the trailing side. Each muscle takes its group's color (solid for primary movers, faint for helpers), so the figure matches the tile and the calendar. Accessibility sizes keep the chips, which stay readable.
+  - Every TipKit bubble became an inline tip: History and Home get a tip section at the top of the list, and Log Set and Pin to Home get a tip in the layout beside the control. The bubble helper `liteweightPopoverTip` is gone.
+- **Roll back:** revert this entry's commit.
+
+### Welcome guide and first-use tips (build 110)
+- **Asked:** "Can we also please add a tutorial/guide to the beginning of the app? Guiding the user through its usage?" The owner approved every part of the proposal (claude.ai/artifact/ViXqmAnnwVropAvzdfteUd), G1–G8 and T1–T7, with no notes.
+- **Decided (details the proposal left open):**
+  - Existing users are anyone with a completed workout. They see the welcome once after updating, with Welcome, Apple Health (only if not yet connected) and Apple Watch (only if paired).
+  - Starter plans use these catalog exercises, looked up by their stable IDs because the store shows display titles that can differ (one that doesn't resolve is skipped):
+    - Full Body A: Squat: Barbell, Bench Press: Barbell, Row: Barbell (Bent Over), Plank.
+    - Full Body B: Deadlift: Barbell, Overhead Press: Barbell, Pulldown (Wide Grip), Lunges: Dumbbell.
+    - Upper / Lower and Push / Pull / Legs are listed in `StarterPlan.all`.
+    - Sets are 3 × 8–12; Plank is 3 × 45 s.
+  - Hevy and backup files picked during the welcome open after it closes, through the existing import and restore paths, so their progress and confirmation sheets aren't hidden.
+  - T1 (Most Rested) is inline inside the card, pointing down at Start, because a bubble anchored in that List row never presented in the simulator.
+  - T3 (rest) is inline under the rest strip instead of a bubble, because the RPE sheet can be up right after Log Set. T7 (Watch) is a one-time sheet, because watchOS has no tip bubbles and the Now page has no room.
+  - The Watch keeps its own tip record. Show Tips Again resets the iPhone's tips only.
+- **Roll back:** revert this entry's commit; remove the `welcome.completedVersion` and `tips.generation` defaults if needed.
+
+### Polish Review: muscle colors, zoom, swipes, one main button, quieter Settings (build 110)
+- **Asked:** the owner approved every fix on the Polish Review page (claude.ai/artifact/FKRMD8i8i7rXcASP45XHdc) and picked color option C, muscle colors, with no notes.
+- **Decided (details the review left open):**
+  - Muscle palette in `LiteweightPalette.muscle(_:)` (DESIGN_SYSTEM §3.5). It reverses the §3.2 rule that muscles are never color-coded. Chips and tiles use Home's names (abdominals is "Core"); tiles show the initial, and Core shows "Co" because Chest has "C".
+  - History rows trade the exercise-names line for up to three muscle chips. The names come back when no exercise has a colored group.
+  - History Delete has no confirmation dialog. The row hides and an Undo toast shows for 5 s; the workout and its Apple Health copy are deleted when the toast expires. `LiteweightToast` gained an optional action, and only an action toast takes touches, only on its capsule.
+  - "Pin to Home" sits on an exercise's chart for 1RM and Volume. Top weight has no Home chart type, so it gets no pin.
+  - The empty-workout button goes gray only while Most Rested is showing.
+  - Rolling numbers come from `LiteweightMetricValue` and `LiteweightWorkoutMetricLine`, so everything built on them rolls. No tick haptic for numbers that change without a touch.
+  - Logger (L1): the "Watch offline · changes queued" line shows only after this workout's phone changes have waited 30 s for a Watch that's part of the workout. Otherwise a small Watch symbol in the summary shows the connection. Live heart rate and energy still show on that line while the Watch is in reach.
+  - A finished workout (D1) uses the logger's own summary components (`WorkoutSummaryMetric`, `WorkoutSummaryMuscleFigure`).
+  - Launch (P4): Home, History and the Workout tab start from `TrainingHistoryCache`, the last history read saved as versioned JSON. It's discarded if any workout in it is gone, and exercise bests wait for the first refresh. About 0.4 KB per workout.
+  - Settings (S1–S4): connection pages show a badge plus one detail line (`SettingsConnectionHeader(detail:)`). Check rows appear only when something fails, with a footer saying what to do. Watch Refresh is a toolbar button, and Watch reachability (Standby) no longer shows on the page. The Health badge names Needs Review and Unavailable. About has one unheaded Links group. Support no longer repeats About. Settings and plate calculator footers are one short line or none.
+- **Roll back:** revert this entry's commit.
+
+### Tab titles scroll away; search bars sit on a translucent edge; Units on the Settings list (build 109)
+- **Asked:** "no need to keep header, or header background, right? cant we just have pencil icon for edit, and search bar with translucent back?" and, of the one-row Units page, "too small! … things like that shouldn't be there?"
+- **Decided:**
+  - Home, Workout and Settings use `liteweightTabTitle` (iOS 26+): the large title sits in the toolbar row beside the buttons and fades out once the list scrolls, so only the floating buttons stay. No inline title or bar band. iOS 17–25 keep the inline-large system title.
+  - Home's Edit is a pencil glass button.
+  - History, Exercises and the add-exercise picker go back to the soft (translucent) scroll edge under pinned search. This reverses the build 98 entry below.
+  - The kg | lb switch moved onto the Settings list as a full-size row ("Weight Unit"); the Units page is gone. Appearance keeps its page because it has a real preview picker.
+- **Roll back:** revert this entry's commit.
 
 ## 2026-11-07
 
@@ -40,7 +90,7 @@ Builds are installed with `~/.local/share/liteweight/tools/install-NN.sh`. Lane 
 - **Decided:** both exercise pages copy the workout page's behavior through one shared modifier, `ListHeaderScrollTitleModifier` in `SwiftUISupport.swift`. The big header is unchanged; the bar shows a one-line copy once it's gone. Before iOS 18 the bar title just stays visible.
 - **Roll back:** `git revert` this entry's commit (it touches only ExerciseDetailView, WorkoutExerciseDetailView and SwiftUISupport).
 
-### Pinned search uses a hard top scroll edge (build 98)
+### Pinned search uses a hard top scroll edge (build 98; reversed in build 109)
 - **Found in the overnight sweep:** with search pinned, scrolled rows read through the field and bar on Exercises, History and the add-exercise picker, in light and dark.
 - **Decided:**
   - On iOS 26 and later, the lists use `.scrollEdgeEffectStyle(.hard, for: .top)`; iOS 16–25 get a visible navigation bar background.
