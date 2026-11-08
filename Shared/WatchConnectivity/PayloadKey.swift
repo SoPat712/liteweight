@@ -259,13 +259,26 @@ enum WatchWorkoutPersistence {
             case .replace(let snapshot):
                 candidate.snapshot = snapshot
             }
-            let event = makeEvent(candidate.nextSequence, candidate.snapshot)
-            candidate.outbox.append(event)
+            let event = append(makeEvent(candidate.nextSequence, candidate.snapshot), to: &candidate)
             if event.kind == .workoutFinished || event.kind == .workoutDiscarded {
                 markTerminal(event.workoutID, in: &candidate)
             }
             return event
         }
+    }
+
+    /// Queues an event, folding a run of value edits (a scroll-wheel burst)
+    /// into one so the phone applies the final value once. The Watch only ever
+    /// transmits the outbox head, so an edit queued behind it has never left the
+    /// Watch and is safe to replace. Returns the event as queued.
+    @discardableResult
+    static func append(_ event: WatchWorkoutEvent, to state: inout WatchWorkoutPersistedState) -> WatchWorkoutEvent {
+        if state.outbox.count > 1, let last = state.outbox.last, let merged = event.absorbing(last) {
+            state.outbox[state.outbox.count - 1] = merged
+            return merged
+        }
+        state.outbox.append(event)
+        return event
     }
 
     static func incrementRevision(_ snapshot: inout WatchWorkoutSnapshot) throws {
@@ -790,6 +803,32 @@ struct WatchWorkoutEvent: Codable, Identifiable, Equatable {
         self.removedExerciseIDs = removedExerciseIDs
         self.removedSetIDs = removedSetIDs
         self.fieldChanges = fieldChanges
+    }
+}
+
+extension WatchWorkoutEvent {
+    /// A masked snapshot edit that only changes values: nothing added, removed
+    /// or reordered.
+    var isValueEdit: Bool {
+        guard kind == .workoutStructureUpdated, snapshot != nil, let fields = fieldChanges else { return false }
+        return (removedExerciseIDs ?? []).isEmpty && (removedSetIDs ?? []).isEmpty
+            && (fields.addedExerciseIDs ?? []).isEmpty && (fields.addedSetIDs ?? []).isEmpty
+            && !fields.exerciseOrder && fields.setOrder.isEmpty
+    }
+
+    /// This edit with an earlier queued value edit folded in. The newer snapshot
+    /// already holds both edits, so only the field masks need merging.
+    func absorbing(_ earlier: WatchWorkoutEvent) -> WatchWorkoutEvent? {
+        guard isValueEdit, earlier.isValueEdit, earlier.workoutID == workoutID,
+              earlier.sequence < sequence, earlier.weightUnit == weightUnit,
+              var fields = fieldChanges, let older = earlier.fieldChanges else { return nil }
+        func union(_ old: [String], _ new: [String]) -> [String] { old + new.filter { !old.contains($0) } }
+        fields.workout = union(older.workout, fields.workout)
+        fields.exercises.merge(older.exercises) { new, old in union(old, new) }
+        fields.sets.merge(older.sets) { new, old in union(old, new) }
+        var merged = self
+        merged.fieldChanges = fields
+        return merged
     }
 }
 

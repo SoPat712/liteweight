@@ -203,8 +203,8 @@ final class WatchWorkoutStore {
             guard candidate.nextSequence < Int64.max else { throw WatchWorkoutPersistenceError.sequenceOverflow }
             candidate.nextSequence += 1
             if case .replace(let snapshot) = snapshotChange { candidate.snapshot = snapshot }
-            let event = makeEvent(candidate.nextSequence, candidate.snapshot)
-            candidate.outbox.append(event)
+            let event = WatchWorkoutPersistence.append(makeEvent(candidate.nextSequence, candidate.snapshot),
+                                                       to: &candidate)
             if event.kind == .workoutFinished || event.kind == .workoutDiscarded {
                 WatchWorkoutPersistence.markTerminal(event.workoutID, in: &candidate)
             }

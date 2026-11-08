@@ -1175,6 +1175,49 @@ final class WatchWorkoutPersistenceTests: XCTestCase {
         XCTAssertTrue(original.outbox.isEmpty)
     }
 
+    private func valueEdit(_ base: WatchWorkoutSnapshot, sequence: Int64, weight: Double,
+                           fields: [String] = ["weight"], addedSet: UUID? = nil) -> WatchWorkoutEvent {
+        var next = base
+        next.exercises[0].sets[0].weight = weight
+        let setID = base.exercises[0].sets[0].id
+        return WatchWorkoutEvent(
+            workoutID: base.workoutID, sequence: sequence, kind: .workoutStructureUpdated,
+            snapshot: next,
+            fieldChanges: WatchWorkoutFieldChanges(sets: [setID.uuidString: fields],
+                                                   addedSetIDs: addedSet.map { [$0] } ?? []))
+    }
+
+    func testScrollWheelBurstFoldsBehindTheSendingEdit() {
+        let base = snapshot()
+        let setKey = base.exercises[0].sets[0].id.uuidString
+        var state = WatchWorkoutPersistedState(snapshot: base)
+        let sending = valueEdit(base, sequence: 1, weight: 40.5)
+        WatchWorkoutPersistence.append(sending, to: &state)
+        WatchWorkoutPersistence.append(valueEdit(base, sequence: 2, weight: 41), to: &state)
+        WatchWorkoutPersistence.append(valueEdit(base, sequence: 3, weight: 41.5, fields: ["reps"]), to: &state)
+        let last = valueEdit(base, sequence: 4, weight: 42)
+        let queued = WatchWorkoutPersistence.append(last, to: &state)
+
+        XCTAssertEqual(state.outbox.map(\.id), [sending.id, last.id], "The edit in flight must never change")
+        XCTAssertEqual(queued, state.outbox.last)
+        XCTAssertEqual(queued.sequence, 4)
+        XCTAssertEqual(queued.snapshot?.exercises[0].sets[0].weight, 42)
+        XCTAssertEqual(queued.fieldChanges?.sets[setKey], ["weight", "reps"])
+    }
+
+    func testStructuralAndCompletionEditsAreNeverFolded() {
+        let base = snapshot()
+        var state = WatchWorkoutPersistedState(snapshot: base)
+        WatchWorkoutPersistence.append(valueEdit(base, sequence: 1, weight: 40.5), to: &state)
+        WatchWorkoutPersistence.append(valueEdit(base, sequence: 2, weight: 41), to: &state)
+        WatchWorkoutPersistence.append(valueEdit(base, sequence: 3, weight: 41.5, addedSet: UUID()), to: &state)
+        WatchWorkoutPersistence.append(valueEdit(base, sequence: 4, weight: 42), to: &state)
+        WatchWorkoutPersistence.append(event(workoutID: base.workoutID, sequence: 5, kind: .setCompletionChanged), to: &state)
+        WatchWorkoutPersistence.append(valueEdit(base, sequence: 6, weight: 42.5), to: &state)
+
+        XCTAssertEqual(state.outbox.map(\.sequence), [1, 2, 3, 4, 5, 6])
+    }
+
     func testRevisionOverflowThrowsWithoutWrapping() {
         var currentSnapshot = snapshot()
         currentSnapshot.revision = .max
