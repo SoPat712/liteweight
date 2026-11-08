@@ -219,19 +219,32 @@ enum LiteweightTheme {
 /// Motion uses springs for state changes and a decelerating curve for travel.
 /// Every spatial animation remains defeasible by Reduce Motion.
 enum LiteweightMotion {
+    #if DEBUG
+    /// `-liteweightSlowMotion` plays every token, and the waits timed against them,
+    /// five times slower so a screen recording can show a sequence frame by frame.
+    static let debugScale: Double = ProcessInfo.processInfo.arguments.contains("-liteweightSlowMotion") ? 5 : 1
+    #else
+    static let debugScale: Double = 1
+    #endif
+
     /// Direct manipulation and state changes the finger caused: set complete,
     /// header collapse, filter selection.
-    static let snappy = Animation.spring(response: 0.32, dampingFraction: 0.82)
+    static let snappy = Animation.spring(response: 0.32, dampingFraction: 0.82).speed(1 / debugScale)
     /// Layout changes that move a large surface, such as the logger summary
     /// collapsing into the floating pill.
-    static let collapse = Animation.spring(response: 0.42, dampingFraction: 0.86)
+    static let collapse = Animation.spring(response: 0.42, dampingFraction: 0.86).speed(1 / debugScale)
     /// Guided travel between exercises: move promptly, then settle without bounce.
-    static let focusScroll = Animation.timingCurve(0.16, 1, 0.3, 1, duration: 0.65)
+    static let focusScroll = Animation.timingCurve(0.16, 1, 0.3, 1, duration: 0.65).speed(1 / debugScale)
     /// Non-spatial changes where a spring would look decorative.
-    static let fade = Animation.easeInOut(duration: 0.18)
+    static let fade = Animation.easeInOut(duration: 0.18).speed(1 / debugScale)
     /// A state that arrives once a layout change has finished, such as a
     /// logged set turning blue after its editor has closed.
-    static let reveal = Animation.easeInOut(duration: 0.3)
+    static let reveal = Animation.easeInOut(duration: 0.3).speed(1 / debugScale)
+
+    /// A wait timed against these tokens, scaled with them.
+    static func duration(milliseconds: Double) -> Duration {
+        .milliseconds(Int(milliseconds * debugScale))
+    }
 
     /// Reduce Motion swaps springs for a short cross-fade rather than removing
     /// feedback entirely, so state changes are still perceivable.

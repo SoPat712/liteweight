@@ -242,11 +242,11 @@ final class LoggerAssistTests: XCTestCase {
         ])[1].repetitions, 9)
     }
 
-    func testWorkingTargetWinsAfterUntargetedWarmup() {
+    func testWorkingTargetAfterWarmupTakesNoWarmupWeight() {
         XCTAssertEqual(filled([
             .init(values: .init(weight: 45, repetitions: 10), isCompleted: true, isWarmup: true),
             .init(targets: .init(repetitions: 12))
-        ])[1], .init(weight: 45, repetitions: 12))
+        ])[1], .init(repetitions: 12))
     }
 
     func testHistoryDoesNotBeatRepeatedTargets() {
@@ -275,10 +275,33 @@ final class LoggerAssistTests: XCTestCase {
         ])
     }
 
-    func testCurrentWorkoutUsesImmediatePredecessorAcrossSetKinds() {
+    func testWorkingSetAfterWarmupsFollowsWorkingSetsNotWarmups() {
         XCTAssertEqual(filled([
             .init(values: .init(weight: 40, repetitions: 10), isCompleted: true, isWarmup: true), .init()
-        ], previous: [.init(values: .init(weight: 140, repetitions: 5))])[1], .init(weight: 40, repetitions: 10))
+        ], previous: [.init(values: .init(weight: 140, repetitions: 5))])[1], .init(weight: 140, repetitions: 5))
+    }
+
+    func testWarmupAfterWorkingSetsFollowsWarmupsNotWorkingSets() {
+        let current: [Input] = [
+            .init(values: .init(weight: 50, repetitions: 10), isCompleted: true, isWarmup: true),
+            .init(values: .init(weight: 140, repetitions: 5), isCompleted: true),
+            .init(isWarmup: true)
+        ]
+        XCTAssertEqual(filled(current)[2], .init(weight: 50, repetitions: 10))
+        // With no warm-up this workout, last time's first warm-up, never this workout's working set.
+        XCTAssertEqual(filled([.init(values: .init(weight: 140, repetitions: 5), isCompleted: true), .init(isWarmup: true)],
+                              previous: [.init(values: .init(weight: 40, repetitions: 8), isWarmup: true)])[1],
+                       .init(weight: 40, repetitions: 8))
+        XCTAssertEqual(filled([.init(values: .init(weight: 140, repetitions: 5), isCompleted: true), .init(isWarmup: true)])[1],
+                       Values())
+    }
+
+    func testWorkingSetsChainAcrossAWarmupBetweenThem() {
+        XCTAssertEqual(filled([
+            .init(values: .init(weight: 140, repetitions: 5), isCompleted: true),
+            .init(values: .init(weight: 60, repetitions: 10), isCompleted: true, isWarmup: true),
+            .init()
+        ])[2], .init(weight: 140, repetitions: 5))
     }
 
     func testEmptyPredecessorIsNotSkippedForHistory() {

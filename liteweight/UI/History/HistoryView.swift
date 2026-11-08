@@ -9,7 +9,6 @@ import SwiftUI
 import CoreData
 import WorkoutDataKit
 import TipKit
-import MuscleMap
 
 struct HistoryView: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
@@ -352,7 +351,7 @@ private struct WorkoutHistoryRow: View {
             // The figure leads the row in place of the tile: it carries the same colors and
             // shows every muscle. Accessibility sizes keep the tile and the named chips.
             if !groups.isEmpty, !dynamicTypeSize.isAccessibilitySize {
-                HistoryMuscleFigure(session: session)
+                LiteweightMuscleFigure(exerciseIDs: session.exercises.compactMap(\.uuid))
             } else {
                 LiteweightMuscleTile(group: groups.first)
                     .padding(.top, 2)
@@ -395,74 +394,6 @@ private struct WorkoutHistoryRow: View {
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-    }
-}
-
-/// Front and back, each trained muscle in its group's color: primary movers solid,
-/// helpers faint. The owner asked for this in place of the group chips.
-private struct HistoryMuscleFigure: View {
-    @EnvironmentObject private var exerciseStore: ExerciseStore
-    let session: TrainingSessionSnapshot
-
-    static let height: CGFloat = 52
-    /// MuscleMap draws each side in a 727 × 1280 box.
-    static let aspect: CGFloat = 727 / 1280
-
-    private struct Highlights {
-        var primary: [String: [Muscle]] = [:]
-        var secondary: [String: [Muscle]] = [:]
-    }
-
-    private var highlights: Highlights {
-        var result = Highlights()
-        var seen = Set<Muscle>()
-        // A muscle the group table doesn't name takes its exercise's group when it's a primary mover.
-        func add(_ names: [String], fallback: String?, to keyPath: WritableKeyPath<Highlights, [String: [Muscle]]>) {
-            for name in names {
-                guard let muscle = liteweightMapMuscle(name), !seen.contains(muscle),
-                      let group = Exercise.muscleGroup(for: name.lowercased()) ?? fallback,
-                      LiteweightPalette.hasMuscleColor(group) else { continue }
-                seen.insert(muscle)
-                result[keyPath: keyPath][group, default: []].append(muscle)
-            }
-        }
-        let exercises = session.exercises.compactMap { $0.uuid.flatMap { exerciseStore.exercisesByUUID[$0] } }
-        for exercise in exercises { add(exercise.primaryMuscle, fallback: exercise.muscleGroup, to: \.primary) }
-        for exercise in exercises { add(exercise.secondaryMuscle, fallback: nil, to: \.secondary) }
-        return result
-    }
-
-    var body: some View {
-        let highlights = highlights
-        HStack(spacing: 1) {
-            figure(.front, highlights)
-                .frame(width: Self.height * Self.aspect, height: Self.height)
-            figure(.back, highlights)
-                .frame(width: Self.height * Self.aspect, height: Self.height)
-        }
-        .allowsHitTesting(false)
-        .accessibilityHidden(true)
-    }
-
-    private func figure(_ side: BodySide, _ highlights: Highlights) -> some View {
-        let style = BodyViewStyle(
-            defaultFillColor: Color(.tertiaryLabel).opacity(0.35),
-            strokeColor: Color(.separator),
-            strokeWidth: 0.5,
-            selectionColor: LiteweightTheme.accent,
-            selectionStrokeColor: LiteweightTheme.accent,
-            selectionStrokeWidth: 1,
-            headColor: Color(.tertiaryLabel).opacity(0.45),
-            hairColor: Color(.quaternaryLabel)
-        )
-        var view = BodyView(gender: .male, side: side, style: style)
-        for (group, muscles) in highlights.secondary {
-            view = view.highlight(muscles, color: LiteweightTheme.muscle(group), opacity: 0.42)
-        }
-        for (group, muscles) in highlights.primary {
-            view = view.highlight(muscles, color: LiteweightTheme.muscle(group))
-        }
-        return view
     }
 }
 

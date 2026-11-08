@@ -250,6 +250,12 @@ struct CurrentWorkoutView: View {
     @ScaledMetric(relativeTo: .subheadline) private var accessibleSummaryRowHeight: CGFloat = 24
     @ScaledMetric(relativeTo: .subheadline) private var accessibleSyncBannerHeight: CGFloat = 56
     @State private var collapsedSummaryMeasuredHeight: CGFloat = 46
+    /// The summary morphs between the big header and the floating pill.
+    @Namespace private var summaryMorph
+    /// Scrolled away from the top: the summary shows as the pill (iOS 18+).
+    @State private var isScrolledPastSummary = false
+    /// The big summary was asked for while scrolled; it stays until the logger is back at the top.
+    @State private var keepsSummaryExpanded = false
     private var collapsedSummaryClearance: CGFloat {
         max(collapsedSummaryMeasuredHeight, usesAccessibilityHeaderLayout ? summaryLineHeight * 3 + 20 : 46) + 20
     }
@@ -484,6 +490,7 @@ struct CurrentWorkoutView: View {
                         }
                         if !isSessionHeaderCollapsed {
                             sessionHeader
+                                .transition(.opacity)
                         }
                     }
                     .background(.bar)
@@ -525,6 +532,7 @@ struct CurrentWorkoutView: View {
                                     // Reserve the pill's height at the scroll top, but keep its
                                     // glass floating over the viewport as content scrolls behind it.
                                     .contentMargins(.top, isSessionHeaderCollapsed ? collapsedSummaryClearance : 0, for: .scrollContent)
+                                    .modifier(LoggerScrollBand(onChange: updateSummaryForScroll))
                                     .clipped()
                                     .onGeometryChange(for: CGRect.self) { proxy in
                                         proxy.frame(in: .global)
@@ -543,7 +551,8 @@ struct CurrentWorkoutView: View {
                                         }
                                         .padding(.horizontal, LiteweightTheme.horizontalPadding)
                                         .padding(.top, 8)
-                                        .transition(.opacity)
+                                        // Grows from the top as the big summary folds away; its numbers fly in.
+                                        .transition(reduceMotion ? .opacity : .scale(scale: 0.9, anchor: .top).combined(with: .opacity))
                                         .zIndex(1)
                                 }
                             }
@@ -1133,8 +1142,14 @@ struct CurrentWorkoutView: View {
         workout.uuid?.uuidString ?? workout.objectID.uriRepresentation().absoluteString
     }
 
-    private var isSessionHeaderCollapsed: Bool {
+    /// Collapsed by hand at the top; remembered for this workout.
+    private var isSummaryPinnedCollapsed: Bool {
         workoutSummaryState.collapsedWorkouts.contains(workoutSummaryKey)
+    }
+
+    /// Big at the top, the pill once scrolled, unless the chevron says otherwise.
+    private var isSessionHeaderCollapsed: Bool {
+        isSummaryPinnedCollapsed || (isScrolledPastSummary && !keepsSummaryExpanded)
     }
 
     private func setSessionHeaderCollapsed(_ collapsed: Bool) {
@@ -1143,10 +1158,29 @@ struct CurrentWorkoutView: View {
 
         withAnimation(LiteweightMotion.preferred(LiteweightMotion.collapse, reduceMotion: reduceMotion)) {
             if collapsed {
-                workoutSummaryState.collapsedWorkouts.insert(workoutSummaryKey)
+                // Scrolled: hand back to the scroll. At the top: pin the pill.
+                if isScrolledPastSummary { keepsSummaryExpanded = false }
+                else { workoutSummaryState.collapsedWorkouts.insert(workoutSummaryKey) }
             } else {
                 workoutSummaryState.collapsedWorkouts.remove(workoutSummaryKey)
+                if isScrolledPastSummary { keepsSummaryExpanded = true }
             }
+        }
+    }
+
+    /// Band 0 is the top, 2 is scrolled; 1 between them changes nothing, so the
+    /// summary doesn't flicker at the threshold.
+    private func updateSummaryForScroll(_ band: Int) {
+        let scrolled: Bool
+        switch band {
+        case 0: scrolled = false
+        case 2: scrolled = true
+        default: return
+        }
+        guard scrolled != isScrolledPastSummary else { return }
+        withAnimation(LiteweightMotion.preferred(LiteweightMotion.collapse, reduceMotion: reduceMotion)) {
+            isScrolledPastSummary = scrolled
+            if !scrolled { keepsSummaryExpanded = false }
         }
     }
 
@@ -1213,12 +1247,15 @@ struct CurrentWorkoutView: View {
                     let metricWidth = max(0, proxy.size.width - mapWidth - 36)
                     HStack(alignment: .top, spacing: 12) {
                         workoutDurationSummary
-                            .frame(width: metricWidth * 0.43)
+                            .summaryMorph("duration", in: summaryMorph)
+                            .frame(width: metricWidth * 0.43, alignment: .leading)
                         summaryValue(workoutWorkLabel, workoutVolumeNumber, tint: workoutWorkTint, unit: workoutWorkUnit,
                                      numericValue: workoutWorkLabel == "Volume" ? workout.trackedCompletedVolume : nil)
-                            .frame(width: metricWidth * 0.41)
+                            .summaryMorph("volume", in: summaryMorph)
+                            .frame(width: metricWidth * 0.41, alignment: .leading)
                         workoutSetsSummary
-                            .frame(width: metricWidth * 0.16)
+                            .summaryMorph("sets", in: summaryMorph)
+                            .frame(width: metricWidth * 0.16, alignment: .leading)
                         liveMuscleMap
                             .frame(width: mapWidth)
                             // In the summary's side margin, clear of the figures.
@@ -1335,13 +1372,15 @@ struct CurrentWorkoutView: View {
                     } else {
                         // The vitals replace the dots so the row doesn't reflow as numbers grow.
                         // If the type is too large for them, they give way to the expanded header.
+                        // Only the row meant to show carries the morph IDs, so the two
+                        // candidates never both claim them.
                         ViewThatFits(in: .horizontal) {
                             if hasVitals {
                                 collapsedSummaryRow(durationTitle, volume: volume, sets: sets,
-                                                    heartRate: heartRate, energy: energy, showsDots: false)
+                                                    heartRate: heartRate, energy: energy, showsDots: false, morphs: true)
                             }
                             collapsedSummaryRow(durationTitle, volume: volume, sets: sets,
-                                                heartRate: nil, energy: nil, showsDots: true)
+                                                heartRate: nil, energy: nil, showsDots: true, morphs: !hasVitals)
                         }
                         // A Spacer here would take half the row from the fit test.
                         .frame(maxWidth: .infinity, alignment: .leading)
@@ -1384,16 +1423,20 @@ struct CurrentWorkoutView: View {
         sets: LiteweightMetricValue,
         heartRate: String?,
         energy: String?,
-        showsDots: Bool
+        showsDots: Bool,
+        morphs: Bool
     ) -> some View {
         HStack(spacing: 8) {
             Text(durationTitle)
                 .font(.liteweightMetric(.subheadline, weight: .semibold))
                 .foregroundStyle(LiteweightTheme.metricTime)
+                .summaryMorph(morphs ? "duration" : nil, in: summaryMorph)
             if showsDots { collapsedSummaryDot }
             volume
+                .summaryMorph(morphs ? "volume" : nil, in: summaryMorph)
             if showsDots { collapsedSummaryDot }
             sets
+                .summaryMorph(morphs ? "sets" : nil, in: summaryMorph)
             if heartRate != nil || energy != nil {
                 collapsedVitals(heartRate: heartRate, energy: energy)
             }
@@ -4333,12 +4376,12 @@ struct InlineWorkoutSetRow: View {
     }
 
     private var showsFocusedEditor: Bool {
-        isCurrent && trackingType.usesReps && !set.isCompleted
+        isCurrent && trackingType.usesReps && !set.isCompleted && !isClosingToLogged
     }
 
-    /// Log Set closes the editor first; the row looks logged only once it has closed.
+    /// Log Set closes the editor and turns the row blue before the save lands.
     private var showsCompleted: Bool {
-        return set.isCompleted && !holdsCompletionLook
+        return (set.isCompleted || isClosingToLogged) && !holdsCompletionLook
     }
 
     private var focusedLayoutAnimation: Animation? {
@@ -4368,6 +4411,12 @@ struct InlineWorkoutSetRow: View {
     @State private var holdsCompletionLook = false
     @State private var fadesCompletion = false
     @State private var completionRevealID = 0
+    /// Log Set's close runs on this local state, ahead of the save, so nothing the
+    /// save redraws can drop its animation (it did: the editor vanished in one frame).
+    @State private var isClosingToLogged = false
+    /// Log Set fades the editor's contents before its space closes, so the rows
+    /// below never rise through it.
+    @State private var hidesEditorContents = false
 
     private var valueColor: Color {
         return showsCompleted || isRaisedCurrent ? LiteweightTheme.primaryText : LiteweightTheme.secondaryText
@@ -4599,6 +4648,7 @@ struct InlineWorkoutSetRow: View {
             Group {
                 if showsFocusedEditor {
                     focusedEditor
+                        .opacity(hidesEditorContents ? 0 : 1)
                         .transition(.opacity)
                 } else {
                     compactRow
@@ -5154,22 +5204,21 @@ struct InlineWorkoutSetRow: View {
     }
 
     private func toggleCompletion() {
+        // A second tap while the row closes would log the set twice.
+        guard !isClosingToLogged, !hidesEditorContents else { return }
         let wasCompleted = set.isCompleted
         let animation = showsFocusedEditor ? LiteweightMotion.collapse : LiteweightMotion.snappy
-        // Log Set: the editor closes, then the row fades to blue, then RPE.
+        // Log Set: the editor closes, turning blue as it lands, then RPE.
         let closesEditorFirst = onCompletionFlow != nil && showsFocusedEditor && !reduceMotion
         if showsFocusedEditor { focusedField = nil }
+        if closesEditorFirst {
+            closeEditorThenLog()
+            return
+        }
         if onCompletionFlow != nil {
             // The logger owns the scroll to the next set, after RPE's dismissal.
             // Historical rows retain their existing local animation.
-            if closesEditorFirst {
-                fadesCompletion = true
-                holdsCompletionLook = true
-                // One transaction, so the rows below rise with the closing editor.
-                withAnimation(LiteweightMotion.collapse) { onToggleCompleted() }
-            } else {
-                onToggleCompleted()
-            }
+            onToggleCompleted()
         } else {
             withAnimation(LiteweightMotion.preferred(animation, reduceMotion: reduceMotion)) {
                 onToggleCompleted()
@@ -5181,20 +5230,13 @@ struct InlineWorkoutSetRow: View {
             // This callback is supplied only by the active logger. Historical
             // editing keeps its existing presentation and completion behavior.
             if let onCompletionFlow {
-                let continueFlow = {
-                    if settingsStore.logRPE, set.rpeValue == nil {
-                        advancesAfterRPE = true
-                        if !showingRPEPicker { showingRPEPicker = true }
-                    } else {
-                        onCompletionFlow()
-                    }
+                if settingsStore.logRPE, set.rpeValue == nil, set.tagValue != .warmUp {
+                    advancesAfterRPE = true
+                    if !showingRPEPicker { showingRPEPicker = true }
+                } else {
+                    onCompletionFlow()
                 }
-                if closesEditorFirst { revealCompletion(then: continueFlow) } else { continueFlow() }
             }
-        } else if closesEditorFirst {
-            // The logger refused the change; nothing closed.
-            holdsCompletionLook = false
-            fadesCompletion = false
         }
         if wasCompleted, !set.isCompleted {
             completionRevealID += 1
@@ -5204,20 +5246,52 @@ struct InlineWorkoutSetRow: View {
         }
     }
 
-    /// Waits for the editor's collapse, fades the logged look in, then continues.
-    private func revealCompletion(then next: @escaping () -> Void) {
+    /// Log Set from the focused editor: the card folds into its row, the row fades to
+    /// blue as it lands, the set is saved, then RPE (or the next set). The close and the
+    /// fade run on this row's own state; the save follows once the row has closed.
+    private func closeEditorThenLog() {
         completionRevealID += 1
         let id = completionRevealID
+        completionFeedback += 1
+        fadesCompletion = true
+        holdsCompletionLook = true
+        // 1. The editor's contents fade where they are.
+        withAnimation(.easeOut(duration: 0.09).speed(1 / LiteweightMotion.debugScale)) { hidesEditorContents = true }
         Task { @MainActor in
-            // The collapse spring has covered nearly all of its travel by now.
-            try? await Task.sleep(for: .milliseconds(340))
-            guard id == completionRevealID, set.isCompleted else { return }
+            try? await Task.sleep(for: LiteweightMotion.duration(milliseconds: 80))
+            guard id == completionRevealID else { return }
+            // 2. Its space closes; the rows below rise with it in this one transaction.
+            withAnimation(LiteweightMotion.collapse) { isClosingToLogged = true }
+            // 3. Blue starts a third of the way into the close and ends as it settles.
+            try? await Task.sleep(for: LiteweightMotion.duration(milliseconds: 130))
+            guard id == completionRevealID else { return }
             withAnimation(LiteweightMotion.reveal) { holdsCompletionLook = false }
+            try? await Task.sleep(for: LiteweightMotion.duration(milliseconds: 170))
+            guard id == completionRevealID else { return }
+            // 4. Save once the row has closed, so nothing the save redraws can jump it.
+            onToggleCompleted()
+            isClosingToLogged = false
+            hidesEditorContents = false
+            guard set.isCompleted else {
+                // The logger refused the change: reopen the editor as it was.
+                withAnimation(LiteweightMotion.collapse) {
+                    holdsCompletionLook = false
+                    fadesCompletion = false
+                }
+                return
+            }
+            focusedField = nil
             // A sheet takes a moment to start moving, so it rises as the fade ends.
-            try? await Task.sleep(for: .milliseconds(150))
+            try? await Task.sleep(for: LiteweightMotion.duration(milliseconds: 150))
             guard id == completionRevealID, set.isCompleted else { return }
             fadesCompletion = false
-            next()
+            guard let onCompletionFlow else { return }
+            if settingsStore.logRPE, set.rpeValue == nil, set.tagValue != .warmUp {
+                advancesAfterRPE = true
+                if !showingRPEPicker { showingRPEPicker = true }
+            } else {
+                onCompletionFlow()
+            }
         }
     }
 
@@ -5703,6 +5777,10 @@ private struct RPEPickerSheet: View {
     @State private var selection: Double?
     @State private var isScrubbing = false
     @State private var showingSaveError = false
+    /// One tick per step, but never faster than the Taptic Engine can keep crisp:
+    /// a fast scrub otherwise ran the ticks together into a buzz.
+    @State private var stepFeedback = 0
+    @State private var lastStepFeedback = Date.distantPast
     @State private var contentHeight: CGFloat = 280
     @ScaledMetric(relativeTo: .footnote) private var graphLabelHeight: CGFloat = 20
     private let graphHeight: CGFloat = 108
@@ -5752,7 +5830,13 @@ private struct RPEPickerSheet: View {
         .presentationDetents(dynamicTypeSize.isAccessibilitySize ? [.large] : [.height(contentHeight)])
         .presentationDragIndicator(.visible)
         .presentationBackground(LiteweightTheme.surface)
-        .sensoryFeedback(.selection, trigger: selection) { _, _ in SettingsStore.shared.workoutHaptics }
+        .sensoryFeedback(.selection, trigger: stepFeedback) { _, _ in SettingsStore.shared.workoutHaptics }
+        .onChange(of: selection) { _, _ in
+            let now = Date()
+            guard now.timeIntervalSince(lastStepFeedback) >= 0.06 else { return }
+            lastStepFeedback = now
+            stepFeedback += 1
+        }
         .alert("Effort Not Saved", isPresented: $showingSaveError) {
             Button("OK", role: .cancel) { }
         } message: {
@@ -5790,18 +5874,27 @@ private struct RPEPickerSheet: View {
             ? AnyLayout(VStackLayout(alignment: .leading, spacing: 4))
             : AnyLayout(HStackLayout(alignment: .firstTextBaseline, spacing: 10))
         return layout {
-            Text(valueTitle)
+            // A slot as wide as the widest value, so "7" ↔ "7.5" never shifts the line.
+            Text("10.5")
                 .font(.liteweightMetric(.largeTitle))
-                .foregroundStyle(selection == nil ? LiteweightTheme.secondaryText : LiteweightTheme.metricEffort)
-                .contentTransition(reduceMotion ? .opacity : .numericText())
+                .hidden()
+                .overlay(alignment: .leading) {
+                    Text(valueTitle)
+                        .font(.liteweightMetric(.largeTitle))
+                        .foregroundStyle(selection == nil ? LiteweightTheme.secondaryText : LiteweightTheme.metricEffort)
+                        .contentTransition(reduceMotion ? .opacity : .numericText(value: selection ?? 0))
+                }
                 .fixedSize()
             Text(effortDescription)
                 .font(.body)
                 .foregroundStyle(LiteweightTheme.secondaryText)
+                .contentTransition(.opacity)
                 .fixedSize(horizontal: false, vertical: true)
         }
         .frame(minHeight: 56, alignment: .leading)
-        .animation(LiteweightMotion.preferred(LiteweightMotion.snappy, reduceMotion: reduceMotion), value: selection)
+        // An ease, not a spring: scrubbing retargets every step, and springs that
+        // restart mid-flight made the number wobble.
+        .animation(LiteweightMotion.fade, value: selection)
         .accessibilityElement(children: .combine)
     }
 
@@ -5843,7 +5936,7 @@ private struct RPEPickerSheet: View {
             .frame(height: graphLabelHeight)
             .accessibilityHidden(true)
         }
-        .animation(LiteweightMotion.preferred(LiteweightMotion.snappy, reduceMotion: reduceMotion), value: selection)
+        .animation(LiteweightMotion.fade, value: selection)
         .accessibilityElement(children: .ignore)
         .accessibilityLabel("Set RPE")
         .accessibilityValue(selection == nil ? "Not rated" : "RPE \(valueTitle), \(effortDescription)")
@@ -5947,6 +6040,39 @@ private extension View {
             gesture(HorizontalSwipeRecognizer(onChanged: onChanged, onEnded: onEnded))
         } else {
             simultaneousGesture(legacy)
+        }
+    }
+}
+
+private extension View {
+    /// Moves a summary number between the big header and the pill. Position only, so
+    /// neither side is resized mid-flight and the pill's measured height stays put.
+    @ViewBuilder
+    func summaryMorph(_ id: String?, in namespace: Namespace.ID) -> some View {
+        if let id {
+            matchedGeometryEffect(id: id, in: namespace, properties: .position, anchor: .leading)
+        } else {
+            self
+        }
+    }
+}
+
+/// Reports how far the logger is scrolled as a band: 0 at the top, 2 once well
+/// past the summary, 1 between. Only band changes reach the view (iOS 18+).
+private struct LoggerScrollBand: ViewModifier {
+    let onChange: (Int) -> Void
+
+    @ViewBuilder
+    func body(content: Content) -> some View {
+        if #available(iOS 18.0, *) {
+            content.onScrollGeometryChange(for: Int.self) { geometry in
+                let scrolled = geometry.contentOffset.y + geometry.contentInsets.top
+                return scrolled > 56 ? 2 : scrolled > 6 ? 1 : 0
+            } action: { _, band in
+                onChange(band)
+            }
+        } else {
+            content
         }
     }
 }

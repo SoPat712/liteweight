@@ -1585,9 +1585,9 @@ struct ActiveSetEditor: View {
         .navigationTitle("").watchVitalsInset(showsTrailingButton: true)
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
-                NavigationLink {
-                    ActiveSetOptionsPage(exerciseID: exerciseID, setID: setID)
-                } label: { Image(systemName: "ellipsis") }
+                // A route, not a view destination: Set Type and RPE below it are routes, and
+                // SwiftUI stacks routes beneath view-pushed pages, so Back skipped around.
+                NavigationLink(value: WatchRoute.setOptions(exerciseID, setID)) { Image(systemName: "ellipsis") }
                     .accessibilityLabel("Set Options")
             }
         }
@@ -1715,7 +1715,7 @@ struct ActiveSetEditor: View {
     }
 }
 
-private struct ActiveSetOptionsPage: View {
+struct ActiveSetOptionsPage: View {
     let exerciseID: UUID
     let setID: UUID
 

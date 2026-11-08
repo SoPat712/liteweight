@@ -5,7 +5,7 @@ import WidgetKit
 
 enum WatchRoute: Hashable {
     case workout, rest, finish, effort, saved, history, settings, done, discard
-    case exercise(UUID), set(UUID, UUID), exerciseSettings(UUID), restTimer(UUID), superset(UUID)
+    case exercise(UUID), set(UUID, UUID), setOptions(UUID, UUID), exerciseSettings(UUID), restTimer(UUID), superset(UUID)
     case setType(UUID, UUID), rpe(UUID, UUID), catalog(UUID?)
     case warmup(UUID)
     case deleteExercise(UUID), deleteSet(UUID, UUID)
@@ -108,8 +108,9 @@ final class WatchNavigation: ObservableObject {
         guard let pendingLog, let snapshot, snapshot.workoutID == pendingLog.workoutID,
               let loggedSet = snapshot.allSets.first(where: { $0.id == pendingLog.setID }),
               loggedSet.completed else { return }
-        setFlow = SetFlow(workoutID: snapshot.workoutID, exerciseID: pendingLog.exerciseID,
-                          setID: pendingLog.setID, needsRPE: WatchPreferences.logRPE && loggedSet.rpe == nil)
+        // Warm-ups skip the effort prompt; RPE stays one tap away on the set.
+        setFlow = SetFlow(workoutID: snapshot.workoutID, exerciseID: pendingLog.exerciseID, setID: pendingLog.setID,
+                          needsRPE: WatchPreferences.logRPE && loggedSet.rpe == nil && loggedSet.tag != "warmUp")
         let stillAtLog = path == pendingLog.origin &&
             (pendingLog.fromEditor || (workoutPage == .now && nowVisible))
         cancelPendingLog()
@@ -306,6 +307,7 @@ struct ContentView: View {
         case .workout: WorkoutSessionView(workoutSessionManager: store.workoutSessionManager)
         case .exercise(let id): ActiveExerciseView(exerciseID: id)
         case .set(let exercise, let set): ActiveSetEditor(exerciseID: exercise, setID: set)
+        case .setOptions(let exercise, let set): ActiveSetOptionsPage(exerciseID: exercise, setID: set)
         case .exerciseSettings(let id): ActiveExerciseSettings(exerciseID: id)
         case .warmup(let id): WatchWarmupPage(exerciseID: id)
         case .restTimer(let id): ActiveRestTimerPicker(exerciseID: id)

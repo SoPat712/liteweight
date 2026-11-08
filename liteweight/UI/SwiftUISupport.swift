@@ -332,7 +332,7 @@ private struct LiteweightSetCompletionModifier: ViewModifier {
                 }
                 guard isComplete, !reduceMotion else { return }
                 do {
-                    try await Task.sleep(for: .milliseconds(420))
+                    try await Task.sleep(for: LiteweightMotion.duration(milliseconds: 420))
                 } catch {
                     return
                 }
@@ -850,10 +850,15 @@ struct RPEGraph: View {
     @ScaledMetric(relativeTo: .caption) private var labelHeight: CGFloat = 18
     @Binding var selection: Double?
     @State private var selectionFeedback = 0
+    @State private var lastFeedback = Date.distantPast
 
     private func select(_ value: Double) {
         guard selection != value else { return }
         selection = value
+        // A fast scrub ran per-step ticks together into a buzz; keep them crisp.
+        let now = Date()
+        guard now.timeIntervalSince(lastFeedback) >= 0.06 else { return }
+        lastFeedback = now
         selectionFeedback += 1
     }
 
@@ -887,7 +892,8 @@ struct RPEGraph: View {
             .frame(height: labelHeight)
             .accessibilityHidden(true)
         }
-        .animation(LiteweightMotion.preferred(LiteweightMotion.snappy, reduceMotion: reduceMotion), value: selection)
+        // An ease: scrubbing retargets every step, and restarting springs wobbled.
+        .animation(LiteweightMotion.fade, value: selection)
         .sensoryFeedback(.selection, trigger: selectionFeedback) { _, _ in SettingsStore.shared.workoutHaptics }
         .accessibilityElement(children: .ignore)
         .accessibilityLabel("Set RPE")
@@ -1574,5 +1580,76 @@ extension View {
 
     func liteweightZoomDestination<ID: Hashable>(id: ID, in namespace: Namespace.ID) -> some View {
         modifier(LiteweightZoomDestination(id: id, namespace: namespace))
+    }
+}
+
+// MARK: - Muscle figure
+
+/// A workout's muscles, front and back, each in its group's color: primary movers
+/// solid, helpers faint. Leads History and Last Workout rows (the owner's request,
+/// in place of the group chips and tile). Pass the exercises with completed sets.
+struct LiteweightMuscleFigure: View {
+    @EnvironmentObject private var exerciseStore: ExerciseStore
+    let exerciseIDs: [UUID]
+
+    static let height: CGFloat = 52
+    /// MuscleMap draws each side in a 727 × 1280 box.
+    static let aspect: CGFloat = 727 / 1280
+
+    private struct Highlights {
+        var primary: [String: [Muscle]] = [:]
+        var secondary: [String: [Muscle]] = [:]
+    }
+
+    private var highlights: Highlights {
+        var result = Highlights()
+        var seen = Set<Muscle>()
+        // A muscle the group table doesn't name takes its exercise's group when it's a primary mover.
+        func add(_ names: [String], fallback: String?, to keyPath: WritableKeyPath<Highlights, [String: [Muscle]]>) {
+            for name in names {
+                guard let muscle = liteweightMapMuscle(name), !seen.contains(muscle),
+                      let group = Exercise.muscleGroup(for: name.lowercased()) ?? fallback,
+                      LiteweightPalette.hasMuscleColor(group) else { continue }
+                seen.insert(muscle)
+                result[keyPath: keyPath][group, default: []].append(muscle)
+            }
+        }
+        let exercises = exerciseIDs.compactMap { exerciseStore.exercisesByUUID[$0] }
+        for exercise in exercises { add(exercise.primaryMuscle, fallback: exercise.muscleGroup, to: \.primary) }
+        for exercise in exercises { add(exercise.secondaryMuscle, fallback: nil, to: \.secondary) }
+        return result
+    }
+
+    var body: some View {
+        let highlights = highlights
+        HStack(spacing: 1) {
+            figure(.front, highlights)
+                .frame(width: Self.height * Self.aspect, height: Self.height)
+            figure(.back, highlights)
+                .frame(width: Self.height * Self.aspect, height: Self.height)
+        }
+        .allowsHitTesting(false)
+        .accessibilityHidden(true)
+    }
+
+    private func figure(_ side: BodySide, _ highlights: Highlights) -> some View {
+        let style = BodyViewStyle(
+            defaultFillColor: Color(.tertiaryLabel).opacity(0.35),
+            strokeColor: Color(.separator),
+            strokeWidth: 0.5,
+            selectionColor: LiteweightTheme.accent,
+            selectionStrokeColor: LiteweightTheme.accent,
+            selectionStrokeWidth: 1,
+            headColor: Color(.tertiaryLabel).opacity(0.45),
+            hairColor: Color(.quaternaryLabel)
+        )
+        var view = BodyView(gender: .male, side: side, style: style)
+        for (group, muscles) in highlights.secondary {
+            view = view.highlight(muscles, color: LiteweightTheme.muscle(group), opacity: 0.42)
+        }
+        for (group, muscles) in highlights.primary {
+            view = view.highlight(muscles, color: LiteweightTheme.muscle(group))
+        }
+        return view
     }
 }

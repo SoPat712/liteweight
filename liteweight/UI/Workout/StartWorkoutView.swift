@@ -2062,6 +2062,13 @@ private struct RecentWorkoutRow: View {
 
     private var title: String { workout.displayTitle(in: exerciseStore.exercises) }
 
+    /// Exercises with at least one completed set, as History's snapshot counts them.
+    private var trainedExerciseIDs: [UUID] {
+        (workout.workoutExercises?.array as? [WorkoutExercise] ?? [])
+            .filter { ($0.workoutSets?.array as? [WorkoutSet] ?? []).contains(where: \.isCompleted) }
+            .compactMap(\.exerciseUuid)
+    }
+
     private var metadata: String {
         let date = LiteweightFormat.listDate(workout.start)
         guard !(workout.title?.isEmpty ?? true) || workout.workoutRoutine != nil else { return date }
@@ -2079,9 +2086,14 @@ private struct RecentWorkoutRow: View {
         layout {
             Button(action: onViewDetails) {
                 HStack(alignment: .top, spacing: 12) {
-                    LiteweightMuscleTile(group: workout.muscleGroups(in: exerciseStore.exercises)
-                        .first { LiteweightPalette.hasMuscleColor($0) })
-                        .padding(.top, 2)
+                    // Same lead as History: the muscle figure, or the tile at accessibility sizes.
+                    if !trainedExerciseIDs.isEmpty, !dynamicTypeSize.isAccessibilitySize {
+                        LiteweightMuscleFigure(exerciseIDs: trainedExerciseIDs)
+                    } else {
+                        LiteweightMuscleTile(group: workout.muscleGroups(in: exerciseStore.exercises)
+                            .first { LiteweightPalette.hasMuscleColor($0) })
+                            .padding(.top, 2)
+                    }
                     VStack(alignment: .leading, spacing: 4) {
                         Text(title)
                             .font(.headline)

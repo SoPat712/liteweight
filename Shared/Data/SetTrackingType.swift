@@ -249,28 +249,34 @@ enum SetValuePrefill {
     }
 
     /// Resolve in workout order so even an unfinished, automatically filled
-    /// predecessor supplies the next row. Only the first row consults history;
-    /// kind matching applies there, not between rows in the current workout.
+    /// predecessor supplies the next row. Warm-ups and working sets never inform
+    /// each other (owner, build 113): each row follows the last row of its own
+    /// kind in this workout, else the first of its kind last time.
     /// A value logged or typed in this workout carries forward over a target
-    /// the plan merely repeats (12/12/12); a target that changes (12/10/8, or
-    /// a working set after untargeted warm-ups) still wins.
+    /// the plan merely repeats (12/12/12); a target that changes (12/10/8) still wins.
     static func resolve(
         currentSets: [SetInput], previousSets: [SetInput], trackingType: SetTrackingType
     ) -> [Values] {
         var result: [Values] = []
-        // Columns whose value came from this workout: logged, typed, or carried from either.
-        var realColumns = Set<SetTrackingType.Column>()
-        var previousTargets = Values()
+        // Per kind (warm-up or working): the last row's values, the columns whose
+        // value came from this workout (logged, typed, or carried), and its targets.
+        var lastValues: [Bool: Values] = [:]
+        var realColumns: [Bool: Set<SetTrackingType.Column>] = [:]
+        var previousTargets: [Bool: Values] = [:]
         for set in currentSets {
+            let kind = set.isWarmup
             if set.isCompleted {
                 result.append(set.values)
-                realColumns = Set(trackingType.columns)
-                previousTargets = set.targets
+                lastValues[kind] = set.values
+                realColumns[kind] = Set(trackingType.columns)
+                previousTargets[kind] = set.targets
                 continue
             }
-            let inherited = result.last
-                ?? previousSets.first(where: { $0.isWarmup == set.isWarmup })?.values
+            let inherited = lastValues[kind]
+                ?? previousSets.first(where: { $0.isWarmup == kind })?.values
                 ?? Values()
+            let carried = realColumns[kind] ?? []
+            let repeatedTargets = previousTargets[kind] ?? Values()
             var values = Values()
             var real = Set<SetTrackingType.Column>()
             for column in trackingType.columns {
@@ -278,7 +284,7 @@ enum SetValuePrefill {
                 if set.userEnteredFields.contains(column) {
                     values[column] = set.values[column]
                     real.insert(column)
-                } else if realColumns.contains(column), target == nil || target == previousTargets[column] {
+                } else if carried.contains(column), target == nil || target == repeatedTargets[column] {
                     values[column] = inherited[column]
                     real.insert(column)
                 } else {
@@ -286,8 +292,9 @@ enum SetValuePrefill {
                 }
             }
             result.append(values)
-            realColumns = real
-            previousTargets = set.targets
+            lastValues[kind] = values
+            realColumns[kind] = real
+            previousTargets[kind] = set.targets
         }
         return result
     }
@@ -296,7 +303,40 @@ enum SetValuePrefill {
 enum SyncedPreferenceStorage {
     // UserDefaults is thread-safe, but a read/merge/write transaction also has
     // to exclude local edits while the connection's background queue applies it.
-    static let lock = NSRecursiveLock()
+    static let lock = SyncedPreferenceLock()
+}
+
+/// The preference transaction lock. A defaults write made while it's held runs after
+/// the outermost unlock, because writing defaults notifies SwiftUI synchronously:
+/// the connection queue, holding this lock, waited on SwiftUI while the main thread
+/// rendered the logger and waited on this lock, and the app froze at launch.
+final class SyncedPreferenceLock: NSLocking {
+    private let mutex = NSRecursiveLock()
+    private var depth = 0
+    private var deferred: [() -> Void] = []
+
+    func lock() {
+        mutex.lock()
+        depth += 1
+    }
+
+    func unlock() {
+        depth -= 1
+        let work = depth == 0 ? deferred : []
+        if depth == 0 { deferred = [] }
+        mutex.unlock()
+        work.forEach { $0() }
+    }
+
+    /// Runs `work` once this thread's transaction ends, or now if it holds no transaction.
+    func afterUnlock(_ work: @escaping () -> Void) {
+        // Another thread holds the transaction, so this one doesn't.
+        guard mutex.try() else { work(); return }
+        let inTransaction = depth > 0
+        if inTransaction { deferred.append(work) }
+        mutex.unlock()
+        if !inTransaction { work() }
+    }
 }
 
 /// One decoded value per defaults instance. Rendering never reads UserDefaults.
@@ -319,6 +359,8 @@ final class DefaultsValueCache<Value: Equatable>: ObservableObject {
         weak var defaults: UserDefaults?
         var data: Data?
         var value: Value
+        /// Writes staged here whose defaults write hasn't run yet; refresh leaves them be.
+        var pendingWrites = 0
 
         init(defaults: UserDefaults, data: Data?, value: Value) {
             self.defaults = defaults
@@ -362,11 +404,18 @@ final class DefaultsValueCache<Value: Equatable>: ObservableObject {
         let changed = entry.value != value
         entry.data = data
         entry.value = value
+        entry.pendingWrites += 1
         lock.unlock()
-        // Never hold a cache lock while defaults or another module notifies.
-        defaults.set(data, forKey: key)
-        notificationCenter.post(name: writeNotification, object: defaults, userInfo: ["key": key])
-        if changed { publishChange() }
+        // Readers see the value now. Never hold a cache lock, or the preference
+        // transaction, while defaults or another module notifies.
+        SyncedPreferenceStorage.lock.afterUnlock { [self] in
+            defaults.set(data, forKey: key)
+            lock.lock()
+            entry.pendingWrites -= 1
+            lock.unlock()
+            notificationCenter.post(name: writeNotification, object: defaults, userInfo: ["key": key])
+            if changed { publishChange() }
+        }
     }
 
     private func entry(for defaults: UserDefaults) -> Entry {
@@ -382,7 +431,7 @@ final class DefaultsValueCache<Value: Equatable>: ObservableObject {
     private func refresh() {
         lock.lock()
         defer { lock.unlock() }
-        for entry in entries.values {
+        for entry in entries.values where entry.pendingWrites == 0 {
             guard let defaults = entry.defaults else { continue }
             let data = defaults.data(forKey: key)
             guard data != entry.data else { continue }

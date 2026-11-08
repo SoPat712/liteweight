@@ -122,7 +122,7 @@ screenshots and canvas boards; never write them in code.
 - One metric, one color, everywhere: Home, History, logger, finish, widgets, Watch and Live Activity.
 - **Green never paints completed sets.** Completion is blue. Green only ever means volume or success.
 - Muscle groups have their own colors (§3.5), used only where a muscle *group* is named or
-  summarized. The anatomical muscle map uses accent everywhere except History rows, where each
+  summarized. The anatomical muscle map uses accent everywhere except History and Last Workout rows, where each
   muscle takes its group's color (§8.9, §15.3).
 
 ### 3.3 Set-state colors (live logger)
@@ -411,7 +411,8 @@ The approved local package lives at `Packages/MuscleMap` (1.6.4, MIT; provenance
 `LITEWEIGHT_CHANGES.md`). `MuscleHitTester.muscle(at:in:gender:side:)` exposes the renderer's existing
 hit testing for the app's hold-gated overlay. Do not duplicate the anatomical paths.
 - **Live workout:** a 54 pt tall pair, not interactive (`allowsHitTesting(false)`).
-- **History rows:** a 58 pt pair, not interactive, muscles in their group colors (§3.5).
+- **History and Last Workout rows:** `LiteweightMuscleFigure`, a 52 pt pair leading the row, not
+  interactive, muscles in their group colors (§3.5).
 - **Exercise detail:** a pair about 190 pt tall that is interactive (press-and-hold tooltip,
   §9.8).
 - Map names with `liteweightMapMuscle(_:)`. Never hand-draw bodies.
@@ -576,7 +577,7 @@ without a spatial animation.
 | Moment | Motion |
 | --- | --- |
 | Complete a set | Fill sweep (§8.3), check bounce plus `.symbolEffect(.replace)`, success haptic and `setComplete` sound (`setRecord` for a PR) |
-| Log Set (focused editor) | Haptic on tap. The editor closes into its row (`collapse`) while the row still looks unlogged; after 340 ms the fill, badge and check fade in (`reveal`, no sweep); RPE opens as the fade ends. Without an RPE prompt the logger then moves to the next set |
+| Log Set (focused editor) | Haptic on tap. The editor's contents fade (90 ms) where they are; at 80 ms its space closes (`collapse`) and the rows below rise into it. At 210 ms the fill, badge and check fade in (`reveal`, no sweep), ending as the row settles; the set is saved at 380 ms, once the row has closed, and RPE rises at about 530 ms (never for a warm-up; Add RPE stays on the set). The close and the fade run on the row's own state (`isClosingToLogged`), ahead of the save: driven by the save, the redraw dropped the animation and the editor vanished in one frame. Without an RPE prompt the logger then moves to the next set |
 | Next set becomes current | The focused editor expands from the compact row (`collapse`). The previous card collapses into its completed row |
 | Counters | `.contentTransition(.numericText())` plus `snappy`. `LiteweightMetricValue` and `LiteweightWorkoutMetricLine` roll on their own, so any number built from them rolls on a value or unit change; Reduce Motion fades |
 | Elapsed clocks | Tick without animation. A spring every second kept the logger redrawing about 85% of the time while idle |
@@ -590,7 +591,7 @@ without a spatial animation.
 | Open or minimize the workout | Zoom from the tab accessory (`matchedTransitionSource` plus `.navigationTransition(.zoom)`); fade under Reduce Motion |
 | Open a row's page | The tapped row zooms into its page and shrinks back on close (`liteweightZoomSource` / `liteweightZoomDestination`, iOS 18+): History, Last Workout, saved workouts, Exercises, Home's recent workouts and records. Older iOS and Reduce Motion push |
 | Finish screen | Metrics rise in staggered (`liteweightStaggeredEntrance`), session bars grow per exercise, trophies bounce |
-| Effort and RPE | Bars fill while dragging, with a selection haptic per step |
+| Effort and RPE | Bars fill while dragging with `fade` (an ease; springs restarted every step and wobbled), with a selection haptic per step, at most one every 60 ms so a fast scrub stays crisp. The number sits in a slot as wide as "10.5" and rolls with `numericText(value:)` in the drag's direction; the reps-left line cross-fades |
 | Charts | Grow on first appearance; cross-fade when the metric or range changes |
 | Tooltip | Scale 0.92 → 1 plus fade (`snappy`) |
 | Lists reordering (recency) | Default List animation; do not add extra motion |
@@ -741,7 +742,7 @@ Board: *Round 3 → History*, revised 2026-10-26. A segmented control (Workouts 
 The cached Exercise Progress index lives in the toolbar's options menu. Workouts are
 grouped by week, with headers showing the count in accent and volume in green. Each row (build 110)
 leads with a muscle tile in its main group's color, then the title and PR trophy, the
-"date · time · sets · volume" line, and on the trailing side a 58 pt front-and-back muscle figure
+"date · time · sets · volume" line. A 52 pt front-and-back muscle figure leads the row
 (the owner's request in place of the group chips): each trained muscle in its group's color, primary
 movers solid and helpers at 0.42. Accessibility sizes show the group chips instead of the figure,
 and the exercise names show when no exercise has a colored group. Swipes, Undo and the long-press preview follow §9.8.1.
@@ -774,7 +775,8 @@ the empty-workout card's button becomes a gray glass "Start Empty Workout" of th
 again when there's no suggestion). Most Rested's background takes its main muscle's color (§3.5).
 Saved workout rows show each muscle as a chip with its rest ("Chest today" with an amber dot,
 "Back 3d" with green), least rested first; the metadata line is just exercises and last done.
-Start and Repeat use the regular bordered height. Last Workout leads with a muscle tile.
+Start and Repeat use the regular bordered height. Last Workout leads with the same muscle figure as
+History (the tile at accessibility sizes).
 
 ### 15.5 Exercises (`liteweight/UI/Exercises/*`)
 - **Library** (`ExerciseMuscleGroupsView`): search sits under the title and moves into the
@@ -817,15 +819,20 @@ Top to bottom:
    only). Give duration/volume explicit columns with 12 pt gutters; sets use a narrower
    column and the 54 pt muscle figures keep their own space. Elapsed time reads `m:ss` below
    one hour and `h:mm:ss` above it. Captions align at the top even if a large value scales down.
-4. **Collapsed state** (only after tapping the header chevron): the header is replaced by a
+4. **Collapsed state** (build 114: scrolling drives it on iOS 18+; the chevron still works): the header
+   folds into the pill once the logger is scrolled past 56 pt and unfolds back at the top (within
+   6 pt; between the two nothing changes, so it never flickers). It morphs rather than swaps: the
+   pill scales in from the top while Duration, Volume and Sets fly from their header spots into the pill
+   (`matchedGeometryEffect`, position only, so neither side resizes mid-flight). The chevron overrides:
+   expanding while scrolled keeps the big summary until the logger is back at the top; collapsing at
+   the top pins the pill for this workout. iOS 17 keeps the chevron only. The pill: the header is replaced by a
    full-width glass pill reading "● 18:42 • 2,430 lb • 6 sets ⌄". While the Watch is sending current
    readings it drops the dots and adds "♥ 132 🔥 210" in `metricHeartRate` and `metricEnergy`, so the
    row doesn't reflow as numbers grow; large type drops the readings first. It floats over the scroll viewport.
    Reserve its measured height, 8 pt top inset and 12 pt bottom gap with scroll-content
    margins so the first item starts below it. Scrolling content passes behind transparent
    glass; do not place an opaque strip behind it. Accessibility sizing grows the clearance.
-   Scrolling never changes modes. Tapping the glass expands the summary at the current scroll
-   position. Remember the choice for this workout in the scene, including minimize/reopen;
+   Tapping the glass expands the summary at the current scroll position. Remember the choice for this workout in the scene, including minimize/reopen;
    a new workout starts expanded.
 5. **Exercise card:** a 42 pt diagram thumbnail, the name (`.headline`), equipment
    (`secondaryText`), the rest chip top right (backlog B3), and an ⋯ menu (Replace, Superset,
@@ -1136,7 +1143,7 @@ A lane that took "native first" literally removed Log Set, gave vitals their own
 - **Native parts, only here:** top-corner ✓ on rating pages (`ToolbarItem` with a plain `Button` + SF Symbol, so the system draws standard glass), and the system back button where a page has no vitals.
 - **Vitals status line:** heart rate and calories share plain text with no capsule, drawing from a 44 × 34 pt toolbar anchor (the slot's minimum width, so the line starts at the screen edge) across the free screen width up to the widest clock (42 pt for "12:59"), using measured edge insets and a 6 pt gap. The toolbar item stays small so watchOS never hides the clock. Text is `caption2` semibold with 10 pt symbols, so both readings fit beside a back button on Ultra. Center the vitals on the clock's line: on watchOS 26 and later, offset only the vitals by −7 pt below 180 pt screen width or −9 pt otherwise; earlier watchOS uses zero offset. Both readings fit beside a back button on Ultra 3; on 44 mm and smaller, a back-button page falls back to heart rate alone. Fit the fixed widest-value templates in order: both readings with compact energy ("1.2k"), heart rate alone, then nothing if neither fits. There is no KCAL caption; the flame carries that meaning. Pages with a trailing button hide vitals (`showsTrailingButton: true`) because watchOS moves the clock into the overflow area.
 - **Running rest screen:** back button and vitals in the toolbar row. Below it, the ring and a column of `+15 · Skip · −15` `watchNeutralCapsule()` buttons (50 pt wide below 180 pt width, 60 pt otherwise), with the column on the right, or on the left when the Watch is worn on the right wrist, because the buttons belong on the side the other hand reaches from. The next set's full exercise name and weight × reps run across the bottom, on one line when they fit and two otherwise. The ring only holds REST and the time. At accessibility type sizes the screen keeps the stacked readout with a `−15 · Skip · +15` row (44 pt tall below 180 pt width, 52 pt otherwise).
-- **After Log Set:** RPE opens first when the set needs one, then slides to the rest screen on ✓ or after 5 s untouched. Rest's back button returns to RPE, which then waits for ✓. RPE opened by hand also waits for ✓. A set that already has an RPE skips this page, and new sets start unrated rather than copying an old rating. Only a manual action saves: ✓ saves the number shown and turning the wheel saves the new value. Opening RPE or letting the 5 s pass saves nothing, so the dimmed suggestion is never recorded on its own and that set stays unrated.
+- **After Log Set:** RPE opens first when the set needs one, then slides to the rest screen on ✓ or after 5 s untouched. Rest's back button returns to RPE, which then waits for ✓. RPE opened by hand also waits for ✓. A set that already has an RPE skips this page, and so does a warm-up (RPE stays one tap away on the set), and new sets start unrated rather than copying an old rating. Only a manual action saves: ✓ saves the number shown and turning the wheel saves the new value. Opening RPE or letting the 5 s pass saves nothing, so the dimmed suggestion is never recorded on its own and that set stays unrated.
 - **Vitals live on the clock's line** beside the back button where present (`watchVitalsInset`), in the same place on every workout page including controls. The controls page shows elapsed time in its header above the unchanged workload line. Never give vitals a separate row of their own.
 - **Primary actions** are the big full-width capsule near the bottom: `watchGlassButton(prominent: true)` / `watchPrimaryCapsule()`, Liquid Glass tinted liteweight blue. Never replace one with a small toolbar ✓ to save height. Never use native `.glassProminent` directly; it stops short of full width on larger Watches, so it won't line up with the tiles.
 - **Data surfaces** are flat and dark, like the iPhone logger: set tiles and controls 15 pt radius, cards and rows 13 pt, `LiteweightTheme.platter` fills. No glass, gloss or gradients around data. Selection changes color only.

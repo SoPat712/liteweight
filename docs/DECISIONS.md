@@ -12,10 +12,37 @@ Builds are installed with `~/.local/share/liteweight/tools/install-NN.sh`. Lane 
 
 ## 2026-11-08
 
+### Watch Set Options is a route; RPE scrub no longer wobbles or buzzes (build 115)
+- **Asked:** "Navigating to a previous set and then options and pressing set type puts the page in the wrong place in the stack? Pressing back then takes me to the set type page?" and, of the iPhone RPE sheet, "Sliding the rpe slider audio sound bad, and the number jiggles oddly! Please animate it properly!"
+- **Found:** the set editor's "…" pushed Set Options as a view destination, while Set Type and RPE are path routes. SwiftUI stacks path routes beneath view-pushed pages, so Back went to the wrong page. The RPE number changed width ("7" ↔ "7.5"), shifting the line, and each step restarted a spring; no sound plays there, so the "audio" was the per-step haptic running together on a fast scrub.
+- **Decided:** Set Options is a `WatchRoute` (`setOptions`); the other view-pushed Watch pages push no routes, so none share the problem. The RPE number has a fixed-width slot, rolls in the drag direction, and both the sheet and `RPEGraph` animate with `fade`; haptics are capped at one per 60 ms.
+- **Roll back:** revert this entry's commit.
+
+### The logger summary morphs into the pill as you scroll (build 114)
+- **Asked** (with a screenshot of the expanded summary): "Long ago you had the right idea! Scrolling down should show the compact info version! Top can show that! Can we have it morph instead of replace? Keep the arrow of course if someone genuinely wants to see the big".
+- **Decided:** this reverses the "scrolling never changes modes" rule. The summary is big at the top and the pill once scrolled past 56 pt; it returns within 6 pt of the top. The pill scales in from the top while Duration, Volume and Sets fly into it (position-only matched geometry, so the pill's measured height and the scroll clearance never change mid-flight). Expanding with the chevron while scrolled keeps the big summary until the top; collapsing at the top pins the pill, as before. iOS 17 has no scroll-geometry callback, so it keeps the chevron only.
+- **Roll back:** revert this entry's commit.
+
+### Warm-ups and working sets fill separately; no RPE prompt after a warm-up (build 113)
+- **Asked:** "warm up set was being informed by last working set? The lbs?", "working set shouldn't inform from working set!!" and "maybe no rpe dialog for working set? User can choose to add but no need". Read as warm-up sets throughout, since the first point is about warm-ups and RPE on a warm-up is the prompt that adds nothing; the owner can say if working sets were meant.
+- **Decided:**
+  - `SetValuePrefill.resolve` keeps one chain per kind: a warm-up follows the last warm-up in this workout, else last time's first warm-up; a working set follows the last working set, else last time's first working set. Before, every row copied the row just above it, so the first working set took the last warm-up's weight. iPhone and Watch share this resolver.
+  - Logging a warm-up no longer opens RPE on iPhone or Watch; Add RPE stays on the set.
+- **Roll back:** revert this entry's commit.
+
+### Log Set closes smoothly; launch freeze fixed; Last Workout figure (build 112)
+- **Asked:** "when completing set, set instant collapses, no animation! And the color comes in after the collapse! the blue backing highlight! please optimize that entire routine to make it better!" and "same thing for workout tab, last workout!" (the History muscle figure).
+- **Found:** a 5× slow-motion recording (`-liteweightSlowMotion`, DEBUG) showed the editor gone in one frame: the save's redraw dropped the close animation. The blue then waited 340 ms plus a 0.3 s fade.
+- **Decided:**
+  - Log Set fades the editor's contents, closes its space, and turns the row blue as it lands, all on the row's own state. The save follows once the row has closed, then RPE (DESIGN_SYSTEM §11). The order the owner asked for in build 103, close then blue then RPE, is kept, now overlapping instead of waiting.
+  - Launch could freeze while the logger was open: the Watch sync queue held the preference lock while writing defaults, which waits on SwiftUI, and the main thread, mid-render, waited on that lock. Defaults writes made inside the preference transaction now run after its outermost unlock (`SyncedPreferenceLock.afterUnlock`); in-memory values update at once.
+  - The Workout tab's Last Workout row leads with the shared `LiteweightMuscleFigure`, like History.
+- **Roll back:** revert this entry's commit.
+
 ### Muscle figure on History rows; every tip inline (build 111)
 - **Asked** (relayed from the Aloud session, 12:56): "in history maybe instead of legs arms chest we should show a little muscle diagram?" and "the tip text is kinda broken and disjointed in places! Like the pencil edit button tip like goes inside of the button!" His screenshot showed the History tip bubble clipping its message.
 - **Decided:**
-  - History rows replace the group chips with a front-and-back muscle figure on the trailing side. Each muscle takes its group's color (solid for primary movers, faint for helpers), so the figure matches the tile and the calendar. Accessibility sizes keep the chips, which stay readable.
+  - History rows lead with a front-and-back muscle figure in place of the tile and group chips; the owner then asked for the same on the Workout tab's Last Workout row (`LiteweightMuscleFigure`, shared). Each muscle takes its group's color (solid for primary movers, faint for helpers), so the figure matches the tile and the calendar. Accessibility sizes keep the chips, which stay readable.
   - Every TipKit bubble became an inline tip: History and Home get a tip section at the top of the list, and Log Set and Pin to Home get a tip in the layout beside the control. The bubble helper `liteweightPopoverTip` is gone.
 - **Roll back:** revert this entry's commit.
 
