@@ -38,7 +38,7 @@ struct WorkoutDetailView: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @EnvironmentObject private var settingsStore: SettingsStore
     @EnvironmentObject private var exerciseStore: ExerciseStore
-    @EnvironmentObject private var sceneState: SceneState
+    @Environment(\.sceneStateReference) private var sceneState
 
     @ObservedObject var workout: Workout
 

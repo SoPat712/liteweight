@@ -197,6 +197,9 @@ enum LiteweightMotion {
     static let focusScroll = Animation.timingCurve(0.16, 1, 0.3, 1, duration: 0.65)
     /// Non-spatial changes where a spring would look decorative.
     static let fade = Animation.easeInOut(duration: 0.18)
+    /// A state that arrives once a layout change has finished, such as a
+    /// logged set turning blue after its editor has closed.
+    static let reveal = Animation.easeInOut(duration: 0.3)
 
     /// Reduce Motion swaps springs for a short cross-fade rather than removing
     /// feedback entirely, so state changes are still perceivable.

@@ -334,7 +334,8 @@ instead of shrinking whole rows at accessibility sizes.
 Leading-anchored fill sweep behind a row: `scaleEffect(x:)` from 0 to 1 at opacity 0.24 using
 `LiteweightMotion.collapse`, then after 420 ms it fades to 0.12. It fires the `.success` haptic.
 Existing completed rows appear already settled and do not replay. Reduce Motion uses a fade and
-keeps the haptic. Apply it to the row content inside its inset; it adds no geometry. Backlog B4
+keeps the haptic. `sweeps: false` skips the sweep and fades straight to 0.12 with `reveal`; the
+logger's Log Set uses it (see the motion table). Apply it to the row content inside its inset; it adds no geometry. Backlog B4
 adds a set-type tint parameter.
 
 ### 8.4 `liteweightStaggeredEntrance(index:)`
@@ -532,6 +533,7 @@ Tokens (`LiteweightMotion`, in `LiteweightStyle.swift`):
 | `collapse` | spring response 0.42, damping 0.86 | Large surfaces moving: header collapse, rest strip insert, focused-set expand |
 | `focusScroll` | cubic (0.16, 1, 0.3, 1), 0.65 s | Guided exercise/superset travel: prompt start, long deceleration, no bounce |
 | `fade` | easeInOut 0.18 s | Non-spatial changes, and the Reduce Motion substitute |
+| `reveal` | easeInOut 0.3 s | A state that arrives after a layout change: the logged row turning blue once its editor has closed |
 
 Always write `withAnimation(LiteweightMotion.preferred(.snappy, reduceMotion: reduceMotion))`, reading
 `@Environment(\.accessibilityReduceMotion)`. Reduce Motion swaps spatial motion for a fade; the
@@ -542,8 +544,10 @@ without a spatial animation.
 | Moment | Motion |
 | --- | --- |
 | Complete a set | Fill sweep (§8.3), check bounce plus `.symbolEffect(.replace)`, success haptic and `setComplete` sound (`setRecord` for a PR) |
+| Log Set (focused editor) | Haptic on tap. The editor closes into its row (`collapse`) while the row still looks unlogged; after 340 ms the fill, badge and check fade in (`reveal`, no sweep); RPE opens as the fade ends. Without an RPE prompt the logger then moves to the next set |
 | Next set becomes current | The focused editor expands from the compact row (`collapse`). The previous card collapses into its completed row |
 | Counters | `.contentTransition(.numericText())` plus `snappy` |
+| Elapsed clocks | Tick without animation. A spring every second kept the logger redrawing about 85% of the time while idle |
 | Rest starts | The strip inserts under the triggering set with `.move(edge: .top).combined(with: .opacity)` and `collapse` |
 | Rest ticks | The ring drains continuously and the digits roll down (`numericText(countsDown: true)`) |
 | Rest ends | The ring pulses once (scale 1.12), the strip folds away, plus a light-impact haptic and the `restComplete` sound |

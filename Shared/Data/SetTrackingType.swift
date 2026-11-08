@@ -197,6 +197,20 @@ enum SetTrackingType: String, Codable, CaseIterable, Identifiable {
     }
 }
 
+/// One +/− press moves to the next multiple of `step` in that direction, so an
+/// off-grid 139 goes to 140 or 137.5 rather than 141.5 or 136.5.
+enum ValueStep {
+    static func next(from value: Double, direction: Double, step: Double) -> Double {
+        guard step > 0, direction != 0 else { return value }
+        // Unit conversion leaves values like 137.49999 on the grid.
+        let position = value / step, tolerance = 1e-4
+        let index = direction > 0
+            ? (position + tolerance).rounded(.down) + 1
+            : (position - tolerance).rounded(.up) - 1
+        return index * step
+    }
+}
+
 /// The logger's only prefill rule. Values use the caller's weight unit and
 /// canonical seconds/meters. Nil is empty; an explicitly entered zero is a value.
 enum SetValuePrefill {
@@ -237,24 +251,43 @@ enum SetValuePrefill {
     /// Resolve in workout order so even an unfinished, automatically filled
     /// predecessor supplies the next row. Only the first row consults history;
     /// kind matching applies there, not between rows in the current workout.
+    /// A value logged or typed in this workout carries forward over a target
+    /// the plan merely repeats (12/12/12); a target that changes (12/10/8, or
+    /// a working set after untargeted warm-ups) still wins.
     static func resolve(
         currentSets: [SetInput], previousSets: [SetInput], trackingType: SetTrackingType
     ) -> [Values] {
         var result: [Values] = []
+        // Columns whose value came from this workout: logged, typed, or carried from either.
+        var realColumns = Set<SetTrackingType.Column>()
+        var previousTargets = Values()
         for set in currentSets {
             if set.isCompleted {
                 result.append(set.values)
+                realColumns = Set(trackingType.columns)
+                previousTargets = set.targets
                 continue
             }
             let inherited = result.last
                 ?? previousSets.first(where: { $0.isWarmup == set.isWarmup })?.values
                 ?? Values()
             var values = Values()
+            var real = Set<SetTrackingType.Column>()
             for column in trackingType.columns {
-                values[column] = set.userEnteredFields.contains(column)
-                    ? set.values[column] : (set.targets[column] ?? inherited[column])
+                let target = set.targets[column]
+                if set.userEnteredFields.contains(column) {
+                    values[column] = set.values[column]
+                    real.insert(column)
+                } else if realColumns.contains(column), target == nil || target == previousTargets[column] {
+                    values[column] = inherited[column]
+                    real.insert(column)
+                } else {
+                    values[column] = target ?? inherited[column]
+                }
             }
             result.append(values)
+            realColumns = real
+            previousTargets = set.targets
         }
         return result
     }

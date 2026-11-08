@@ -271,16 +271,18 @@ private struct LiteweightSetCompletionModifier: ViewModifier {
     let tint: Color
     let settledOpacity: Double
     let peakOpacity: Double
+    let sweeps: Bool
     @State private var lastCompletion: Bool
     @State private var fillProgress: CGFloat
     @State private var fillOpacity: Double
 
-    init(isComplete: Bool, feedbackEnabled: Bool, tint: Color, settledOpacity: Double, peakOpacity: Double) {
+    init(isComplete: Bool, feedbackEnabled: Bool, tint: Color, settledOpacity: Double, peakOpacity: Double, sweeps: Bool) {
         self.isComplete = isComplete
         self.feedbackEnabled = feedbackEnabled
         self.tint = tint
         self.settledOpacity = settledOpacity
         self.peakOpacity = peakOpacity
+        self.sweeps = sweeps
         _lastCompletion = State(initialValue: isComplete)
         _fillProgress = State(initialValue: isComplete ? 1 : 0)
         _fillOpacity = State(initialValue: isComplete ? settledOpacity : 0)
@@ -305,6 +307,13 @@ private struct LiteweightSetCompletionModifier: ViewModifier {
                     return
                 }
                 lastCompletion = isComplete
+                if isComplete, !sweeps {
+                    fillProgress = 1
+                    withAnimation(LiteweightMotion.preferred(LiteweightMotion.reveal, reduceMotion: reduceMotion)) {
+                        fillOpacity = settledOpacity
+                    }
+                    return
+                }
                 withAnimation(LiteweightMotion.preferred(LiteweightMotion.collapse, reduceMotion: reduceMotion)) {
                     fillProgress = isComplete ? 1 : 0
                     fillOpacity = isComplete ? (reduceMotion ? settledOpacity : peakOpacity) : 0
@@ -354,17 +363,19 @@ extension View {
     /// Leading accent sweep, faint settled fill, and completion success haptic.
     /// Apply to the row content inside its existing inset; this adds no geometry.
     /// Callers still own check symbols, field states, and the completion label.
-    /// Reduce Motion uses a fade and keeps the haptic.
+    /// Reduce Motion uses a fade and keeps the haptic. With `sweeps: false` the
+    /// fill fades straight to its settled opacity instead.
     func liteweightSetCompletion(
         isComplete: Bool,
         feedbackEnabled: Bool = true,
         tint: Color = LiteweightTheme.accent,
         settledOpacity: Double = 0.12,
-        peakOpacity: Double = 0.24
+        peakOpacity: Double = 0.24,
+        sweeps: Bool = true
     ) -> some View {
         modifier(LiteweightSetCompletionModifier(
             isComplete: isComplete, feedbackEnabled: feedbackEnabled,
-            tint: tint, settledOpacity: settledOpacity, peakOpacity: peakOpacity
+            tint: tint, settledOpacity: settledOpacity, peakOpacity: peakOpacity, sweeps: sweeps
         ))
     }
 

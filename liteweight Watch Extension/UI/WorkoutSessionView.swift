@@ -316,7 +316,8 @@ private struct WatchNowSet: View {
             onSelect: select, onAdjust: { field, direction in
                 let changedFocus = focus != field
                 if changedFocus { select(field) }
-                adjust(direction * buttonDetents, feedback: !changedFocus)
+                if field == .weight { stepWeight(direction, feedback: !changedFocus) }
+                else { adjust(direction * buttonDetents, feedback: !changedFocus) }
             })
     }
 
@@ -358,6 +359,18 @@ private struct WatchNowSet: View {
     private func endEditing() {
         persistCrown()
         crownFocused = false; focus = nil; editingValue = false
+    }
+    /// Weight buttons land on the 2.5 grid (139 → 140), as on the phone. The
+    /// Crown keeps its 0.5 steps from the new value.
+    private func stepWeight(_ direction: Double, feedback: Bool) {
+        guard focus == .weight else { return }
+        let field = SetValueField.weight
+        let current = crownOrigin + crown.rounded() * field.step
+        crownOrigin = min(field.maximum, max(0, ValueStep.next(
+            from: current, direction: direction, step: field.step * field.buttonDetents(unit: unit))))
+        crown = 0
+        persistCrown()
+        if feedback { WatchFeedback.play(.click) }
     }
     private func adjust(_ direction: Double, feedback: Bool = true) {
         guard let focus else { return }
@@ -1656,7 +1669,8 @@ struct ActiveSetEditor: View {
             compact: compact, stacksFields: typeSize.isAccessibilitySize, fillsPage: true,
             onSelect: selectField, onAdjust: { field, direction in
                 selectField(field)
-                step(field, by: direction * field.buttonDetents(unit: unit))
+                if field == .weight { stepWeight(direction) }
+                else { step(field, by: direction * field.buttonDetents(unit: unit)) }
             })
     }
     private func previous(_ set: WatchWorkoutSet, exercise: WatchWorkoutExercise) -> String {
@@ -1667,6 +1681,16 @@ struct ActiveSetEditor: View {
         focus = field
         syncCrown()
         crownFocused = true
+    }
+    /// Weight buttons land on the 2.5 grid (139 → 140), as on the phone.
+    private func stepWeight(_ direction: Double) {
+        guard set != nil else { return }
+        let field = SetValueField.weight
+        crownOrigin = min(field.maximum, max(0, ValueStep.next(
+            from: crownOrigin, direction: direction, step: field.step * field.buttonDetents(unit: unit))))
+        crown = 0
+        persistCrown()
+        WatchFeedback.play(.click)
     }
     private func step(_ field: SetValueField, by direction: Double) {
         guard set != nil else { return }

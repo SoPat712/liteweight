@@ -20,7 +20,7 @@ struct FeedView : View {
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @EnvironmentObject private var settingsStore: SettingsStore
     @EnvironmentObject var exerciseStore: ExerciseStore
-    @EnvironmentObject private var sceneState: SceneState
+    @Environment(\.sceneStateReference) private var sceneState
     @ObservedObject private var bodyMetricsStore = BodyMetricsStore.shared
     @EnvironmentObject private var pinnedChartsStore: PinnedChartsStore
 
@@ -584,8 +584,13 @@ struct FeedView : View {
     private var recordsSection: some View {
         let now = Date()
         let cutoff = Calendar.current.date(byAdding: .day, value: -30, to: now) ?? now
-        let records = Array(historyStore.snapshot.recordEvents.lazy
-            .prefix(while: { $0.date >= cutoff }).filter { $0.date <= now }.prefix(3))
+        // A plain loop: Swift 6.4's optimizer crashes on the equivalent lazy
+        // prefix(while:)/filter/prefix chain (CopyPropagation, -O builds).
+        var records: [ExerciseBests.RecordEvent] = []
+        for event in historyStore.snapshot.recordEvents {
+            guard event.date >= cutoff, records.count < 3 else { break }
+            if event.date <= now { records.append(event) }
+        }
         return Section {
             cardHeader(.records)
                 .modifier(HomeCardAccessibilitySummary(title: HomeSection.records.title,

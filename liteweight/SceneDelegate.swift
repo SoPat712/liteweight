@@ -31,6 +31,8 @@ class SceneDelegate: UIResponder, UIWindowSceneDelegate {
             let window = UIWindow(windowScene: windowScene)
             let rootView = ContentView()
                 .environmentObject(sceneState)
+                .environmentObject(sceneState.workoutSummary)
+                .environment(\.sceneStateReference, sceneState)
                 .environmentObject(SettingsStore.shared)
                 .environmentObject(RestTimerStore.shared)
                 .environmentObject(ExerciseStore.shared)
@@ -255,12 +257,31 @@ class SceneDelegate: UIResponder, UIWindowSceneDelegate {
     }
 }
 
+/// For views that only change the tab or open the workout: reading SceneState
+/// from the environment does not subscribe, so tab switches don't re-render them.
+private struct SceneStateReferenceKey: EnvironmentKey {
+    static let defaultValue = SceneState()
+}
+
+extension EnvironmentValues {
+    var sceneStateReference: SceneState {
+        get { self[SceneStateReferenceKey.self] }
+        set { self[SceneStateReferenceKey.self] = newValue }
+    }
+}
+
+/// Manual summary choice survives logger presentation changes in this scene.
+/// An unseen workout has no entry and therefore starts expanded.
+final class WorkoutSummaryState: ObservableObject {
+    @Published var collapsedWorkouts: Set<String> = []
+}
+
 class SceneState: ObservableObject {
     @Published var selectedTab: Tab = .workout
     @Published var isCurrentWorkoutExpanded = true
-    /// Manual summary choice survives logger presentation changes in this scene.
-    /// An unseen workout has no entry and therefore starts expanded.
-    @Published var collapsedWorkoutSummaries: Set<String> = []
+    /// Not @Published: toggling the logger summary must re-render only the
+    /// logger, not every tab that observes this scene state.
+    let workoutSummary = WorkoutSummaryState()
 
     enum Tab: Int, Hashable {
         case home = 0

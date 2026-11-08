@@ -13,7 +13,7 @@ struct HistoryView: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @EnvironmentObject private var settingsStore: SettingsStore
     @EnvironmentObject private var exerciseStore: ExerciseStore
-    @EnvironmentObject private var sceneState: SceneState
+    @Environment(\.sceneStateReference) private var sceneState
     @Environment(\.managedObjectContext) private var managedObjectContext
     @ObservedObject private var historyStore = TrainingHistoryStore.shared
 

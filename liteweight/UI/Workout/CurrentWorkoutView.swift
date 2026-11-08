@@ -87,7 +87,7 @@ struct CurrentWorkoutView: View {
     @Environment(\.managedObjectContext) private var managedObjectContext
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
-    @EnvironmentObject private var sceneState: SceneState
+    @EnvironmentObject private var workoutSummaryState: WorkoutSummaryState
     @EnvironmentObject private var restTimerStore: RestTimerStore
     @EnvironmentObject private var exerciseStore: ExerciseStore
     @EnvironmentObject private var settingsStore: SettingsStore
@@ -529,7 +529,7 @@ struct CurrentWorkoutView: View {
             } else if ProcessInfo.processInfo.arguments.contains("-liteweightInspectFinishWorkout") {
                 showingFinishEditor = true
             } else if ProcessInfo.processInfo.arguments.contains("-liteweightInspectCollapsedSummary") {
-                sceneState.collapsedWorkoutSummaries.insert(workoutSummaryKey)
+                workoutSummaryState.collapsedWorkouts.insert(workoutSummaryKey)
                 if let workoutID = workout.uuid {
                     Timer.scheduledTimer(withTimeInterval: 5, repeats: true) { _ in
                         watchConnection.liveMetrics.receive(
@@ -1009,7 +1009,7 @@ struct CurrentWorkoutView: View {
     }
 
     private var isSessionHeaderCollapsed: Bool {
-        sceneState.collapsedWorkoutSummaries.contains(workoutSummaryKey)
+        workoutSummaryState.collapsedWorkouts.contains(workoutSummaryKey)
     }
 
     private func setSessionHeaderCollapsed(_ collapsed: Bool) {
@@ -1018,9 +1018,9 @@ struct CurrentWorkoutView: View {
 
         withAnimation(LiteweightMotion.preferred(LiteweightMotion.collapse, reduceMotion: reduceMotion)) {
             if collapsed {
-                sceneState.collapsedWorkoutSummaries.insert(workoutSummaryKey)
+                workoutSummaryState.collapsedWorkouts.insert(workoutSummaryKey)
             } else {
-                sceneState.collapsedWorkoutSummaries.remove(workoutSummaryKey)
+                workoutSummaryState.collapsedWorkouts.remove(workoutSummaryKey)
             }
         }
     }
@@ -1150,7 +1150,7 @@ struct CurrentWorkoutView: View {
                 if usesAccessibilityHeaderLayout {
                     accessibleSummaryRow("Duration", value: title, tint: LiteweightTheme.metricTime)
                 } else {
-                    summaryValue("Duration", title, tint: LiteweightTheme.metricTime, systemImage: "pencil")
+                    summaryValue("Duration", title, tint: LiteweightTheme.metricTime, systemImage: "pencil", ticks: true)
                         .frame(minHeight: LiteweightTheme.controlHeight)
                         .contentShape(Rectangle())
                 }
@@ -1233,7 +1233,6 @@ struct CurrentWorkoutView: View {
                 .contentTransition(reduceMotion ? .opacity : .numericText())
                 .animation(LiteweightMotion.preferred(LiteweightMotion.snappy, reduceMotion: reduceMotion), value: volumeTitle)
                 .animation(LiteweightMotion.preferred(LiteweightMotion.snappy, reduceMotion: reduceMotion), value: setCount)
-                .animation(LiteweightMotion.preferred(LiteweightMotion.snappy, reduceMotion: reduceMotion), value: Int(workout.safeDuration))
                 .animation(LiteweightMotion.preferred(LiteweightMotion.snappy, reduceMotion: reduceMotion), value: heartRate)
                 .animation(LiteweightMotion.preferred(LiteweightMotion.snappy, reduceMotion: reduceMotion), value: energy)
                 .padding(.horizontal, 14)
@@ -1328,7 +1327,8 @@ struct CurrentWorkoutView: View {
         _ value: String,
         tint: Color,
         unit: String? = nil,
-        systemImage: String? = nil
+        systemImage: String? = nil,
+        ticks: Bool = false
     ) -> some View {
         VStack(alignment: .leading, spacing: 5) {
             HStack(spacing: 4) {
@@ -1344,7 +1344,8 @@ struct CurrentWorkoutView: View {
             .minimumScaleFactor(0.85)
             LiteweightMetricValue(value: value, unit: unit, tint: tint)
             .contentTransition(reduceMotion ? .opacity : .numericText())
-            .animation(LiteweightMotion.preferred(LiteweightMotion.snappy, reduceMotion: reduceMotion), value: value)
+            // A clock that springs every second keeps the screen redrawing.
+            .animation(ticks ? nil : LiteweightMotion.preferred(LiteweightMotion.snappy, reduceMotion: reduceMotion), value: value)
             .lineLimit(1)
             .minimumScaleFactor(0.85)
         }
@@ -1722,7 +1723,6 @@ struct CurrentWorkoutView: View {
                     loggerViewport: visibleLoggerViewport,
                     onEditorSheetChanged: { showsSetEditorSheet = $0 },
                     onCompletionFlow: { advanceToNextSet(after: set) },
-                    holdsFocusedEditor: holdsCompletionLayout && pendingCompletion?.set.objectID == set.objectID,
                     onValueEdited: { SetTrackingPreferences.markLoggerField($0, for: set.uuid) },
                     onRPEChanged: {
                         waitsForRPEDismissal = true
@@ -3044,8 +3044,9 @@ struct CurrentWorkoutView: View {
         let justCompleted = !set.isCompleted
         let suggestedValues = justCompleted ? suggestedSetValues(for: set, in: workoutExercise) : nil
         if justCompleted {
-            // Hold the editor's geometry through the RPE presentation. The model
-            // can accept both edits now, with one save after the guided motion.
+            // Hold focus on this set through the RPE presentation; its editor
+            // closes now. The model accepts both edits, with one save after the
+            // guided motion.
             pendingCompletion = PendingLoggerCompletion(
                 set: set, focus: WorkoutSetFocus.next(in: workout),
                 suggestion: loggerSuggestion(for: set, in: workoutExercise, historySets: latestHistorySets(for: workoutExercise))
@@ -4244,7 +4245,6 @@ struct InlineWorkoutSetRow: View {
     var loggerViewport = CGRect.zero
     var onEditorSheetChanged: ((Bool) -> Void)? = nil
     var onCompletionFlow: (() -> Void)? = nil
-    var holdsFocusedEditor = false
     var onValueEdited: ((SetTrackingType.Column) -> Void)? = nil
     var onRPEChanged: (() -> Bool)? = nil
     var onRPEDismissed: (() -> Void)? = nil
@@ -4256,12 +4256,26 @@ struct InlineWorkoutSetRow: View {
     }
 
     private var showsFocusedEditor: Bool {
-        isCurrent && trackingType.usesReps && (!set.isCompleted || holdsFocusedEditor)
+        isCurrent && trackingType.usesReps && !set.isCompleted
+    }
+
+    /// Log Set closes the editor first; the row looks logged only once it has closed.
+    private var showsCompleted: Bool {
+        return set.isCompleted && !holdsCompletionLook
     }
 
     private var focusedLayoutAnimation: Animation? {
+        if fadesCompletion { return LiteweightMotion.preferred(LiteweightMotion.collapse, reduceMotion: reduceMotion) }
         if onCompletionFlow != nil { return reduceMotion ? nil : LiteweightMotion.focusScroll }
         return LiteweightMotion.preferred(LiteweightMotion.collapse, reduceMotion: reduceMotion)
+    }
+
+    private var completionAnimation: Animation? {
+        if fadesCompletion { return LiteweightMotion.preferred(LiteweightMotion.reveal, reduceMotion: reduceMotion) }
+        if onCompletionFlow != nil { return focusedLayoutAnimation }
+        return LiteweightMotion.preferred(
+            isCurrent && !usesDuration ? LiteweightMotion.collapse : LiteweightMotion.snappy, reduceMotion: reduceMotion
+        )
     }
 
     @State private var stepFeedback = 0
@@ -4274,22 +4288,25 @@ struct InlineWorkoutSetRow: View {
     @State private var isRaisedCurrent = false
     @State private var completionBounce = 0
     @State private var checkReveal: CGFloat = 0
+    @State private var holdsCompletionLook = false
+    @State private var fadesCompletion = false
+    @State private var completionRevealID = 0
 
     private var valueColor: Color {
-        return set.isCompleted || isRaisedCurrent ? LiteweightTheme.primaryText : LiteweightTheme.secondaryText
+        return showsCompleted || isRaisedCurrent ? LiteweightTheme.primaryText : LiteweightTheme.secondaryText
     }
 
     private var weightIsChanged: Bool { displayedValues.weight != nil }
     private var repetitionsAreChanged: Bool { displayedValues.repetitions != nil }
 
     private var badgeColor: Color {
-        if set.isCompleted { return LiteweightTheme.setFill(for: set.tagValue).tint }
+        if showsCompleted { return LiteweightTheme.setFill(for: set.tagValue).tint }
         if set.tagValue == .warmUp { return LiteweightTheme.metricSets }
-        return set.isCompleted || isRaisedCurrent ? LiteweightTheme.accent : LiteweightTheme.secondaryText
+        return isRaisedCurrent ? LiteweightTheme.accent : LiteweightTheme.secondaryText
     }
 
     private var badgeFill: Color {
-        if set.isCompleted {
+        if showsCompleted {
             switch set.tagValue {
             case .warmUp: return LiteweightTheme.setWarmUpContainer
             case .dropSet: return LiteweightTheme.setDropContainer
@@ -4298,15 +4315,14 @@ struct InlineWorkoutSetRow: View {
             }
         }
         if set.tagValue == .warmUp { return LiteweightTheme.metricSetsContainer }
-        if set.isCompleted { return LiteweightTheme.accentSoft }
         return isRaisedCurrent ? .clear : LiteweightTheme.field
     }
 
     private var completionImage: some View {
-        Image(systemName: set.isCompleted ? "checkmark.circle.fill" : "circle")
+        Image(systemName: showsCompleted ? "checkmark.circle.fill" : "circle")
             .symbolRenderingMode(.palette)
             .foregroundStyle(
-                set.isCompleted ? LiteweightTheme.onAccent : (isRaisedCurrent ? LiteweightTheme.accent : LiteweightTheme.tertiaryText),
+                showsCompleted ? LiteweightTheme.onAccent : (isRaisedCurrent ? LiteweightTheme.accent : LiteweightTheme.tertiaryText),
                 LiteweightTheme.accent
             )
             .font(.system(size: InlineWorkoutSetLayout.completionSymbolSize, weight: .regular))
@@ -4321,13 +4337,13 @@ struct InlineWorkoutSetRow: View {
                 // Keep the blue disc visible while the symbol's white check draws in.
                 Circle()
                     .fill(LiteweightTheme.accent)
-                    .opacity(set.isCompleted ? 1 : 0)
+                    .opacity(showsCompleted ? 1 : 0)
                 completionImage
                     .contentTransition(.symbolEffect(.replace))
                     .symbolEffect(.bounce, options: .nonRepeating, value: completionBounce)
                     .mask {
                         Rectangle()
-                            .scaleEffect(x: set.isCompleted ? checkReveal : 1, anchor: .leading)
+                            .scaleEffect(x: showsCompleted ? checkReveal : 1, anchor: .leading)
                     }
             }
             .frame(width: InlineWorkoutSetLayout.completionSymbolSize, height: InlineWorkoutSetLayout.completionSymbolSize)
@@ -4381,7 +4397,7 @@ struct InlineWorkoutSetRow: View {
                 Image(systemName: isRunning ? "stop.fill" : "stopwatch")
                     .font(.system(size: 12, weight: .bold))
                     .foregroundColor(
-                        isRunning ? LiteweightTheme.danger : (set.isCompleted || isRaisedCurrent ? LiteweightTheme.metricTime : LiteweightTheme.secondaryText)
+                        isRunning ? LiteweightTheme.danger : (showsCompleted || isRaisedCurrent ? LiteweightTheme.metricTime : LiteweightTheme.secondaryText)
                     )
             }
             Text(text)
@@ -4514,17 +4530,14 @@ struct InlineWorkoutSetRow: View {
             }
             // Keep sweep state and success feedback alive across presentation changes.
             .liteweightSetCompletion(
-                isComplete: set.isCompleted, feedbackEnabled: false,
+                isComplete: showsCompleted, feedbackEnabled: false,
                 tint: LiteweightTheme.setFill(for: set.tagValue).tint,
                 settledOpacity: LiteweightTheme.setFill(for: set.tagValue).settled,
-                peakOpacity: LiteweightTheme.setFill(for: set.tagValue).peak
+                peakOpacity: LiteweightTheme.setFill(for: set.tagValue).peak,
+                sweeps: !fadesCompletion
             )
             .padding(.horizontal, -InlineWorkoutSetLayout.completedChromeExpansion)
-            .animation(
-                onCompletionFlow != nil ? focusedLayoutAnimation
-                    : LiteweightMotion.preferred(isCurrent && !usesDuration ? LiteweightMotion.collapse : LiteweightMotion.snappy, reduceMotion: reduceMotion),
-                value: set.isCompleted
-            )
+            .animation(completionAnimation, value: showsCompleted)
             .animation(focusedLayoutAnimation, value: showsFocusedEditor)
             .background {
                 GeometryReader { proxy in
@@ -4588,19 +4601,25 @@ struct InlineWorkoutSetRow: View {
         }
         .onAppear {
             synchronizeEntryText()
-            isRaisedCurrent = isCurrent && !set.isCompleted
-            checkReveal = set.isCompleted ? 1 : 0
+            isRaisedCurrent = isCurrent && !showsCompleted
+            checkReveal = showsCompleted ? 1 : 0
         }
         .onChange(of: isCurrent) { _, current in
             let animation = onCompletionFlow != nil ? focusedLayoutAnimation : LiteweightMotion.preferred(
                 current ? LiteweightMotion.snappy.delay(0.18) : LiteweightMotion.snappy, reduceMotion: reduceMotion
             )
             withAnimation(animation) {
-                isRaisedCurrent = current && !set.isCompleted
+                isRaisedCurrent = current && !showsCompleted
             }
         }
         .onChange(of: set.isCompleted) { _, isCompleted in
             if focusedField != .weight { weightText = formattedWeight }
+            // Banking the elapsed time on completion keeps a running stopwatch
+            // from being silently discarded.
+            guard isCompleted, inlineTimerStart != nil else { return }
+            toggleInlineTimer()
+        }
+        .onChange(of: showsCompleted) { _, isCompleted in
             if isCompleted {
                 completionBounce += 1
                 withAnimation(LiteweightMotion.preferred(LiteweightMotion.snappy.delay(0.12), reduceMotion: reduceMotion)) {
@@ -4609,13 +4628,9 @@ struct InlineWorkoutSetRow: View {
             } else {
                 checkReveal = 0
             }
-            withAnimation(LiteweightMotion.preferred(LiteweightMotion.snappy, reduceMotion: reduceMotion)) {
+            withAnimation(fadesCompletion ? completionAnimation : LiteweightMotion.preferred(LiteweightMotion.snappy, reduceMotion: reduceMotion)) {
                 isRaisedCurrent = isCurrent && !isCompleted
             }
-            // Banking the elapsed time on completion keeps a running stopwatch
-            // from being silently discarded.
-            guard isCompleted, inlineTimerStart != nil else { return }
-            toggleInlineTimer()
         }
         .onChange(of: set.weightValue) { _, _ in
             guard focusedField != .weight else { return }
@@ -4813,7 +4828,6 @@ struct InlineWorkoutSetRow: View {
                     .background(LiteweightTheme.accent, in: Capsule())
             }
             .buttonStyle(.plain)
-            .disabled(holdsFocusedEditor && set.isCompleted)
             .accessibilityLabel("Log set \(index + 1)")
         }
         .padding(10)
@@ -4846,7 +4860,7 @@ struct InlineWorkoutSetRow: View {
     }
 
     private var visibleSuggestion: LoggerAssist.Suggestion? {
-        guard let suggestion, !set.isCompleted || holdsFocusedEditor, set.tagValue != .warmUp else { return nil }
+        guard let suggestion, !set.isCompleted, set.tagValue != .warmUp else { return nil }
         let enteredWeight = weightFormatter.number(from: suggestionWeightTitle(suggestion))?.doubleValue ?? suggestion.weight
         let metricWeight = WeightUnit.convert(weight: enteredWeight, from: settingsStore.weightUnit, to: .metric)
         if abs(set.weightValue - metricWeight) < 0.000_001,
@@ -4989,7 +5003,8 @@ struct InlineWorkoutSetRow: View {
                 weight: displayedValues.weight ?? 0, from: .metric, to: settingsStore.weightUnit
             )
             let maximum = WeightUnit.convert(weight: WorkoutSet.MAX_WEIGHT, from: .metric, to: settingsStore.weightUnit)
-            let value = min(max(base + Double(direction) * settingsStore.weightUnit.adjustmentStep, 0), maximum)
+            let next = ValueStep.next(from: base, direction: Double(direction), step: settingsStore.weightUnit.adjustmentStep)
+            let value = min(max(next, 0), maximum)
             weightTextBinding.wrappedValue = weightFormatter.string(from: NSNumber(value: value)) ?? "0"
         } else {
             let base = displayedValues.repetitions ?? 0
@@ -5054,11 +5069,20 @@ struct InlineWorkoutSetRow: View {
     private func toggleCompletion() {
         let wasCompleted = set.isCompleted
         let animation = showsFocusedEditor ? LiteweightMotion.collapse : LiteweightMotion.snappy
+        // Log Set: the editor closes, then the row fades to blue, then RPE.
+        let closesEditorFirst = onCompletionFlow != nil && showsFocusedEditor && !reduceMotion
         if showsFocusedEditor { focusedField = nil }
         if onCompletionFlow != nil {
-            // The logger owns the only layout/scroll transaction, after RPE's
-            // dismissal. Historical rows retain their existing local animation.
-            onToggleCompleted()
+            // The logger owns the scroll to the next set, after RPE's dismissal.
+            // Historical rows retain their existing local animation.
+            if closesEditorFirst {
+                fadesCompletion = true
+                holdsCompletionLook = true
+                // One transaction, so the rows below rise with the closing editor.
+                withAnimation(LiteweightMotion.collapse) { onToggleCompleted() }
+            } else {
+                onToggleCompleted()
+            }
         } else {
             withAnimation(LiteweightMotion.preferred(animation, reduceMotion: reduceMotion)) {
                 onToggleCompleted()
@@ -5070,15 +5094,44 @@ struct InlineWorkoutSetRow: View {
             // This callback is supplied only by the active logger. Historical
             // editing keeps its existing presentation and completion behavior.
             if let onCompletionFlow {
-                if settingsStore.logRPE, set.rpeValue == nil {
-                    advancesAfterRPE = true
-                    if !showingRPEPicker { showingRPEPicker = true }
-                } else {
-                    onCompletionFlow()
+                let continueFlow = {
+                    if settingsStore.logRPE, set.rpeValue == nil {
+                        advancesAfterRPE = true
+                        if !showingRPEPicker { showingRPEPicker = true }
+                    } else {
+                        onCompletionFlow()
+                    }
                 }
+                if closesEditorFirst { revealCompletion(then: continueFlow) } else { continueFlow() }
             }
+        } else if closesEditorFirst {
+            // The logger refused the change; nothing closed.
+            holdsCompletionLook = false
+            fadesCompletion = false
         }
-        if wasCompleted, !set.isCompleted { stepFeedback += 1 }
+        if wasCompleted, !set.isCompleted {
+            completionRevealID += 1
+            holdsCompletionLook = false
+            fadesCompletion = false
+            stepFeedback += 1
+        }
+    }
+
+    /// Waits for the editor's collapse, fades the logged look in, then continues.
+    private func revealCompletion(then next: @escaping () -> Void) {
+        completionRevealID += 1
+        let id = completionRevealID
+        Task { @MainActor in
+            // The collapse spring has covered nearly all of its travel by now.
+            try? await Task.sleep(for: .milliseconds(340))
+            guard id == completionRevealID, set.isCompleted else { return }
+            withAnimation(LiteweightMotion.reveal) { holdsCompletionLook = false }
+            // A sheet takes a moment to start moving, so it rises as the fade ends.
+            try? await Task.sleep(for: .milliseconds(150))
+            guard id == completionRevealID, set.isCompleted else { return }
+            fadesCompletion = false
+            next()
+        }
     }
 
     @ViewBuilder
@@ -5227,7 +5280,7 @@ struct InlineWorkoutSetRow: View {
                     .overlay {
                         Circle()
                             .stroke(LiteweightTheme.accent, lineWidth: 1.5)
-                            .opacity(isRaisedCurrent && !set.isCompleted && set.tagValue != .warmUp ? 1 : 0)
+                            .opacity(isRaisedCurrent && !showsCompleted && set.tagValue != .warmUp ? 1 : 0)
                     }
                     .frame(width: LiteweightTheme.iconButtonSize, height: LiteweightTheme.controlHeight)
                     .contentShape(Rectangle())
@@ -5258,7 +5311,7 @@ struct InlineWorkoutSetRow: View {
                     Group {
                         if let rpe = set.rpeValue {
                             Text(String(format: "%g", rpe))
-                        } else if set.isCompleted {
+                        } else if showsCompleted {
                             Text("–")
                         } else {
                             Image(systemName: "gauge.with.dots.needle.50percent")
@@ -5268,12 +5321,12 @@ struct InlineWorkoutSetRow: View {
                     .font(.liteweightMetric(.title3))
                     .lineLimit(1)
                     .minimumScaleFactor(0.85)
-                    .foregroundStyle(set.rpeValue != nil || (!set.isCompleted && isRaisedCurrent) ? LiteweightTheme.metricEffort : LiteweightTheme.secondaryText)
+                    .foregroundStyle(set.rpeValue != nil || (!showsCompleted && isRaisedCurrent) ? LiteweightTheme.metricEffort : LiteweightTheme.secondaryText)
                     .frame(width: InlineWorkoutSetLayout.visualHeight, height: InlineWorkoutSetLayout.visualHeight)
                     .background(
                         Capsule(style: .continuous)
                             .fill(LiteweightTheme.metricEffortContainer)
-                            .opacity(isRaisedCurrent && !set.isCompleted ? 1 : 0)
+                            .opacity(isRaisedCurrent && !showsCompleted ? 1 : 0)
                     )
                     .frame(width: LiteweightTheme.iconButtonSize, height: LiteweightTheme.controlHeight)
                     .contentShape(Rectangle())
@@ -5307,7 +5360,7 @@ struct InlineWorkoutSetRow: View {
         .background {
             RoundedRectangle(cornerRadius: LiteweightTheme.compactCornerRadius, style: .continuous)
                 .fill(LiteweightTheme.field)
-                .opacity(isRaisedCurrent && !set.isCompleted ? 1 : 0)
+                .opacity(isRaisedCurrent && !showsCompleted ? 1 : 0)
         }
     }
 
@@ -5429,7 +5482,7 @@ struct InlineWorkoutSetRow: View {
                     .fill(isFocused ? LiteweightTheme.accentSoft : LiteweightTheme.tertiaryFill)
                     .overlay {
                         RoundedRectangle(cornerRadius: LiteweightTheme.compactCornerRadius, style: .continuous)
-                            .strokeBorder(isFocused ? LiteweightTheme.accent : LiteweightTheme.outline.opacity(set.isCompleted ? 0.5 : 1), lineWidth: isFocused ? 2 : 0.5)
+                            .strokeBorder(isFocused ? LiteweightTheme.accent : LiteweightTheme.outline.opacity(showsCompleted ? 0.5 : 1), lineWidth: isFocused ? 2 : 0.5)
                     }
             )
             .frame(minHeight: LiteweightTheme.controlHeight)

@@ -200,6 +200,62 @@ final class LoggerAssistTests: XCTestCase {
         ])
     }
 
+    func testPlusMinusLandOnTheStepGrid() {
+        XCTAssertEqual(ValueStep.next(from: 139, direction: 1, step: 2.5), 140)
+        XCTAssertEqual(ValueStep.next(from: 139, direction: -1, step: 2.5), 137.5)
+        XCTAssertEqual(ValueStep.next(from: 140, direction: 1, step: 2.5), 142.5)
+        XCTAssertEqual(ValueStep.next(from: 140, direction: -1, step: 2.5), 137.5)
+        XCTAssertEqual(ValueStep.next(from: 137.49999, direction: 1, step: 2.5), 140)
+        XCTAssertEqual(ValueStep.next(from: 0, direction: 1, step: 2.5), 2.5)
+    }
+
+    func testLoggedRepsBeatARepeatedTarget() {
+        let target = Values(repetitions: 12)
+        XCTAssertEqual(filled([
+            .init(values: .init(weight: 100, repetitions: 10), targets: target, isCompleted: true),
+            .init(targets: target), .init(targets: target)
+        ]), [
+            .init(weight: 100, repetitions: 10), .init(weight: 100, repetitions: 10), .init(weight: 100, repetitions: 10)
+        ])
+    }
+
+    func testChangedTargetStillWinsOverLoggedReps() {
+        XCTAssertEqual(filled([
+            .init(values: .init(weight: 100, repetitions: 11), targets: .init(repetitions: 12), isCompleted: true),
+            .init(targets: .init(repetitions: 10)), .init(targets: .init(repetitions: 8))
+        ]), [
+            .init(weight: 100, repetitions: 11), .init(weight: 100, repetitions: 10), .init(weight: 100, repetitions: 8)
+        ])
+    }
+
+    func testLoggedWeightBeatsARepeatedWeightTarget() {
+        let target = Values(weight: 150, repetitions: 5)
+        XCTAssertEqual(filled([
+            .init(values: .init(weight: 145, repetitions: 5), targets: target, isCompleted: true), .init(targets: target)
+        ])[1], .init(weight: 145, repetitions: 5))
+    }
+
+    func testTypedRepsBeatARepeatedTarget() {
+        let target = Values(repetitions: 12)
+        XCTAssertEqual(filled([
+            .init(values: .init(repetitions: 9), userEnteredFields: [.reps], targets: target), .init(targets: target)
+        ])[1].repetitions, 9)
+    }
+
+    func testWorkingTargetWinsAfterUntargetedWarmup() {
+        XCTAssertEqual(filled([
+            .init(values: .init(weight: 45, repetitions: 10), isCompleted: true, isWarmup: true),
+            .init(targets: .init(repetitions: 12))
+        ])[1], .init(weight: 45, repetitions: 12))
+    }
+
+    func testHistoryDoesNotBeatRepeatedTargets() {
+        let target = Values(repetitions: 12)
+        XCTAssertEqual(filled([.init(targets: target), .init(targets: target)],
+                              previous: [.init(values: .init(weight: 140, repetitions: 5))]),
+                       [.init(weight: 140, repetitions: 12), .init(weight: 140, repetitions: 12)])
+    }
+
     func testTypedValueBeatsSavedTargetIncludingExplicitZeroAndEmpty() {
         XCTAssertEqual(filled([
             .init(values: .init(weight: 0), userEnteredFields: [.weight, .reps], targets: .init(weight: 140, repetitions: 5))

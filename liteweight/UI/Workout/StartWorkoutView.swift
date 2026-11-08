@@ -549,7 +549,7 @@ struct StartWorkoutView: View {
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @Environment(\.managedObjectContext) private var managedObjectContext
     @EnvironmentObject private var exerciseStore: ExerciseStore
-    @EnvironmentObject private var sceneState: SceneState
+    @Environment(\.sceneStateReference) private var sceneState
     @ObservedObject private var watchConnection = WatchConnectionManager.shared
     @ObservedObject private var historyStore = TrainingHistoryStore.shared
 

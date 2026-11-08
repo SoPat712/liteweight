@@ -521,8 +521,6 @@ struct ContentView : View {
                                     .accessibilityHidden(true)
                                 Text(activeWorkoutDurationFormatter.string(from: activeWorkoutDuration(workout)) ?? "0:00")
                                     .foregroundStyle(LiteweightTheme.metricTime)
-                                    .contentTransition(reduceMotion ? .opacity : .numericText())
-                                    .animation(LiteweightMotion.preferred(LiteweightMotion.snappy, reduceMotion: reduceMotion), value: Int(activeWorkoutDuration(workout)))
                                 Text("•").foregroundColor(LiteweightTheme.tertiaryText)
                                 (Text(activeWorkoutVolumeTitle(workout))
                                  + Text(" " + settingsStore.weightUnit.unit.symbol)
@@ -595,8 +593,6 @@ struct ContentView : View {
                             Text(activeWorkoutDurationFormatter.string(from: activeWorkoutDuration(workout)) ?? "0:00")
                                 .font(.liteweightMetric(.caption2, weight: .semibold))
                                 .foregroundColor(LiteweightTheme.metricTime)
-                                .contentTransition(reduceMotion ? .opacity : .numericText())
-                                .animation(LiteweightMotion.preferred(LiteweightMotion.snappy, reduceMotion: reduceMotion), value: Int(activeWorkoutDuration(workout)))
                                 .lineLimit(1)
                             ActiveWorkoutPillVitals(
                                 store: WatchConnectionManager.shared.liveMetrics,
