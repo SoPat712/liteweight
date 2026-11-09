@@ -209,6 +209,9 @@ struct ContentView : View {
                 .productionEnvironment()
         } else if ProcessInfo.processInfo.arguments.contains("-liteweightInspectCustomizeHome") {
             CustomizeHomeSheet()
+        } else if ProcessInfo.processInfo.arguments.contains("-liteweightInspectCalendar") {
+            NavigationStack { WorkoutCalendarView() }
+                .productionEnvironment()
         } else if ProcessInfo.processInfo.arguments.contains("-liteweightInspectHistory") {
             HistoryView()
                 .productionEnvironment()

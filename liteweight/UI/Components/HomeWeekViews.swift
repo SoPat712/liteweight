@@ -865,10 +865,11 @@ struct WeeklySetsChart: View {
     @ScaledMetric(relativeTo: .body) private var nameWidth: CGFloat = 92
     @ScaledMetric(relativeTo: .body) private var valueWidth: CGFloat = 44
     @ScaledMetric(relativeTo: .body) private var rowHeight: CGFloat = 40
+    @ScaledMetric(relativeTo: .caption2) private var tickHeight: CGFloat = 16
     @State private var hasAppeared = false
     let averages: [String: Double]
-    /// Sets logged since the week began, drawn as a thin bar over the wide pale
-    /// four-week-average bar so a row reads as this week filling toward a usual week (build 117).
+    /// Sets logged since the week began, drawn as a solid bar over the pale four-week-average
+    /// bar of the same height, so a row reads as this week filling toward a usual week (builds 117–118).
     var thisWeek: [String: Int] = [:]
     /// The All Muscles range; it labels the axis.
     let target: ClosedRange<Int>
@@ -935,13 +936,13 @@ struct WeeklySetsChart: View {
         HStack(spacing: 6) {
             Capsule()
                 .fill(LiteweightTheme.secondaryText.opacity(Self.averageOpacity))
-                .frame(width: 18, height: Self.averageThickness)
+                .frame(width: 18, height: Self.barThickness)
             Text("Avg")
         }
         HStack(spacing: 6) {
             Capsule()
                 .fill(LiteweightTheme.secondaryText)
-                .frame(width: 18, height: Self.weekThickness)
+                .frame(width: 18, height: Self.barThickness)
             Text("This week")
         }
         HStack(spacing: 6) {
@@ -950,8 +951,8 @@ struct WeeklySetsChart: View {
         }
     }
 
-    private static let averageThickness: CGFloat = 12
-    private static let weekThickness: CGFloat = 6
+    /// Both bars share one height; the owner found a thin bar inside a wide one odd (build 118).
+    private static let barThickness: CGFloat = 10
     private static let averageOpacity = 0.4
 
     /// A bar's length on the axis; any sets at all show at least a dot as wide as the bar is tall.
@@ -977,19 +978,13 @@ struct WeeklySetsChart: View {
         .clipped()
     }
 
-    /// At accessibility sizes the bars get the full width under each row's name and numbers,
-    /// so the axis labels and column headers no longer collide.
+    /// At accessibility sizes each row stacks its name, its labeled numbers and a full-width bar,
+    /// so nothing truncates or collides; the column headers give way to inline labels.
     @ViewBuilder
     private var axisRow: some View {
         if dynamicTypeSize.isAccessibilitySize {
-            VStack(spacing: 4) {
-                HStack(spacing: 0) {
-                    Spacer(minLength: 0)
-                    columnHeaders
-                }
-                tickLabels
-            }
-            .accessibilityHidden(true)
+            tickLabels
+                .accessibilityHidden(true)
         } else {
             HStack(spacing: 0) {
                 Color.clear.frame(width: nameWidth, height: 1)
@@ -1006,15 +1001,15 @@ struct WeeklySetsChart: View {
             ZStack(alignment: .topLeading) {
                 Text("0")
                 Text("\(target.lowerBound)")
-                    .position(x: width * Double(target.lowerBound) / scaleMax, y: 7)
+                    .position(x: width * Double(target.lowerBound) / scaleMax, y: tickHeight / 2)
                 Text("\(target.upperBound)")
-                    .position(x: width * Double(target.upperBound) / scaleMax, y: 7)
+                    .position(x: width * Double(target.upperBound) / scaleMax, y: tickHeight / 2)
             }
             .font(.caption2)
             .monospacedDigit()
             .foregroundStyle(LiteweightTheme.secondaryText)
         }
-        .frame(height: 16)
+        .frame(height: tickHeight)
     }
 
     private var columnHeaders: some View {
@@ -1041,11 +1036,8 @@ struct WeeklySetsChart: View {
         Group {
             if dynamicTypeSize.isAccessibilitySize {
                 VStack(alignment: .leading, spacing: 4) {
-                    HStack(spacing: 0) {
-                        name
-                        Spacer(minLength: 8)
-                        rowValues(row)
-                    }
+                    name
+                    labeledValues(row)
                     barTrack(row)
                         .frame(height: 20)
                 }
@@ -1074,14 +1066,51 @@ struct WeeklySetsChart: View {
                 bandShape
                     .frame(width: high - low)
                     .offset(x: low)
+                let averageLength = barLength(row.sets, width: width, thickness: Self.barThickness)
                 Capsule()
                     .fill(LiteweightTheme.muscle(row.group).opacity(Self.averageOpacity))
-                    .frame(width: barLength(row.sets, width: width, thickness: Self.averageThickness), height: Self.averageThickness)
+                    .frame(width: averageLength, height: Self.barThickness)
                 Capsule()
                     .fill(LiteweightTheme.muscle(row.group))
-                    .frame(width: barLength(Double(row.thisWeek), width: width, thickness: Self.weekThickness), height: Self.weekThickness)
+                    .frame(width: barLength(Double(row.thisWeek), width: width, thickness: Self.barThickness), height: Self.barThickness)
+                    .mask(alignment: .leading) {
+                        // Past the average, a 2 pt gap keeps the average's end visible.
+                        if Double(row.thisWeek) > row.sets, averageLength > 0 {
+                            HStack(spacing: 2) {
+                                Rectangle().frame(width: max(averageLength - 1, 0))
+                                Rectangle()
+                            }
+                        } else {
+                            Rectangle()
+                        }
+                    }
             }
             .frame(width: width, height: proxy.size.height, alignment: .leading)
+        }
+    }
+
+    /// The accessibility-size numbers, each with its own label in place of the column headers.
+    /// Side by side when they fit, else one under the other; a number never wraps away from its label.
+    private func labeledValues(_ row: Row) -> some View {
+        let average = (Text(Self.format(row.sets))
+            .font(.liteweightMetric(.body, weight: .semibold))
+            .foregroundColor(LiteweightTheme.secondaryText)
+            + Text(" avg").font(.subheadline).foregroundColor(LiteweightTheme.secondaryText))
+            .fixedSize()
+        let week = (Text("\(row.thisWeek)")
+            .font(.liteweightMetric(.body, weight: .semibold))
+            .foregroundColor(row.thisWeek > 0 ? LiteweightTheme.primaryText : LiteweightTheme.tertiaryText)
+            + Text(" this week").font(.subheadline).foregroundColor(LiteweightTheme.secondaryText))
+            .fixedSize()
+        return ViewThatFits(in: .horizontal) {
+            HStack(alignment: .firstTextBaseline, spacing: 16) {
+                average
+                week
+            }
+            VStack(alignment: .leading, spacing: 2) {
+                average
+                week
+            }
         }
     }
 

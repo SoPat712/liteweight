@@ -624,8 +624,23 @@ struct WorkoutCalendarView: View {
     @ScaledMetric(relativeTo: .subheadline) private var dayDiameter: CGFloat = 34
     @State private var selectedDay: TrainingDay?
     @State private var visibleMonth = Calendar.current.dateInterval(of: .month, for: Date())?.start ?? Date()
+    @State private var availableWidth: CGFloat = 0
 
     private let columns = Array(repeating: GridItem(.flexible(), spacing: 4), count: 7)
+
+    /// At large text sizes the month shrinks to the screen's width instead of clipping its last
+    /// columns (build 118); below 36 pt days it scrolls sideways.
+    private var gridWidth: CGFloat? {
+        guard dynamicTypeSize.isAccessibilitySize else { return nil }
+        let preferred = 7 * max(44, dayDiameter + 10) + 36
+        guard availableWidth > 0 else { return preferred }
+        return min(preferred, max(7 * 36 + 24, availableWidth))
+    }
+
+    private var circleDiameter: CGFloat {
+        guard let gridWidth else { return dayDiameter }
+        return min(dayDiameter, (gridWidth - 24) / 7 - 2)
+    }
 
     private var weekdays: [String] {
         let calendar = Calendar.current
@@ -680,6 +695,8 @@ struct WorkoutCalendarView: View {
 
                         Text(monthTitle)
                             .font(.headline)
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.6)
 
                         Spacer()
 
@@ -691,6 +708,7 @@ struct WorkoutCalendarView: View {
                     if dynamicTypeSize.isAccessibilitySize {
                         ScrollView(.horizontal) { calendarGrid }
                             .scrollIndicators(.hidden)
+                            .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { availableWidth = $0 }
                     } else {
                         calendarGrid
                     }
@@ -751,7 +769,7 @@ struct WorkoutCalendarView: View {
                 ForEach(Array(calendarCells.enumerated()), id: \.offset) { _, date in calendarDay(date) }
             }
         }
-        .frame(width: dynamicTypeSize.isAccessibilitySize ? 7 * max(44, dayDiameter + 10) + 36 : nil)
+        .frame(width: gridWidth)
     }
 
     private func shiftMonth(_ direction: Int) {
@@ -787,9 +805,12 @@ struct WorkoutCalendarView: View {
             Text("\(Calendar.current.component(.day, from: date))")
                 .font(.liteweightMetric(.subheadline, weight: workoutCount > 0 || isToday ? .bold : .semibold))
                 .foregroundStyle(workoutCount > 0 ? LiteweightTheme.onAccent : (isToday ? LiteweightTheme.accent : LiteweightTheme.primaryText))
+                .lineLimit(1)
+                .minimumScaleFactor(0.5)
+                .padding(.horizontal, 3)
         }
-        .frame(width: dayDiameter, height: dayDiameter)
-        .frame(maxWidth: .infinity, minHeight: max(LiteweightTheme.controlHeight, dayDiameter + 10))
+        .frame(width: circleDiameter, height: circleDiameter)
+        .frame(maxWidth: .infinity, minHeight: max(LiteweightTheme.controlHeight, circleDiameter + 10))
         .contentShape(Rectangle())
         .accessibilityLabel(
             "\(date.formatted(date: .long, time: .omitted)), \(workoutCount) workout\(workoutCount == 1 ? "" : "s")"
@@ -829,7 +850,8 @@ private struct WorkoutCalendarDayView: View {
     }
 }
 
-private struct CalendarWorkoutRow: View {
+/// A finished workout: title, date and its metric line. Calendar and Apple Health share it.
+struct CalendarWorkoutRow: View {
     @EnvironmentObject private var settingsStore: SettingsStore
     @EnvironmentObject private var exerciseStore: ExerciseStore
 

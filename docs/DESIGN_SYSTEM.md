@@ -720,24 +720,27 @@ no Core Data change. Default cards, in order:
      line names the most rested group.
    - **Daily Volume**: the original seven daily volume bars with the comparison line.
 3. **Last 4 Weeks** calendar: 34 pt day circles, trained days solid accent with white numbers,
-   others `tertiaryFill` with `secondaryText`. A streak chip sits in the section header.
+   others `tertiaryFill` with `secondaryText`. At accessibility text sizes the week shrinks to
+   the card's width (cells down to 36 pt, numbers scale down) instead of clipping Friday and
+   Saturday; only below that does it scroll sideways (build 118). The full calendar does the same. A streak chip sits in the section header.
    Every date opens a Daily Recap, including rest days. The recap shows that day's workout,
    set, time and volume totals, all its sessions, muscle focus and any logged measurements.
    Workout detail is one level below the recap. The full calendar follows the same rule.
 4. Recent Training rows: the title with the date at the trailing edge, then the shared
    `LiteweightWorkoutMetricLine` (duration, sets, volume).
 5. **Muscle Focus**: average sets a week per tracked group over the last four weeks, ranked, in
-   each group's muscle color (§3.5) over a shaded target band. Each row is a bar inside a bar
-   (build 117): a wide 12 pt pale bar (the muscle color at 40%) for the four-week average, and a
-   thin 6 pt solid bar on top for this week, which keeps going past the pale end when this week
-   is ahead. A legend explains Avg, This week and the band by shape, in a neutral tint. Two
+   each group's muscle color (§3.5) over a shaded target band. Each row draws two bars of one
+   10 pt height (build 118; build 117's thin bar inside a wide one felt odd to the owner): pale
+   (the muscle color at 40%) for the four-week average, solid on top for this week. When this
+   week passes the average, a 2 pt gap in the solid bar marks where the average ends. A legend
+   explains Avg, This week and the band in a neutral tint. Two
    number columns (build 116): "Avg" (secondary) and "This wk" (primary). Edit Muscle Focus
    sets the All Muscles range (default 10–20; changing it resets every group) and any group's
    own range (`home.weeklySetTargetsByGroup`, "legs:12-20"); each row shades its own band.
    Header "N of 6 groups reach 10 sets a week", or "reach their target" once ranges differ; the
    footer names the group furthest below its target in one line. At accessibility text sizes
-   each row puts its name and numbers on one line with a full-width bar under them, and the
-   axis labels span the full width, so nothing collides.
+   each row stacks its name, its numbers with inline "avg" and "this week" labels (in place of
+   the column headers), and a full-width bar; the axis labels span the full width.
 6. Body and Pinned Charts use headline row names and the shared metric/unit
    hierarchy. Recent dates use subheadline metadata. Body rows use native List spacing and
    reflow vertically at accessibility sizes; never add a second minimum row height. Body's
@@ -909,7 +912,12 @@ icon, name, badge and primary button on Health and Watch pages. Keep one short f
 Connection pages state status in the header: a badge plus one detail line
 (`SettingsConnectionHeader(detail:)`), e.g. "Ready · Paired and installed". Check rows (Paired,
 Installed) appear only when one fails, with a footer saying what to do. Watch Refresh is a toolbar
-button. About has one unheaded Links group (Source Code, Built on Iron, Licenses), and the top
+button. Apple Health (build 119) is informational: "Connected" means workouts save (body
+measurements and effort are optional and never warn). "What liteweight Saves" lists each category
+as Saving, Off or Not Asked, since Apple hides read access, with Ask for Missing Categories when
+any was never asked and Manage in Health. "Saved to Health" shows the five latest saved workouts
+(a Watch symbol marks ones the Watch recorded), Show All, and a waiting count. There is no bulk
+sync button; one workout syncs from its detail page. About has one unheaded Links group (Source Code, Built on Iron, Licenses), and the top
 liteweight card is the only way into About. Footers are one short line, or none where the row says it.
 
 "Import & Export" holds the Hevy CSV import, backups and exports.

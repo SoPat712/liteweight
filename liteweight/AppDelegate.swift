@@ -65,6 +65,9 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
         // Reset first so repeated launches stay idempotent instead of stacking
         // duplicate history.
         LiteweightSampleDataSeeder.seed(reset: true, includeActiveWorkout: wantsActiveWorkout)
+        if arguments.contains("-liteweightSeedHealthSaved") {
+            LiteweightSampleDataSeeder.markSavedToHealth()
+        }
         if wantsActiveWorkout && arguments.contains("-liteweightSeedNotes") {
             seedActiveWorkoutNotes()
         }

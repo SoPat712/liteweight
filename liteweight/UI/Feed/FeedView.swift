@@ -1097,8 +1097,17 @@ private struct HomeTrainingCalendar: View {
     @ScaledMetric(relativeTo: .subheadline) private var dayDiameter: CGFloat = 34
     let workoutsByDay: [Date: [TrainingSessionSnapshot]]
     @State private var selectedDay: TrainingDay?
+    @State private var availableWidth: CGFloat = 0
 
-    private var cellSize: CGFloat { max(LiteweightTheme.controlHeight, dayDiameter + 10) }
+    /// At large text sizes the week shrinks to the card's width instead of clipping Friday and
+    /// Saturday (build 118); below 36 pt cells it scrolls sideways.
+    private var cellSize: CGFloat {
+        let preferred = max(LiteweightTheme.controlHeight, dayDiameter + 10)
+        guard availableWidth > 0 else { return preferred }
+        return min(preferred, max(36, (availableWidth / 7).rounded(.down)))
+    }
+
+    private var circleDiameter: CGFloat { min(dayDiameter, cellSize - 4) }
 
     private var days: [Date?] {
         let today = calendar.startOfDay(for: Date())
@@ -1146,6 +1155,7 @@ private struct HomeTrainingCalendar: View {
             .padding(.vertical, 2)
         }
         .scrollIndicators(.hidden)
+        .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { availableWidth = $0 }
         .navigationDestination(item: $selectedDay) { day in TrainingDayRecapView(date: day.date) }
         .preference(key: WorkoutsLast28DaysKey.self, value: days.compactMap { $0 }.reduce(0) { $0 + workouts(on: $1).count })
     }
@@ -1170,7 +1180,10 @@ private struct HomeTrainingCalendar: View {
         Text("\(calendar.component(.day, from: day))")
             .font(.liteweightMetric(.subheadline))
             .foregroundStyle(trained ? LiteweightTheme.onAccent : LiteweightTheme.secondaryText)
-            .frame(width: dayDiameter, height: dayDiameter)
+            .lineLimit(1)
+            .minimumScaleFactor(0.5)
+            .padding(.horizontal, 3)
+            .frame(width: circleDiameter, height: circleDiameter)
             .background(trained ? (group.map { LiteweightTheme.muscle($0) } ?? LiteweightTheme.accent) : LiteweightTheme.tertiaryFill, in: Circle())
             .overlay {
                 if !trained && calendar.isDateInToday(day) {

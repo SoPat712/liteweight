@@ -85,8 +85,21 @@ extension HealthManager {
     enum AccessState: Equatable {
         case unavailable
         case notDetermined
-        case needsReview
+        /// Workouts are off in Health. Optional body categories never cause this (build 119).
+        case workoutsOff
         case ready
+    }
+
+    /// A category liteweight saves to Apple Health, and whether Health lets it (build 119).
+    /// Apple hides read access from apps, so saving is all an app can show.
+    struct SaveCategory: Identifiable {
+        enum Kind: String {
+            case workouts, bodyWeight, height, bodyFat, waist, effort
+        }
+
+        let kind: Kind
+        let status: HKAuthorizationStatus
+        var id: Kind { kind }
     }
 
     enum AuthorizationError: LocalizedError {
@@ -194,21 +207,27 @@ extension HealthManager {
         )
     }
 
+    /// Workouts decide the connection. Body measurements and effort are optional, so one of
+    /// them being off no longer reads as "Needs Review" or blocks anything; Settings lists
+    /// each category instead (build 119).
     var accessState: AccessState {
         guard HKHealthStore.isHealthDataAvailable() else { return .unavailable }
+        switch healthStore.authorizationStatus(for: HKObjectType.workoutType()) {
+        case .sharingAuthorized: return .ready
+        case .sharingDenied: return .workoutsOff
+        default: return .notDetermined
+        }
+    }
 
-        // Effort is optional: existing Health connections stay ready even when
-        // this newer category has not been requested or was declined.
-        let shareTypes: [HKSampleType] = [HKObjectType.workoutType()]
-            + bodyMeasurementTypes.map { $0 as HKSampleType }
-        let statuses = shareTypes.map(healthStore.authorizationStatus(for:))
-        if statuses.allSatisfy({ $0 == .notDetermined }) {
-            return .notDetermined
-        }
-        if statuses.allSatisfy({ $0 == .sharingAuthorized }) {
-            return .ready
-        }
-        return .needsReview
+    var saveCategories: [SaveCategory] {
+        guard HKHealthStore.isHealthDataAvailable() else { return [] }
+        let body: [(SaveCategory.Kind, HKQuantityTypeIdentifier)] = [
+            (.bodyWeight, .bodyMass), (.height, .height), (.bodyFat, .bodyFatPercentage), (.waist, .waistCircumference)
+        ]
+        var types: [(SaveCategory.Kind, HKObjectType)] = [(.workouts, HKObjectType.workoutType())]
+        types += body.compactMap { kind, identifier in HKObjectType.quantityType(forIdentifier: identifier).map { (kind, $0) } }
+        if let workoutEffortType { types.append((.effort, workoutEffortType)) }
+        return types.map { SaveCategory(kind: $0.0, status: healthStore.authorizationStatus(for: $0.1)) }
     }
 
     private var workoutEffortType: HKQuantityType? {

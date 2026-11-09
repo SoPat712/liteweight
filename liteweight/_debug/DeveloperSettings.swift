@@ -422,6 +422,19 @@ enum LiteweightSampleDataSeeder {
         seedBodyMeasurements(reset: reset)
     }
 
+    /// Marks sample history as saved to Apple Health, every fourth as recorded by the Watch,
+    /// so Settings › Apple Health can be reviewed with content (build 119).
+    static func markSavedToHealth() {
+        let context = WorkoutDataStorage.shared.persistentContainer.viewContext
+        let request: NSFetchRequest<Workout> = Workout.fetchRequest()
+        request.predicate = NSPredicate(format: "isCurrentWorkout == NO")
+        request.sortDescriptors = [NSSortDescriptor(keyPath: \Workout.start, ascending: false)]
+        for (index, workout) in ((try? context.fetch(request)) ?? []).enumerated() {
+            workout.healthExportState = index % 4 == 1 ? "watch" : "exported"
+        }
+        context.saveOrCrash()
+    }
+
     private static func deleteAllWorkouts(in context: NSManagedObjectContext) {
         let request: NSFetchRequest<Workout> = Workout.fetchRequest()
         for workout in (try? context.fetch(request)) ?? [] {

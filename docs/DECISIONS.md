@@ -8,7 +8,28 @@ Builds are installed with `~/.local/share/liteweight/tools/install-NN.sh`. Lane 
 
 **Builds 107–111** (2026-11-08) landed in one commit, because they changed the same files. Reverting that commit undoes all five; to undo one entry, change its parts back by hand.
 
+**Builds 118–119** (2026-11-09) landed in one commit for the same reason. Reverting it undoes both.
+
 ---
+
+## 2026-11-09
+
+### Apple Health page is informational; optional categories no longer warn (build 119)
+- **Asked:** "Why's it say that? If it can't read if it has access? Maybe this page should just be informational! And show previously synced workouts too maybe?" The owner chose the category list, the latest 5 plus Show All, and removing Sync Past Workouts.
+- **Found:** "Needs Review" appeared when any of the five save categories (workouts, weight, height, body fat, waist) was off or never asked, and that same state disabled Sync Past Workouts. So an optional body category blocked workout sync.
+- **Decided:**
+  - `HealthManager.accessState` follows workouts only: Connected, Not Saving Workouts, or Not Connected. The welcome guide's Health page uses the same state.
+  - Settings lists each category's save status (Apple hides read status), with Ask for Missing Categories when one was never asked.
+  - "Saved to Health" lists workouts whose export state is `exported` or `watch`, read from Core Data rather than HealthKit, plus a count of `pending` workouts.
+  - The bulk sync button is gone. New workouts save on finish and pending ones retry on foreground, unlock and authorization. One workout can still be synced from its detail page. `updateHealthWorkouts` stays in HealthManager, unused.
+- **Roll back:** revert this entry's commit.
+
+### Muscle Focus bars share one height; calendars fit large text (build 118)
+- **Asked:** "i dont like the filled and unfilled bars! one is wider! feels odd! fix!" and, of the Last 4 Weeks calendar clipping Friday and Saturday at accessibility sizes, "yes fix it!"
+- **Decided:**
+  - Both Muscle Focus bars are 10 pt: pale average behind, solid this week on top. When this week passes the average, a 2 pt gap in the solid bar marks the average's end, which a same-height bar would otherwise hide.
+  - Home's Last 4 Weeks and the full Calendar measure their width at accessibility sizes and shrink the week to fit: cells go down to 36 pt and the numbers scale down. Below that they still scroll sideways, as before. Standard sizes are unchanged.
+- **Roll back:** revert this entry's commit.
 
 ## 2026-11-08
 
