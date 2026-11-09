@@ -386,6 +386,7 @@ extension WatchConnectionManager: WCSessionDelegate {
                 return
             }
             self.connectivityQueue.async {
+                self.removeAbandonedTransferFiles()
                 self.preferenceSync.applyReceived(session.receivedApplicationContext)
                 do {
                     try self.updateApplicationContextIfChanged(self.applicationContextIncludingPreferences([:]))
@@ -2224,6 +2225,25 @@ extension WatchConnectionManager {
                 guard id == workoutID else { continue }
             }
             transfer.cancel()
+            // A cancelled transfer never reports finishing, so its file would stay
+            // behind: each 2 MB library copy piled up in tmp (owner's phone, build 115).
+            if retainedTransferFiles.remove(transfer.file.fileURL) != nil {
+                try? FileManager.default.removeItem(at: transfer.file.fileURL)
+            }
+        }
+    }
+
+    /// Staged files outlive the app when it quits mid-transfer, because the retained
+    /// set is only in memory. Remove any of ours that no live transfer still reads.
+    private func removeAbandonedTransferFiles() {
+        dispatchPrecondition(condition: .onQueue(connectivityQueue))
+        let directory = FileManager.default.temporaryDirectory
+        let live = Set(session.outstandingFileTransfers.map { $0.file.fileURL.standardizedFileURL.path })
+        let names = (try? FileManager.default.contentsOfDirectory(atPath: directory.path)) ?? []
+        for name in names where name.hasPrefix(Self.libraryFilePrefix) || name.hasPrefix(Self.snapshotFilePrefix) {
+            let url = directory.appendingPathComponent(name, isDirectory: false)
+            guard !live.contains(url.standardizedFileURL.path), !retainedTransferFiles.contains(url) else { continue }
+            try? FileManager.default.removeItem(at: url)
         }
     }
 

@@ -1117,6 +1117,24 @@ extension ExportImportWorkoutDataTests {
         XCTAssertEqual(try Data(contentsOf: url), originalData)
     }
 
+    func testCustomExerciseWithoutMusclesTakesOneFromItsName() {
+        let cases: [(String, String?)] = [
+            ("Seated Triceps Press", "triceps"), ("Back Extension (Machine)", "erector spinae"),
+            ("Leg Extension (Machine)", "quadriceps"), ("Seated Leg Curl (Machine)", "hamstrings"),
+            ("Bicep Curl (Machine)", "biceps"), ("Lat Pulldown (Cable)", "latissimus dorsi"),
+            ("Chest Fly (Machine)", "pectorals"), ("Lateral Raise (Cable)", "deltoids"),
+            ("Standing Calf Raise", "calves"), ("Hanging Leg Raise", "abdominals"),
+            ("Tricep Kickback (Dumbbell)", "triceps"), ("Glute Kickback (Machine)", "glutes"),
+            ("Hammer Strength Chest Press", "pectorals"),
+            ("Uncatalogued Hevy Movement", nil), ("Laboratory Walk", nil)
+        ]
+        for (title, muscle) in cases {
+            XCTAssertEqual(ExerciseCatalogMetadata.inferredPrimaryMuscle(for: title), muscle, title)
+        }
+        XCTAssertEqual(Exercise.muscleGroup(for: "triceps"), "arms")
+        XCTAssertEqual(Exercise.muscleGroup(for: "erector spinae"), "back")
+    }
+
     func testExerciseCatalogEnrichmentPreservesUnknownAndExplicitCustomMetadata() throws {
         let (_, url) = temporaryExerciseStore()
         defer { try? FileManager.default.removeItem(at: url) }
@@ -1181,7 +1199,8 @@ extension ExportImportWorkoutDataTests {
         XCTAssertNil(loadedMuscles.animationFilename)
 
         let loadedEquipment = try XCTUnwrap(store.customExercises.first { $0.title == explicitEquipment.title })
-        XCTAssertTrue(loadedEquipment.primaryMuscle.isEmpty)
+        // No catalog data when the equipment disagrees, but the name still names the muscle.
+        XCTAssertEqual(loadedEquipment.primaryMuscle, ["biceps"])
         XCTAssertTrue(loadedEquipment.secondaryMuscle.isEmpty)
         XCTAssertEqual(loadedEquipment.equipment, explicitEquipment.equipment)
         XCTAssertNil(loadedEquipment.imageFilename)

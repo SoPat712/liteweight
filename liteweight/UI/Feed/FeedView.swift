@@ -238,7 +238,8 @@ struct FeedView : View {
         return Section {
             cardHeader(.muscles)
             if trained {
-                WeeklySetsChart(averages: summary.weeklyAverages, target: target)
+                WeeklySetsChart(averages: summary.weeklyAverages,
+                                thisWeek: summary.muscleSets.mapValues { $0.reduce(0, +) }, target: target)
                     .padding(.vertical, 6)
             } else {
                 Text("Complete a few workouts to see how many sets each muscle group gets a week.")

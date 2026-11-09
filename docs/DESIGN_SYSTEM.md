@@ -722,8 +722,10 @@ no Core Data change. Default cards, in order:
    `LiteweightWorkoutMetricLine` (duration, sets, volume).
 5. **Muscle Focus**: average sets a week per tracked group over the last four weeks, ranked,
    as bars in each group's muscle color (§3.5) over a shaded target band (default 10–20, set in
-   Customize Home); the legend only explains the band. Header "N of 6 groups reach 10 sets a
-   week"; the footer names the lowest group in one line. Every
+   Customize Home); the legend only explains the band. Two number columns (build 116): "Avg" (the
+   bar, secondary) and "This wk" (sets since the week began, primary); the owner read the single
+   "Week" column as this week's count. Header "N of 6 groups reach 10 sets a week"; the footer
+   names the lowest group in one line. Every
    row lays out its own name, so nothing collides at large text sizes.
 6. Body and Pinned Charts use headline row names and the shared metric/unit
    hierarchy. Recent dates use subheadline metadata. Body rows use native List spacing and

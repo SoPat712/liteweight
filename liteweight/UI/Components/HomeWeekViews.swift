@@ -788,17 +788,21 @@ struct WeeklySetsChart: View {
     @ScaledMetric(relativeTo: .body) private var rowHeight: CGFloat = 40
     @State private var hasAppeared = false
     let averages: [String: Double]
+    /// Sets logged since the week began. The bar and "Avg" stay the four-week
+    /// average; read alone, "Week" looked like this week's count (owner, build 116).
+    var thisWeek: [String: Int] = [:]
     let target: ClosedRange<Int>
 
     private struct Row: Identifiable {
         var id: String { group }
         let group: String
         let sets: Double
+        let thisWeek: Int
     }
 
     private var rows: [Row] {
         HomeWeekSummary.muscleGroups
-            .map { Row(group: $0, sets: averages[$0] ?? 0) }
+            .map { Row(group: $0, sets: averages[$0] ?? 0, thisWeek: thisWeek[$0] ?? 0) }
             .sorted { $0.sets > $1.sets }
     }
 
@@ -815,7 +819,7 @@ struct WeeklySetsChart: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
             LiteweightChartHeader(
-                caption: "Sets per week · last 4 weeks",
+                caption: "Avg sets a week · last 4 weeks",
                 value: LiteweightChartText.value("\(reaching) of \(rows.count)", unit: "groups", tint: LiteweightTheme.metricSets, style: .title),
                 detail: "reach \(target.lowerBound) sets a week"
             )
@@ -873,11 +877,18 @@ struct WeeklySetsChart: View {
                 .foregroundStyle(LiteweightTheme.secondaryText)
             }
             .frame(height: 16)
-            Text("Week")
+            Text("Avg")
                 .font(.caption2.weight(.semibold))
                 .foregroundStyle(LiteweightTheme.secondaryText)
                 .textCase(.uppercase)
                 .frame(width: valueWidth, alignment: .trailing)
+            Text("This wk")
+                .font(.caption2.weight(.semibold))
+                .foregroundStyle(LiteweightTheme.secondaryText)
+                .textCase(.uppercase)
+                .lineLimit(1)
+                .minimumScaleFactor(0.7)
+                .frame(width: valueWidth + 8, alignment: .trailing)
         }
         .accessibilityHidden(true)
     }
@@ -906,14 +917,20 @@ struct WeeklySetsChart: View {
             .frame(height: rowHeight)
             Text(Self.format(row.sets))
                 .font(.liteweightMetric(.body, weight: .semibold))
-                .foregroundStyle(LiteweightTheme.primaryText)
+                .foregroundStyle(LiteweightTheme.secondaryText)
                 .contentTransition(reduceMotion ? .opacity : .numericText(value: row.sets))
                 .animation(LiteweightMotion.preferred(LiteweightMotion.snappy, reduceMotion: reduceMotion), value: row.sets)
                 .frame(width: valueWidth, alignment: .trailing)
+            Text("\(row.thisWeek)")
+                .font(.liteweightMetric(.body, weight: .semibold))
+                .foregroundStyle(row.thisWeek > 0 ? LiteweightTheme.primaryText : LiteweightTheme.tertiaryText)
+                .contentTransition(reduceMotion ? .opacity : .numericText(value: Double(row.thisWeek)))
+                .animation(LiteweightMotion.preferred(LiteweightMotion.snappy, reduceMotion: reduceMotion), value: row.thisWeek)
+                .frame(width: valueWidth + 8, alignment: .trailing)
         }
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(HomeWeekSummary.displayName(row.group))
-        .accessibilityValue("\(Self.format(row.sets)) sets a week, \(row.sets < Double(target.lowerBound) ? "below" : row.sets > Double(target.upperBound) ? "above" : "within") your \(target.lowerBound) to \(target.upperBound) target")
+        .accessibilityValue("\(row.thisWeek) \(row.thisWeek == 1 ? "set" : "sets") this week. Averages \(Self.format(row.sets)) sets a week, \(row.sets < Double(target.lowerBound) ? "below" : row.sets > Double(target.upperBound) ? "above" : "within") your \(target.lowerBound) to \(target.upperBound) target")
     }
 }
 

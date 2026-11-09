@@ -152,14 +152,13 @@ public struct ExerciseCatalogMetadata {
     /// all workout relationships; do not rewrite the custom file or merge histories.
     public func enriching(_ exercise: Exercise) -> Exercise {
         guard exercise.isCustom,
-              exercise.primaryMuscle.isEmpty, exercise.secondaryMuscle.isEmpty,
-              exercise.pdfPaths.isEmpty,
+              exercise.primaryMuscle.isEmpty, exercise.secondaryMuscle.isEmpty else { return exercise }
+        guard exercise.pdfPaths.isEmpty,
               exercise.imageFilename == nil, exercise.animationFilename == nil,
-              let template = uniqueNames[Self.nameKey(exercise.title)] else { return exercise }
-
-        // Respect a custom equipment choice that contradicts the catalog template.
-        let equipment = Set(template.equipment.map(Self.nameKey))
-        guard exercise.equipment.allSatisfy({ equipment.contains(Self.nameKey($0)) }) else { return exercise }
+              let template = uniqueNames[Self.nameKey(exercise.title)],
+              // Respect a custom equipment choice that contradicts the catalog template.
+              exercise.equipment.allSatisfy({ Set(template.equipment.map(Self.nameKey)).contains(Self.nameKey($0)) })
+        else { return Self.namingMuscle(exercise) }
         return Exercise(
             uuid: exercise.uuid, everkineticId: exercise.everkineticId,
             title: exercise.title, alias: exercise.alias,
@@ -173,6 +172,48 @@ public struct ExerciseCatalogMetadata {
             imageFilename: template.imageFilename, animationFilename: template.animationFilename,
             originalTitle: exercise.originalTitle
         )
+    }
+
+    /// A custom exercise with no muscles and no catalog twin still counts toward a
+    /// group when its name says which (an imported "Seated Triceps Press" counted
+    /// nowhere). In memory only, never written back; a muscle the person sets wins.
+    static func namingMuscle(_ exercise: Exercise) -> Exercise {
+        guard let muscle = inferredPrimaryMuscle(for: exercise.title) else { return exercise }
+        return Exercise(
+            uuid: exercise.uuid, everkineticId: exercise.everkineticId,
+            title: exercise.title, alias: exercise.alias, description: exercise.description,
+            primaryMuscle: [muscle], secondaryMuscle: [],
+            equipment: exercise.equipment, steps: exercise.steps, tips: exercise.tips,
+            references: exercise.references, pdfPaths: exercise.pdfPaths,
+            imageFilename: exercise.imageFilename, animationFilename: exercise.animationFilename,
+            originalTitle: exercise.originalTitle
+        )
+    }
+
+    /// The first rule whose words appear in the name, in order, so "Leg Curl" is
+    /// hamstrings before "Curl" is biceps and "Back Extension" is lower back before
+    /// "Leg Extension" is quads. Names are catalog muscle names `Exercise` groups.
+    public static func inferredPrimaryMuscle(for title: String) -> String? {
+        let key = " " + nameKey(title) + " "
+        func has(_ words: String...) -> Bool { words.contains { key.contains(" " + $0 + " ") } }
+        func starts(_ stems: String...) -> Bool { stems.contains { key.contains(" " + $0) } }
+        if has("leg curl", "hamstring curl", "romanian deadlift", "rdl", "good morning", "nordic") || starts("hamstring") { return "hamstrings" }
+        if starts("calf", "calves") { return "calves" }
+        if has("hip thrust", "glute bridge", "abduction", "donkey kick") || starts("glute") { return "glutes" }
+        if has("back extension", "hyperextension", "superman") { return "erector spinae" }
+        if has("squat", "leg press", "leg extension", "lunge", "lunges", "step up", "hack") { return "quadriceps" }
+        if starts("tricep", "skull") || has("pushdown", "dip", "dips", "kickback", "kickbacks") { return "triceps" }
+        if starts("bicep", "curl", "preacher") || has("hammer curl") { return "biceps" }
+        if starts("wrist", "forearm") || has("grip") { return "forearms" }
+        if starts("shrug") { return "trapezius" }
+        if has("lateral raise", "front raise", "rear delt", "face pull", "overhead press", "shoulder press",
+               "military press", "arnold press", "upright row") || starts("delt") { return "deltoids" }
+        if has("pulldown", "pull up", "pullup", "pull ups", "chin up", "chinup", "lat") { return "latissimus dorsi" }
+        if starts("row") { return "upper back" }
+        if has("bench", "chest", "fly", "flye", "flyes", "pec", "push up", "pushup", "push ups") { return "pectorals" }
+        if has("crunch", "plank", "sit up", "situp", "ab", "abs", "core", "leg raise", "russian twist", "woodchop")
+            || starts("oblique") { return "abdominals" }
+        return nil
     }
 
     public static func nameKey(_ name: String) -> String {

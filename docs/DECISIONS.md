@@ -12,6 +12,14 @@ Builds are installed with `~/.local/share/liteweight/tools/install-NN.sh`. Lane 
 
 ## 2026-11-08
 
+### Muscle Focus shows this week; imported exercises get a muscle from their name; Watch library copies cleaned up (build 116)
+- **Asked:** "i did 3 sets TODAY of arms and it's showing 2?" Checked against the phone's data: Arms was 8 sets in 28 days, so 2 a week, correct. The owner then chose "relable the muscle focus and add this week!", "fill in muscles probably yeah?" and "sure fix the leftover copy".
+- **Decided:**
+  - Muscle Focus has "Avg" and "This wk" columns; the caption says "Avg sets a week · last 4 weeks".
+  - A custom exercise with no muscles and no catalog twin takes a primary muscle from its name (`ExerciseCatalogMetadata.inferredPrimaryMuscle`), in memory only, so imported "Seated Triceps Press" counts as Arms and "Back Extension (Machine)" as Back. Ordered rules keep "Leg Curl" out of biceps and "Hammer Strength" out of curls.
+  - Cancelled Watch library and snapshot transfers delete their staged file (cancelling never reported finishing, so 2 MB copies piled up in tmp), and connecting sweeps any staged file no live transfer reads.
+- **Roll back:** revert this entry's commit.
+
 ### Watch Set Options is a route; RPE scrub no longer wobbles or buzzes (build 115)
 - **Asked:** "Navigating to a previous set and then options and pressing set type puts the page in the wrong place in the stack? Pressing back then takes me to the set type page?" and, of the iPhone RPE sheet, "Sliding the rpe slider audio sound bad, and the number jiggles oddly! Please animate it properly!"
 - **Found:** the set editor's "…" pushed Set Options as a view destination, while Set Type and RPE are path routes. SwiftUI stacks path routes beneath view-pushed pages, so Back went to the wrong page. The RPE number changed width ("7" ↔ "7.5"), shifting the line, and each step restarted a spring; no sound plays there, so the "audio" was the per-step haptic running together on a fast scrub.
