@@ -194,6 +194,33 @@ final class HomeWeekSummaryTests: XCTestCase {
                        [.muscles, .pace, .calendar, .recent, .pinned])
         XCTAssertEqual(HomeSection.migrated(style: "muscles", order: nil, hidden: nil).first, .muscleWeek)
     }
+
+    func testMuscleTargetsDecodeOnlyValidGroupRanges() {
+        let ranges = WeeklySetTarget.decode("legs:12-20,core:6-10,abdominals:6-10,arms:9-9,back:x-3,chest:0-8")
+        XCTAssertEqual(ranges, ["legs": 12...20, "abdominals": 6...10])
+        XCTAssertEqual(WeeklySetTarget.encode(["abdominals": 6...10, "legs": 12...20]), "legs:12-20,abdominals:6-10")
+        XCTAssertEqual(WeeklySetTarget.decode(""), [:])
+    }
+
+    func testRingGoalsFollowLastWeekUntilSet() {
+        var summary = HomeWeekSummary()
+        summary.lastVolume = 9_000
+        summary.lastSets = 40
+        summary.lastWorkouts = 3
+        var goals = WeekRingGoals()
+        XCTAssertTrue(goals.followsLastWeek)
+        XCTAssertEqual(goals.volumeGoal(summary), 9_000)
+        goals.sets = 60
+        XCTAssertFalse(goals.followsLastWeek)
+        XCTAssertEqual(goals.setsGoal(summary), 60)
+        XCTAssertEqual(goals.workoutsGoal(summary), 3)
+    }
+
+    func testBodyRowsDefaultAndKeepMeasurementOrder() {
+        XCTAssertEqual(HomeBodyRows.decode(nil), [.bodyFat, .waist])
+        XCTAssertEqual(HomeBodyRows.decode(""), [])
+        XCTAssertEqual(HomeBodyRows.decode("waist,bogus,chest,bodyWeight,chest"), [.chest, .waist])
+    }
 }
 
 final class ExerciseBestsTests: XCTestCase {

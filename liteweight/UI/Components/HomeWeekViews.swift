@@ -46,7 +46,7 @@ enum HomeSection: String, CaseIterable, Identifiable {
 
     var summary: String {
         switch self {
-        case .rings: return "Volume, sets and workouts close as you match last week."
+        case .rings: return "Volume, sets and workouts close at your goals, or at last week's totals."
         case .pace: return "Your running volume against last week's line."
         case .muscleWeek: return "Which muscle groups you trained on each day."
         case .bars: return "Volume for each day of the week."
@@ -79,6 +79,12 @@ enum HomeSection: String, CaseIterable, Identifiable {
         case .muscleLoad: return "figure.arms.open"
         }
     }
+
+    /// Cards with settings of their own get a pencil beside their title and an Edit item in
+    /// their hold menu; Edit Home only adds, removes and reorders cards (build 117).
+    var isEditable: Bool { [.rings, .muscles, .body, .pinned].contains(self) }
+
+    var editTitle: String { "Edit \(title)" }
 
     /// The saved cards in order, merging Body Weight into Body before skipping unknown and repeated names.
     /// An empty string means Home has no cards.
@@ -127,12 +133,67 @@ enum HomeSection: String, CaseIterable, Identifiable {
     }
 }
 
-/// The weekly sets per muscle that Muscle Focus shades.
+/// The weekly sets per muscle that Muscle Focus shades: the All Muscles range, and any group's own range.
 enum WeeklySetTarget {
     static let lowKey = "home.weeklySetTargetLow"
     static let highKey = "home.weeklySetTargetHigh"
+    /// Groups with a range of their own, as "legs:12-20,abdominals:6-10" (build 117).
+    static let groupsKey = "home.weeklySetTargetsByGroup"
     static let defaultLow = 10
     static let defaultHigh = 20
+
+    static func decode(_ stored: String) -> [String: ClosedRange<Int>] {
+        var ranges: [String: ClosedRange<Int>] = [:]
+        for entry in stored.split(separator: ",") {
+            let parts = entry.split(separator: ":")
+            guard parts.count == 2, HomeWeekSummary.muscleGroups.contains(String(parts[0])) else { continue }
+            let bounds = parts[1].split(separator: "-").compactMap { Int($0) }
+            guard bounds.count == 2, bounds[0] >= 1, bounds[1] > bounds[0] else { continue }
+            ranges[String(parts[0])] = bounds[0]...bounds[1]
+        }
+        return ranges
+    }
+
+    static func encode(_ ranges: [String: ClosedRange<Int>]) -> String {
+        HomeWeekSummary.muscleGroups.compactMap { group in
+            ranges[group].map { "\(group):\($0.lowerBound)-\($0.upperBound)" }
+        }.joined(separator: ",")
+    }
+}
+
+/// Each ring's goal on Home. Zero, the default, follows last week's total; anything else is the user's own goal (build 117).
+struct WeekRingGoals: Equatable {
+    static let volumeKey = "home.ringGoal.volume"
+    static let setsKey = "home.ringGoal.sets"
+    static let workoutsKey = "home.ringGoal.workouts"
+
+    /// Kilograms.
+    var volume = 0.0
+    var sets = 0
+    var workouts = 0
+
+    var followsLastWeek: Bool { self == WeekRingGoals() }
+
+    func volumeGoal(_ summary: HomeWeekSummary) -> Double { volume > 0 ? volume : summary.lastVolume }
+    func setsGoal(_ summary: HomeWeekSummary) -> Int { sets > 0 ? sets : summary.lastSets }
+    func workoutsGoal(_ summary: HomeWeekSummary) -> Int { workouts > 0 ? workouts : summary.lastWorkouts }
+}
+
+/// The measurements Body lists under its weight chart (build 117).
+enum HomeBodyRows {
+    static let key = "home.bodyRows"
+    static let defaultKinds: [BodyMeasurementKind] = [.bodyFat, .waist]
+    static let choices = BodyMeasurementKind.allCases.filter { $0 != .bodyWeight }
+
+    static func decode(_ stored: String?) -> [BodyMeasurementKind] {
+        guard let stored else { return defaultKinds }
+        let kinds = Set(stored.split(separator: ",").compactMap { BodyMeasurementKind(rawValue: String($0)) })
+        return choices.filter(kinds.contains)
+    }
+
+    static func encode(_ kinds: [BodyMeasurementKind]) -> String {
+        kinds.map(\.rawValue).joined(separator: ",")
+    }
 }
 
 /// Spoken Home metrics use full units rather than the compact chart labels.
@@ -185,6 +246,8 @@ struct HomeCardAccessibilitySummary: ViewModifier {
     let title: String
     let value: String
     var isSummary = false
+    /// The card's own edit, since the summary hides the pencil inside it.
+    var edit: (title: String, action: () -> Void)?
 
     func body(content: Content) -> some View {
         content
@@ -193,6 +256,11 @@ struct HomeCardAccessibilitySummary: ViewModifier {
             .accessibilityValue(value)
             .accessibilityAddTraits(isSummary ? .isSummaryElement : [])
             .accessibilitySortPriority(1)
+            .accessibilityActions {
+                if let edit {
+                    Button(edit.title, action: edit.action)
+                }
+            }
     }
 }
 
@@ -315,6 +383,7 @@ struct WeekRingsView: View {
     let summary: HomeWeekSummary
     let unit: String
     let valueLabel: (Double) -> String
+    var goals = WeekRingGoals()
 
     private struct Ring: Identifiable {
         let id: String
@@ -323,23 +392,27 @@ struct WeekRingsView: View {
         let target: String?
         let unit: String?
         let progress: Double
+        let isOwnGoal: Bool
         let tint: Color
         let track: Color
     }
 
     private var rings: [Ring] {
-        [
+        let volumeGoal = goals.volumeGoal(summary)
+        let setsGoal = goals.setsGoal(summary)
+        let workoutsGoal = goals.workoutsGoal(summary)
+        return [
             Ring(id: "volume", label: "Volume", value: valueLabel(summary.volume),
-                 target: summary.lastVolume > 0 ? valueLabel(summary.lastVolume) : nil, unit: unit,
-                 progress: progress(summary.volume, of: summary.lastVolume),
+                 target: volumeGoal > 0 ? valueLabel(volumeGoal) : nil, unit: unit,
+                 progress: progress(summary.volume, of: volumeGoal), isOwnGoal: goals.volume > 0,
                  tint: LiteweightTheme.metricVolume, track: LiteweightTheme.metricVolumeContainer),
             Ring(id: "sets", label: "Sets", value: "\(summary.sets)",
-                 target: summary.lastSets > 0 ? "\(summary.lastSets)" : nil, unit: nil,
-                 progress: progress(Double(summary.sets), of: Double(summary.lastSets)),
+                 target: setsGoal > 0 ? "\(setsGoal)" : nil, unit: nil,
+                 progress: progress(Double(summary.sets), of: Double(setsGoal)), isOwnGoal: goals.sets > 0,
                  tint: LiteweightTheme.metricSets, track: LiteweightTheme.metricSetsContainer),
             Ring(id: "workouts", label: summary.workouts == 1 ? "Workout" : "Workouts", value: "\(summary.workouts)",
-                 target: summary.lastWorkouts > 0 ? "\(summary.lastWorkouts)" : nil, unit: nil,
-                 progress: progress(Double(summary.workouts), of: Double(summary.lastWorkouts)),
+                 target: workoutsGoal > 0 ? "\(workoutsGoal)" : nil, unit: nil,
+                 progress: progress(Double(summary.workouts), of: Double(workoutsGoal)), isOwnGoal: goals.workouts > 0,
                  tint: LiteweightTheme.accent, track: LiteweightTheme.accentSoft)
         ]
     }
@@ -375,12 +448,17 @@ struct WeekRingsView: View {
 
     func accessibilitySummary(weightUnit: WeightUnit) -> String {
         let volume = HomeCardSpeech.weight(summary.volume, unit: weightUnit)
-        let volumeTarget = summary.lastVolume > 0
-            ? "Volume \(HomeCardSpeech.number(WeightUnit.convert(weight: summary.volume, from: .metric, to: weightUnit))) of \(HomeCardSpeech.weight(summary.lastVolume, unit: weightUnit))"
+        let volumeGoal = goals.volumeGoal(summary)
+        let setsGoal = goals.setsGoal(summary)
+        let workoutsGoal = goals.workoutsGoal(summary)
+        let volumeTarget = volumeGoal > 0
+            ? "Volume \(HomeCardSpeech.number(WeightUnit.convert(weight: summary.volume, from: .metric, to: weightUnit))) of \(HomeCardSpeech.weight(volumeGoal, unit: weightUnit))"
             : "Volume \(volume)"
-        let sets = summary.lastSets > 0 ? "\(summary.sets) of \(summary.lastSets) sets" : HomeCardSpeech.count(summary.sets, singular: "set", plural: "sets")
-        let workouts = summary.lastWorkouts > 0 ? "\(summary.workouts) of \(summary.lastWorkouts) workouts" : HomeCardSpeech.count(summary.workouts, singular: "workout", plural: "workouts")
-        let meaning = summary.lastWorkouts > 0
+        let sets = setsGoal > 0 ? "\(summary.sets) of \(setsGoal) sets" : HomeCardSpeech.count(summary.sets, singular: "set", plural: "sets")
+        let workouts = workoutsGoal > 0 ? "\(summary.workouts) of \(workoutsGoal) workouts" : HomeCardSpeech.count(summary.workouts, singular: "workout", plural: "workouts")
+        let meaning = !goals.followsLastWeek
+            ? "Each ring closes when you reach its goal."
+            : summary.lastWorkouts > 0
             ? "Each ring closes when you match last week."
             : "Nothing was logged last week, so any training closes a ring."
         return "\(volumeTarget), \(sets), \(workouts). \(meaning)"
@@ -424,7 +502,7 @@ struct WeekRingsView: View {
         }
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(ring.label)
-        .accessibilityValue("\(ring.value)\(ring.target.map { " of \($0)" } ?? "")\(ring.unit.map { " \($0)" } ?? ""), \(Int((ring.progress * 100).rounded())) percent of last week")
+        .accessibilityValue("\(ring.value)\(ring.target.map { " of \($0)" } ?? "")\(ring.unit.map { " \($0)" } ?? ""), \(Int((ring.progress * 100).rounded())) percent of \(ring.isOwnGoal ? "your goal" : "last week")")
     }
 
     private var dayStrip: some View {
@@ -783,34 +861,42 @@ struct MuscleWeekGrid: View {
 /// Average weekly sets for each tracked muscle group over the last four weeks, against the user's target range.
 struct WeeklySetsChart: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @ScaledMetric(relativeTo: .body) private var nameWidth: CGFloat = 92
     @ScaledMetric(relativeTo: .body) private var valueWidth: CGFloat = 44
     @ScaledMetric(relativeTo: .body) private var rowHeight: CGFloat = 40
     @State private var hasAppeared = false
     let averages: [String: Double]
-    /// Sets logged since the week began. The bar and "Avg" stay the four-week
-    /// average; read alone, "Week" looked like this week's count (owner, build 116).
+    /// Sets logged since the week began, drawn as a thin bar over the wide pale
+    /// four-week-average bar so a row reads as this week filling toward a usual week (build 117).
     var thisWeek: [String: Int] = [:]
+    /// The All Muscles range; it labels the axis.
     let target: ClosedRange<Int>
+    /// Groups with a range of their own, each shading its own band (build 117).
+    var groupTargets: [String: ClosedRange<Int>] = [:]
 
     private struct Row: Identifiable {
         var id: String { group }
         let group: String
         let sets: Double
         let thisWeek: Int
+        let target: ClosedRange<Int>
     }
 
     private var rows: [Row] {
         HomeWeekSummary.muscleGroups
-            .map { Row(group: $0, sets: averages[$0] ?? 0, thisWeek: thisWeek[$0] ?? 0) }
+            .map { Row(group: $0, sets: averages[$0] ?? 0, thisWeek: thisWeek[$0] ?? 0, target: groupTargets[$0] ?? target) }
             .sorted { $0.sets > $1.sets }
     }
 
     private var scaleMax: Double {
-        max(Double(target.upperBound) * 1.2, rows.map(\.sets).max() ?? 0)
+        let highest = rows.map { max($0.sets, Double($0.thisWeek), Double($0.target.upperBound) * 1.2) }.max() ?? 0
+        return max(Double(target.upperBound) * 1.2, highest)
     }
 
-    private var reaching: Int { rows.filter { $0.sets >= Double(target.lowerBound) }.count }
+    private var reaching: Int { rows.filter { $0.sets >= Double($0.target.lowerBound) }.count }
+
+    private var sharesOneTarget: Bool { groupTargets.values.allSatisfy { $0 == target } }
 
     static func format(_ sets: Double) -> String {
         sets.formatted(.number.precision(.fractionLength(sets == sets.rounded() ? 0 : 1)))
@@ -821,7 +907,7 @@ struct WeeklySetsChart: View {
             LiteweightChartHeader(
                 caption: "Avg sets a week · last 4 weeks",
                 value: LiteweightChartText.value("\(reaching) of \(rows.count)", unit: "groups", tint: LiteweightTheme.metricSets, style: .title),
-                detail: "reach \(target.lowerBound) sets a week"
+                detail: sharesOneTarget ? "reach \(target.lowerBound) sets a week" : "reach their target"
             )
 
             VStack(spacing: 0) {
@@ -831,9 +917,9 @@ struct WeeklySetsChart: View {
                 }
             }
 
-            HStack(spacing: 6) {
-                bandShape.frame(width: 14, height: 12)
-                Text("Target, \(target.lowerBound)–\(target.upperBound) sets")
+            ViewThatFits(in: .horizontal) {
+                HStack(spacing: 14) { legendItems }
+                VStack(alignment: .leading, spacing: 6) { legendItems }
             }
             .font(.footnote)
             .foregroundStyle(LiteweightTheme.secondaryText)
@@ -841,6 +927,37 @@ struct WeeklySetsChart: View {
         }
         .animation(LiteweightMotion.preferred(LiteweightMotion.collapse, reduceMotion: reduceMotion), value: hasAppeared)
         .onAppear { hasAppeared = true }
+    }
+
+    /// Group colors vary by row, so the legend explains the two bars by shape in a neutral tint.
+    @ViewBuilder
+    private var legendItems: some View {
+        HStack(spacing: 6) {
+            Capsule()
+                .fill(LiteweightTheme.secondaryText.opacity(Self.averageOpacity))
+                .frame(width: 18, height: Self.averageThickness)
+            Text("Avg")
+        }
+        HStack(spacing: 6) {
+            Capsule()
+                .fill(LiteweightTheme.secondaryText)
+                .frame(width: 18, height: Self.weekThickness)
+            Text("This week")
+        }
+        HStack(spacing: 6) {
+            bandShape.frame(width: 14, height: 12)
+            Text(sharesOneTarget ? "Target, \(target.lowerBound)–\(target.upperBound) sets" : "Target")
+        }
+    }
+
+    private static let averageThickness: CGFloat = 12
+    private static let weekThickness: CGFloat = 6
+    private static let averageOpacity = 0.4
+
+    /// A bar's length on the axis; any sets at all show at least a dot as wide as the bar is tall.
+    private func barLength(_ sets: Double, width: CGFloat, thickness: CGFloat) -> CGFloat {
+        guard hasAppeared || reduceMotion, sets > 0 else { return 0 }
+        return max(width * sets / scaleMax, thickness)
     }
 
     private var bandShape: some View {
@@ -860,61 +977,116 @@ struct WeeklySetsChart: View {
         .clipped()
     }
 
+    /// At accessibility sizes the bars get the full width under each row's name and numbers,
+    /// so the axis labels and column headers no longer collide.
+    @ViewBuilder
     private var axisRow: some View {
-        HStack(spacing: 0) {
-            Color.clear.frame(width: nameWidth, height: 1)
-            GeometryReader { proxy in
-                let width = proxy.size.width
-                ZStack(alignment: .topLeading) {
-                    Text("0")
-                    Text("\(target.lowerBound)")
-                        .position(x: width * Double(target.lowerBound) / scaleMax, y: 7)
-                    Text("\(target.upperBound)")
-                        .position(x: width * Double(target.upperBound) / scaleMax, y: 7)
+        if dynamicTypeSize.isAccessibilitySize {
+            VStack(spacing: 4) {
+                HStack(spacing: 0) {
+                    Spacer(minLength: 0)
+                    columnHeaders
                 }
-                .font(.caption2)
-                .monospacedDigit()
-                .foregroundStyle(LiteweightTheme.secondaryText)
+                tickLabels
             }
-            .frame(height: 16)
+            .accessibilityHidden(true)
+        } else {
+            HStack(spacing: 0) {
+                Color.clear.frame(width: nameWidth, height: 1)
+                tickLabels
+                columnHeaders
+            }
+            .accessibilityHidden(true)
+        }
+    }
+
+    private var tickLabels: some View {
+        GeometryReader { proxy in
+            let width = proxy.size.width
+            ZStack(alignment: .topLeading) {
+                Text("0")
+                Text("\(target.lowerBound)")
+                    .position(x: width * Double(target.lowerBound) / scaleMax, y: 7)
+                Text("\(target.upperBound)")
+                    .position(x: width * Double(target.upperBound) / scaleMax, y: 7)
+            }
+            .font(.caption2)
+            .monospacedDigit()
+            .foregroundStyle(LiteweightTheme.secondaryText)
+        }
+        .frame(height: 16)
+    }
+
+    private var columnHeaders: some View {
+        HStack(spacing: 0) {
             Text("Avg")
-                .font(.caption2.weight(.semibold))
-                .foregroundStyle(LiteweightTheme.secondaryText)
-                .textCase(.uppercase)
+                .lineLimit(1)
                 .frame(width: valueWidth, alignment: .trailing)
             Text("This wk")
-                .font(.caption2.weight(.semibold))
-                .foregroundStyle(LiteweightTheme.secondaryText)
-                .textCase(.uppercase)
                 .lineLimit(1)
                 .minimumScaleFactor(0.7)
                 .frame(width: valueWidth + 8, alignment: .trailing)
         }
-        .accessibilityHidden(true)
+        .font(.caption2.weight(.semibold))
+        .foregroundStyle(LiteweightTheme.secondaryText)
+        .textCase(.uppercase)
     }
 
+    @ViewBuilder
     private func barRow(_ row: Row) -> some View {
-        HStack(spacing: 0) {
-            Text(HomeWeekSummary.displayName(row.group))
-                .font(.body)
-                .foregroundStyle(LiteweightTheme.primaryText)
-                .lineLimit(1)
-                .frame(width: nameWidth, alignment: .leading)
-            GeometryReader { proxy in
-                let width = proxy.size.width
-                let low = width * Double(target.lowerBound) / scaleMax
-                let high = width * Double(target.upperBound) / scaleMax
-                ZStack(alignment: .leading) {
-                    bandShape
-                        .frame(width: high - low)
-                        .offset(x: low)
-                    Capsule()
-                        .fill(LiteweightTheme.muscle(row.group))
-                        .frame(width: hasAppeared || reduceMotion ? max(width * row.sets / scaleMax, row.sets > 0 ? 8 : 0) : 0, height: 8)
+        let name = Text(HomeWeekSummary.displayName(row.group))
+            .font(.body)
+            .foregroundStyle(LiteweightTheme.primaryText)
+            .lineLimit(1)
+        Group {
+            if dynamicTypeSize.isAccessibilitySize {
+                VStack(alignment: .leading, spacing: 4) {
+                    HStack(spacing: 0) {
+                        name
+                        Spacer(minLength: 8)
+                        rowValues(row)
+                    }
+                    barTrack(row)
+                        .frame(height: 20)
                 }
-                .frame(width: width, height: proxy.size.height, alignment: .leading)
+                .padding(.vertical, 6)
+            } else {
+                HStack(spacing: 0) {
+                    name
+                        .frame(width: nameWidth, alignment: .leading)
+                    barTrack(row)
+                        .frame(height: rowHeight)
+                    rowValues(row)
+                }
             }
-            .frame(height: rowHeight)
+        }
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(HomeWeekSummary.displayName(row.group))
+        .accessibilityValue("\(row.thisWeek) \(row.thisWeek == 1 ? "set" : "sets") this week. Averages \(Self.format(row.sets)) sets a week, \(row.sets < Double(row.target.lowerBound) ? "below" : row.sets > Double(row.target.upperBound) ? "above" : "within") your \(row.target.lowerBound) to \(row.target.upperBound) target")
+    }
+
+    private func barTrack(_ row: Row) -> some View {
+        GeometryReader { proxy in
+            let width = proxy.size.width
+            let low = width * Double(row.target.lowerBound) / scaleMax
+            let high = width * Double(row.target.upperBound) / scaleMax
+            ZStack(alignment: .leading) {
+                bandShape
+                    .frame(width: high - low)
+                    .offset(x: low)
+                Capsule()
+                    .fill(LiteweightTheme.muscle(row.group).opacity(Self.averageOpacity))
+                    .frame(width: barLength(row.sets, width: width, thickness: Self.averageThickness), height: Self.averageThickness)
+                Capsule()
+                    .fill(LiteweightTheme.muscle(row.group))
+                    .frame(width: barLength(Double(row.thisWeek), width: width, thickness: Self.weekThickness), height: Self.weekThickness)
+            }
+            .frame(width: width, height: proxy.size.height, alignment: .leading)
+        }
+    }
+
+    private func rowValues(_ row: Row) -> some View {
+        HStack(spacing: 0) {
             Text(Self.format(row.sets))
                 .font(.liteweightMetric(.body, weight: .semibold))
                 .foregroundStyle(LiteweightTheme.secondaryText)
@@ -928,21 +1100,17 @@ struct WeeklySetsChart: View {
                 .animation(LiteweightMotion.preferred(LiteweightMotion.snappy, reduceMotion: reduceMotion), value: row.thisWeek)
                 .frame(width: valueWidth + 8, alignment: .trailing)
         }
-        .accessibilityElement(children: .ignore)
-        .accessibilityLabel(HomeWeekSummary.displayName(row.group))
-        .accessibilityValue("\(row.thisWeek) \(row.thisWeek == 1 ? "set" : "sets") this week. Averages \(Self.format(row.sets)) sets a week, \(row.sets < Double(target.lowerBound) ? "below" : row.sets > Double(target.upperBound) ? "above" : "within") your \(target.lowerBound) to \(target.upperBound) target")
     }
 }
 
 // MARK: - Customize Home
 
-/// Fitness-style Edit Summary for Home: the cards on Home in order, the cards that can be added, and the weekly set target.
+/// Fitness-style Edit Summary for Home: the cards on Home in order and the cards that can be added.
+/// A card's own settings live in its own editor (build 117).
 struct CustomizeHomeSheet: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @AppStorage(HomeSection.cardsKey) private var storedCards: String?
-    @AppStorage(WeeklySetTarget.lowKey) private var targetLow = WeeklySetTarget.defaultLow
-    @AppStorage(WeeklySetTarget.highKey) private var targetHigh = WeeklySetTarget.defaultHigh
 
     private var cards: [HomeSection] { HomeSection.resolve(storedCards) }
     private var available: [HomeSection] { HomeSection.allCases.filter { !cards.contains($0) } }
@@ -999,19 +1167,6 @@ struct CustomizeHomeSheet: View {
                 }
 
                 Section {
-                    Stepper(value: $targetLow, in: 1...max(1, targetHigh - 1)) {
-                        LabeledContent("At Least", value: "\(targetLow) sets")
-                    }
-                    Stepper(value: $targetHigh, in: min(targetLow + 1, 60)...60) {
-                        LabeledContent("At Most", value: "\(targetHigh) sets")
-                    }
-                } header: {
-                    Text("Weekly Sets per Muscle")
-                } footer: {
-                    Text("Muscle Focus shades this range. Many lifters aim for 10–20 sets a week per muscle.")
-                }
-
-                Section {
                     Button("Restore Default Layout") {
                         update { $0 = HomeSection.defaultCards }
                     }
@@ -1020,7 +1175,7 @@ struct CustomizeHomeSheet: View {
                 }
             }
             .environment(\.editMode, .constant(.active))
-            .navigationTitle("Customize Home")
+            .navigationTitle("Edit Home")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .confirmationAction) {
@@ -1050,4 +1205,272 @@ struct CustomizeHomeSheet: View {
 
 private extension HomeSection {
     var addRowID: String { "add." + rawValue }
+}
+
+// MARK: - Card editors
+
+/// Edit Rings: each ring follows last week's total or a goal of the user's own (build 117).
+struct RingGoalsSheet: View {
+    @Environment(\.dismiss) private var dismiss
+    @AppStorage(WeekRingGoals.volumeKey) private var volumeGoal = 0.0
+    @AppStorage(WeekRingGoals.setsKey) private var setsGoal = 0
+    @AppStorage(WeekRingGoals.workoutsKey) private var workoutsGoal = 0
+    let summary: HomeWeekSummary
+    let weightUnit: WeightUnit
+
+    private var volumeStep: Double { weightUnit == .metric ? 500 : 1000 }
+
+    private func displayVolume(_ kilograms: Double) -> Double {
+        WeightUnit.convert(weight: kilograms, from: .metric, to: weightUnit).rounded()
+    }
+
+    private func volumeText(_ value: Double) -> String {
+        "\(Int(value).formatted()) \(weightUnit.unit.symbol)"
+    }
+
+    var body: some View {
+        NavigationStack {
+            List {
+                RingGoalSection(
+                    title: "Volume", tint: LiteweightTheme.metricVolume,
+                    lastWeek: summary.lastVolume > 0 ? volumeText(displayVolume(summary.lastVolume)) : nil,
+                    goal: Binding(get: { volumeGoal > 0 ? displayVolume(volumeGoal) : 0 },
+                                  set: { volumeGoal = $0 > 0 ? WeightUnit.convert(weight: $0, from: weightUnit, to: .metric) : 0 }),
+                    start: summary.lastVolume > 0
+                        ? max(volumeStep, (displayVolume(summary.lastVolume) / volumeStep).rounded() * volumeStep)
+                        : volumeStep * 10,
+                    step: volumeStep, range: volumeStep...1_000_000, format: volumeText)
+                RingGoalSection(
+                    title: "Sets", tint: LiteweightTheme.metricSets,
+                    lastWeek: summary.lastSets > 0 ? "\(summary.lastSets) sets" : nil,
+                    goal: Binding(get: { Double(setsGoal) }, set: { setsGoal = Int($0) }),
+                    start: Double(summary.lastSets > 0 ? summary.lastSets : 30),
+                    step: 1, range: 1...500, format: { "\(Int($0)) \(Int($0) == 1 ? "set" : "sets")" })
+                RingGoalSection(
+                    title: "Workouts", tint: LiteweightTheme.accent,
+                    lastWeek: summary.lastWorkouts > 0 ? "\(summary.lastWorkouts) \(summary.lastWorkouts == 1 ? "workout" : "workouts")" : nil,
+                    goal: Binding(get: { Double(workoutsGoal) }, set: { workoutsGoal = Int($0) }),
+                    start: Double(summary.lastWorkouts > 0 ? summary.lastWorkouts : 3),
+                    step: 1, range: 1...21, format: { "\(Int($0)) \(Int($0) == 1 ? "workout" : "workouts")" })
+                Section {} footer: {
+                    Text("Each ring closes when you reach its goal.")
+                }
+            }
+            .navigationTitle("Rings")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Done") { dismiss() }
+                }
+            }
+        }
+    }
+}
+
+/// One ring in Edit Rings: Last Week or Custom, and the custom goal's stepper.
+private struct RingGoalSection: View {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    let title: String
+    let tint: Color
+    /// Last week's total, or nil when nothing was logged.
+    let lastWeek: String?
+    /// In display units; zero follows last week.
+    @Binding var goal: Double
+    let start: Double
+    let step: Double
+    let range: ClosedRange<Double>
+    let format: (Double) -> String
+
+    var body: some View {
+        Section {
+            Picker("\(title) Goal", selection: Binding(
+                get: { goal > 0 },
+                set: { custom in
+                    withAnimation(LiteweightMotion.preferred(LiteweightMotion.snappy, reduceMotion: reduceMotion)) {
+                        goal = custom ? min(max(start, range.lowerBound), range.upperBound) : 0
+                    }
+                })) {
+                Text("Last Week").tag(false)
+                Text("Custom").tag(true)
+            }
+            .pickerStyle(.segmented)
+            .labelsHidden()
+            if goal > 0 {
+                Stepper(value: $goal, in: range, step: step) {
+                    LabeledContent("Goal") {
+                        Text(format(goal))
+                            .font(.liteweightMetric(.body, weight: .semibold))
+                            .foregroundStyle(LiteweightTheme.primaryText)
+                            .contentTransition(reduceMotion ? .opacity : .numericText(value: goal))
+                    }
+                }
+                .accessibilityValue(format(goal))
+            } else {
+                LabeledContent("Goal", value: lastWeek ?? "Any training")
+            }
+        } header: {
+            Text(title)
+                .foregroundStyle(tint)
+        }
+    }
+}
+
+/// Edit Muscle Focus: one weekly range for every group, and a range of its own for any group (build 117).
+struct MuscleTargetsSheet: View {
+    @Environment(\.dismiss) private var dismiss
+    @AppStorage(WeeklySetTarget.lowKey) private var targetLow = WeeklySetTarget.defaultLow
+    @AppStorage(WeeklySetTarget.highKey) private var targetHigh = WeeklySetTarget.defaultHigh
+    @AppStorage(WeeklySetTarget.groupsKey) private var storedGroups = ""
+
+    private var allRange: ClosedRange<Int> { targetLow...max(targetHigh, targetLow + 1) }
+
+    private func rangeText(_ range: ClosedRange<Int>) -> String {
+        "\(range.lowerBound)–\(range.upperBound)"
+    }
+
+    var body: some View {
+        let groups = WeeklySetTarget.decode(storedGroups)
+        NavigationStack {
+            List {
+                Section {
+                    NavigationLink {
+                        SetTargetEditor(group: nil)
+                    } label: {
+                        LabeledContent("All Muscles", value: rangeText(allRange))
+                    }
+                    ForEach(HomeWeekSummary.muscleGroups, id: \.self) { group in
+                        NavigationLink {
+                            SetTargetEditor(group: group)
+                        } label: {
+                            LabeledContent {
+                                Text(rangeText(groups[group] ?? allRange))
+                                    .foregroundStyle(groups[group] == nil ? LiteweightTheme.secondaryText : LiteweightTheme.primaryText)
+                            } label: {
+                                Label {
+                                    Text(HomeWeekSummary.displayName(group))
+                                } icon: {
+                                    Circle()
+                                        .fill(LiteweightTheme.muscle(group))
+                                        .frame(width: 10, height: 10)
+                                }
+                            }
+                        }
+                        .accessibilityValue("\(rangeText(groups[group] ?? allRange)) sets\(groups[group] == nil ? ", same as all muscles" : "")")
+                    }
+                } header: {
+                    Text("Target Sets a Week")
+                } footer: {
+                    Text("Tap a muscle to give it a range of its own. Many lifters aim for 10–20 sets a week per muscle.")
+                }
+            }
+            .navigationTitle("Muscle Focus")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Done") { dismiss() }
+                }
+            }
+        }
+    }
+}
+
+/// The At Least and At Most steppers for All Muscles (`group` nil) or one group.
+private struct SetTargetEditor: View {
+    @AppStorage(WeeklySetTarget.lowKey) private var targetLow = WeeklySetTarget.defaultLow
+    @AppStorage(WeeklySetTarget.highKey) private var targetHigh = WeeklySetTarget.defaultHigh
+    @AppStorage(WeeklySetTarget.groupsKey) private var storedGroups = ""
+    let group: String?
+
+    private var allRange: ClosedRange<Int> { targetLow...max(targetHigh, targetLow + 1) }
+    private var groups: [String: ClosedRange<Int>] { WeeklySetTarget.decode(storedGroups) }
+    private var range: ClosedRange<Int> { group.flatMap { groups[$0] } ?? allRange }
+
+    /// All Muscles sets every group, as its row promises; a group matching All Muscles drops its own range.
+    private func store(_ new: ClosedRange<Int>) {
+        if let group {
+            var updated = groups
+            updated[group] = new == allRange ? nil : new
+            storedGroups = WeeklySetTarget.encode(updated)
+        } else {
+            targetLow = new.lowerBound
+            targetHigh = new.upperBound
+            storedGroups = ""
+        }
+    }
+
+    var body: some View {
+        List {
+            Section {
+                Stepper(value: Binding(get: { range.lowerBound }, set: { store($0...max(range.upperBound, $0 + 1)) }),
+                        in: 1...59) {
+                    LabeledContent("At Least", value: "\(range.lowerBound) sets")
+                }
+                Stepper(value: Binding(get: { range.upperBound }, set: { store(min(range.lowerBound, $0 - 1)...$0) }),
+                        in: 2...60) {
+                    LabeledContent("At Most", value: "\(range.upperBound) sets")
+                }
+            } footer: {
+                Text(group == nil
+                     ? (groups.isEmpty ? "Muscle Focus shades this range for every muscle." : "Changing this gives every muscle this range, replacing their own.")
+                     : "Muscle Focus shades this range in the \(HomeWeekSummary.displayName(group ?? "")) row.")
+            }
+            if let group, groups[group] != nil {
+                Section {
+                    Button("Use All Muscles Range") {
+                        var updated = groups
+                        updated[group] = nil
+                        storedGroups = WeeklySetTarget.encode(updated)
+                    }
+                }
+            }
+        }
+        .navigationTitle(group.map(HomeWeekSummary.displayName) ?? "All Muscles")
+        .navigationBarTitleDisplayMode(.inline)
+    }
+}
+
+/// Edit Body: which measurements Body lists under its weight chart (build 117).
+struct BodyRowsSheet: View {
+    @Environment(\.dismiss) private var dismiss
+    @AppStorage(HomeBodyRows.key) private var storedRows: String?
+
+    var body: some View {
+        let rows = HomeBodyRows.decode(storedRows)
+        NavigationStack {
+            List {
+                Section {
+                    ForEach(HomeBodyRows.choices) { kind in
+                        let isShown = rows.contains(kind)
+                        Button {
+                            storedRows = HomeBodyRows.encode(isShown ? rows.filter { $0 != kind } : rows + [kind])
+                        } label: {
+                            HStack {
+                                Text(kind.title)
+                                    .foregroundStyle(LiteweightTheme.primaryText)
+                                Spacer()
+                                if isShown {
+                                    Image(systemName: "checkmark")
+                                        .font(.body.weight(.semibold))
+                                        .foregroundStyle(LiteweightTheme.accent)
+                                }
+                            }
+                            .contentShape(Rectangle())
+                        }
+                        .accessibilityAddTraits(isShown ? .isSelected : [])
+                    }
+                } header: {
+                    Text("Listed Under Weight")
+                } footer: {
+                    Text("Body weight stays at the top with its chart.")
+                }
+            }
+            .navigationTitle("Body")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Done") { dismiss() }
+                }
+            }
+        }
+    }
 }

@@ -32,8 +32,9 @@ struct FeedView : View {
 
     @State private var showingMeasurements = false
     @State private var showingChartSelector = false
-    @State private var showingChartEditor = false
     @State private var showingCustomize = false
+    /// The card whose own editor is open (build 117).
+    @State private var editingCard: HomeSection?
     @State private var persistenceError: String?
     @AppStorage(LiteweightTips.generationKey) private var tipGeneration = 0
     @State private var showsEditTip = false
@@ -43,6 +44,15 @@ struct FeedView : View {
     @AppStorage(HomeSection.cardsKey) private var storedCards: String?
     @AppStorage(WeeklySetTarget.lowKey) private var setTargetLow = WeeklySetTarget.defaultLow
     @AppStorage(WeeklySetTarget.highKey) private var setTargetHigh = WeeklySetTarget.defaultHigh
+    @AppStorage(WeeklySetTarget.groupsKey) private var storedGroupTargets = ""
+    @AppStorage(WeekRingGoals.volumeKey) private var volumeGoal = 0.0
+    @AppStorage(WeekRingGoals.setsKey) private var setsGoal = 0
+    @AppStorage(WeekRingGoals.workoutsKey) private var workoutsGoal = 0
+    @AppStorage(HomeBodyRows.key) private var storedBodyRows: String?
+
+    private var ringGoals: WeekRingGoals {
+        WeekRingGoals(volume: volumeGoal, sets: setsGoal, workouts: workoutsGoal)
+    }
 
     static var workoutFetchRequest: NSFetchRequest<Workout> {
         let request: NSFetchRequest<Workout> = Workout.fetchRequest()
@@ -92,11 +102,14 @@ struct FeedView : View {
                             .font(.subheadline)
                             .foregroundStyle(LiteweightTheme.secondaryText)
                     }
+                    if card.isEditable {
+                        cardEditButton(card)
+                    }
                 }
 
                 switch card {
                 case .rings:
-                    WeekRingsView(summary: summary, unit: unit, valueLabel: { compactWeight($0) })
+                    WeekRingsView(summary: summary, unit: unit, valueLabel: { compactWeight($0) }, goals: ringGoals)
                 case .pace:
                     WeekPaceView(summary: summary, unit: unit, valueLabel: { compactWeight($0) })
                     if isFirstWeekCard {
@@ -125,7 +138,7 @@ struct FeedView : View {
             .background(LiteweightTheme.surface, in: RoundedRectangle(cornerRadius: LiteweightTheme.heroCornerRadius, style: .continuous))
             .modifier(HomeCardAccessibilitySummary(title: title,
                 value: weekCardAccessibilityValue(card, summary: summary, isFirstWeekCard: isFirstWeekCard),
-                isSummary: card == .rings))
+                isSummary: card == .rings, edit: cardEdit(card)))
             .listRowInsets(EdgeInsets(top: 0, leading: 0, bottom: 0, trailing: 0))
             .listRowBackground(Color.clear)
             .listRowSeparator(.hidden)
@@ -144,7 +157,7 @@ struct FeedView : View {
         let totals = "\(HomeCardSpeech.count(summary.workouts, singular: "workout", plural: "workouts")), \(HomeCardSpeech.count(summary.sets, singular: "set", plural: "sets")), volume \(HomeCardSpeech.weight(summary.volume, unit: unit))."
         switch card {
         case .rings:
-            return WeekRingsView(summary: summary, unit: unit.unit.symbol, valueLabel: compactWeight)
+            return WeekRingsView(summary: summary, unit: unit.unit.symbol, valueLabel: compactWeight, goals: ringGoals)
                 .accessibilitySummary(weightUnit: unit)
         case .pace:
             let pace = WeekPaceView(summary: summary, unit: unit.unit.symbol, valueLabel: compactWeight)
@@ -225,21 +238,69 @@ struct FeedView : View {
     }
 
     private func cardHeader(_ card: HomeSection) -> some View {
-        cardTitle(card.title)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .listRowSeparator(.hidden)
+        HStack(alignment: .center, spacing: 8) {
+            cardTitle(card.title)
+                .frame(maxWidth: .infinity, alignment: .leading)
+            if card.isEditable {
+                cardEditButton(card)
+            }
+        }
+        .listRowSeparator(.hidden)
+    }
+
+    /// The pencil beside an editable card's title opens that card's own editor (build 117).
+    private func cardEditButton(_ card: HomeSection) -> some View {
+        Button {
+            editingCard = card
+        } label: {
+            Image(systemName: "pencil")
+                .font(.subheadline.weight(.semibold))
+                .foregroundStyle(LiteweightTheme.secondaryText)
+                .frame(width: 30, height: 30)
+                .background(LiteweightTheme.field, in: Circle())
+                .padding(7)
+                .contentShape(Rectangle())
+                .padding(-7)
+        }
+        .buttonStyle(.borderless)
+        .accessibilityLabel(card.editTitle)
+    }
+
+    /// VoiceOver reaches a card's editor as an action on its summary, which hides the pencil.
+    private func cardEdit(_ card: HomeSection) -> (title: String, action: () -> Void)? {
+        card.isEditable ? (card.editTitle, { editingCard = card }) : nil
+    }
+
+    @ViewBuilder
+    private func cardEditor(_ card: HomeSection, summary: HomeWeekSummary) -> some View {
+        switch card {
+        case .rings:
+            RingGoalsSheet(summary: summary, weightUnit: settingsStore.weightUnit)
+        case .muscles:
+            MuscleTargetsSheet()
+        case .body:
+            BodyRowsSheet()
+        case .pinned:
+            PinnedChartEditSheet()
+                .environmentObject(pinnedChartsStore)
+                .environmentObject(exerciseStore)
+        default:
+            EmptyView()
+        }
     }
 
     /// Average weekly sets per muscle group over the last four weeks against the user's target,
     /// so the user can see what they have been neglecting.
     private func muscleFocusSection(_ summary: HomeWeekSummary) -> some View {
         let target = setTargetLow...max(setTargetHigh, setTargetLow + 1)
+        let groupTargets = WeeklySetTarget.decode(storedGroupTargets)
         let trained = summary.weeklyAverages.values.contains { $0 > 0 }
         return Section {
             cardHeader(.muscles)
             if trained {
                 WeeklySetsChart(averages: summary.weeklyAverages,
-                                thisWeek: summary.muscleSets.mapValues { $0.reduce(0, +) }, target: target)
+                                thisWeek: summary.muscleSets.mapValues { $0.reduce(0, +) }, target: target,
+                                groupTargets: groupTargets)
                     .padding(.vertical, 6)
             } else {
                 Text("Complete a few workouts to see how many sets each muscle group gets a week.")
@@ -248,39 +309,50 @@ struct FeedView : View {
             }
         } footer: {
             if trained {
-                Text(muscleFocusFooter(summary, target: target))
+                Text(muscleFocusFooter(summary, target: target, groupTargets: groupTargets))
             } else {
                 Text("Based on completed sets over the last 4 weeks.")
             }
         }
         .modifier(HomeCardAccessibilitySummary(title: HomeSection.muscles.title,
-            value: muscleFocusAccessibilityValue(summary, target: target)))
+            value: muscleFocusAccessibilityValue(summary, target: target, groupTargets: groupTargets),
+            edit: cardEdit(.muscles)))
     }
 
-    private func muscleFocusAccessibilityValue(_ summary: HomeWeekSummary, target: ClosedRange<Int>) -> String {
+    private func muscleFocusAccessibilityValue(_ summary: HomeWeekSummary, target: ClosedRange<Int>,
+                                               groupTargets: [String: ClosedRange<Int>]) -> String {
         let groups = HomeWeekSummary.muscleGroups
-        let meaning = "Average weekly sets per muscle group over the last 4 weeks, compared with your target of \(target.lowerBound) to \(target.upperBound) sets."
+        let sharesOneTarget = groupTargets.values.allSatisfy { $0 == target }
+        let meaning = sharesOneTarget
+            ? "Average weekly sets per muscle group over the last 4 weeks, compared with your target of \(target.lowerBound) to \(target.upperBound) sets."
+            : "Average weekly sets per muscle group over the last 4 weeks, compared with each group's target."
         guard summary.weeklyAverages.values.contains(where: { $0 > 0 }) else {
             return meaning + " No completed sets in the last 4 weeks. Complete a few workouts to see how many sets each muscle group gets a week."
         }
-        let reaching = groups.filter { (summary.weeklyAverages[$0] ?? 0) >= Double(target.lowerBound) }.count
-        let values = groups.map {
-            "\(HomeWeekSummary.displayName($0)) \(HomeCardSpeech.number(summary.weeklyAverages[$0] ?? 0)) sets"
+        let reaching = groups.filter { (summary.weeklyAverages[$0] ?? 0) >= Double((groupTargets[$0] ?? target).lowerBound) }.count
+        let values = groups.map { group -> String in
+            let own = groupTargets[group].map { ", target \($0.lowerBound) to \($0.upperBound)" } ?? ""
+            return "\(HomeWeekSummary.displayName(group)) \(HomeCardSpeech.number(summary.weeklyAverages[group] ?? 0)) sets\(own)"
         }.joined(separator: ", ")
-        return "\(meaning) \(reaching) of \(groups.count) groups reach \(target.lowerBound) sets a week. \(values). \(muscleFocusFooter(summary, target: target))"
+        let reach = sharesOneTarget ? "reach \(target.lowerBound) sets a week" : "reach their target"
+        return "\(meaning) \(reaching) of \(groups.count) groups \(reach). \(values). \(muscleFocusFooter(summary, target: target, groupTargets: groupTargets))"
     }
 
-    private func muscleFocusFooter(_ summary: HomeWeekSummary, target: ClosedRange<Int>) -> String {
-        let guideline = "Change the target in Customize Home."
-        guard let lowest = HomeWeekSummary.muscleGroups.min(by: { (summary.weeklyAverages[$0] ?? 0) < (summary.weeklyAverages[$1] ?? 0) }),
-              let sets = summary.weeklyAverages[lowest], sets < Double(target.lowerBound) else {
-            return "Every group reaches \(target.lowerBound) sets a week. " + guideline
+    /// Names the group furthest below its own target; the card's pencil sets targets now (build 117).
+    private func muscleFocusFooter(_ summary: HomeWeekSummary, target: ClosedRange<Int>,
+                                   groupTargets: [String: ClosedRange<Int>]) -> String {
+        let share = { (group: String) in (summary.weeklyAverages[group] ?? 0) / Double((groupTargets[group] ?? target).lowerBound) }
+        guard let lowest = HomeWeekSummary.muscleGroups.min(by: { share($0) < share($1) }), share(lowest) < 1 else {
+            return groupTargets.values.allSatisfy({ $0 == target })
+                ? "Every group reaches \(target.lowerBound) sets a week."
+                : "Every group reaches its target."
         }
+        let sets = summary.weeklyAverages[lowest] ?? 0
         guard sets > 0 else {
-            return "\(HomeWeekSummary.displayName(lowest)) has no sets in the last 4 weeks. " + guideline
+            return "\(HomeWeekSummary.displayName(lowest)) has no sets in the last 4 weeks."
         }
         let amount = WeeklySetsChart.format(sets)
-        return "\(HomeWeekSummary.displayName(lowest)) averages \(amount) \(amount == "1" ? "set" : "sets") a week. " + guideline
+        return "\(HomeWeekSummary.displayName(lowest)) averages \(amount) \(amount == "1" ? "set" : "sets") a week."
     }
 
     private var calendarSection: some View {
@@ -354,7 +426,8 @@ struct FeedView : View {
     private var measurementsSection: some View {
         Section {
             cardHeader(.body)
-                .modifier(HomeCardAccessibilitySummary(title: HomeSection.body.title, value: bodyAccessibilityValue))
+                .modifier(HomeCardAccessibilitySummary(title: HomeSection.body.title, value: bodyAccessibilityValue,
+                                                       edit: cardEdit(.body)))
             bodyWeightTrend
                 .listRowSeparator(.hidden)
 
@@ -436,12 +509,12 @@ struct FeedView : View {
     }
 
     private var homeMeasurementKinds: [BodyMeasurementKind] {
-        [.bodyWeight, .bodyFat, .waist]
+        [.bodyWeight] + homeRowKinds
     }
 
-    /// Weight is the card's headline and chart, so the rows below list the rest.
+    /// Weight is the card's headline and chart, so the rows below list the measurements chosen in Edit Body.
     private var homeRowKinds: [BodyMeasurementKind] {
-        homeMeasurementKinds.filter { $0 != .bodyWeight }
+        HomeBodyRows.decode(storedBodyRows)
     }
 
     private func measurementChangeLabel(_ change: Double) -> some View {
@@ -501,7 +574,8 @@ struct FeedView : View {
             : "Exercise charts you pinned, over the last 3 months. " + summaries.joined(separator: " ")
         return Section {
             cardHeader(.pinned)
-                .modifier(HomeCardAccessibilitySummary(title: HomeSection.pinned.title, value: value))
+                .modifier(HomeCardAccessibilitySummary(title: HomeSection.pinned.title, value: value,
+                                                       edit: cardEdit(.pinned)))
             if pinnedChartsStore.pinnedCharts.isEmpty {
                 Button("Pin an Exercise Chart") { showingChartSelector = true }
                     .accessibilityLabel("Pin an Exercise Chart")
@@ -518,10 +592,6 @@ struct FeedView : View {
                     Label("Pin Chart", systemImage: "pin")
                 }
                 .accessibilityLabel("Pin Chart")
-                Button { showingChartEditor = true } label: {
-                    Label("Edit Pins", systemImage: "slider.horizontal.3")
-                }
-                .accessibilityLabel("Edit Pins")
             }
         }
     }
@@ -880,13 +950,21 @@ struct FeedView : View {
     @ViewBuilder
     private func cardActions(_ card: HomeSection) -> some View {
         if #available(iOS 17.0, *) {
-            Button("Customize Home", systemImage: "slider.horizontal.3") { showingCustomize = true }
+            if card.isEditable {
+                Button(card.editTitle, systemImage: "pencil") { editingCard = card }
+            }
+            Button("Edit Home", systemImage: "slider.horizontal.3") { showingCustomize = true }
             Button("Remove from Home", systemImage: "minus.circle", role: .destructive) {
                 updateCards { $0.removeAll { $0 == card } }
             }
         } else {
+            if card.isEditable {
+                Button { editingCard = card } label: {
+                    Label(card.editTitle, systemImage: "pencil")
+                }
+            }
             Button { showingCustomize = true } label: {
-                Label("Customize Home", systemImage: "slider.horizontal.3")
+                Label("Edit Home", systemImage: "slider.horizontal.3")
             }
             Button(role: .destructive) {
                 updateCards { $0.removeAll { $0 == card } }
@@ -976,13 +1054,11 @@ struct FeedView : View {
                 .environmentObject(pinnedChartsStore)
                 .environmentObject(exerciseStore)
             }
-            .sheet(isPresented: $showingChartEditor) {
-                PinnedChartEditSheet()
-                    .environmentObject(pinnedChartsStore)
-                    .environmentObject(exerciseStore)
-            }
             .sheet(isPresented: $showingCustomize) {
                 CustomizeHomeSheet()
+            }
+            .sheet(item: $editingCard) { card in
+                cardEditor(card, summary: summary)
             }
             .alert("Workout Not Started", isPresented: Binding(
                 get: { persistenceError != nil },

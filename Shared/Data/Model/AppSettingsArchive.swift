@@ -79,6 +79,12 @@ enum AppSettingsArchive {
             "home.hiddenSections": .string,
             "home.weeklySetTargetLow": .integer,
             "home.weeklySetTargetHigh": .integer,
+            // Each card's own settings (build 117).
+            "home.weeklySetTargetsByGroup": .string,
+            "home.ringGoal.volume": .number,
+            "home.ringGoal.sets": .integer,
+            "home.ringGoal.workouts": .integer,
+            "home.bodyRows": .string,
             "exerciseDetail.metric": .string,
             "exerciseDetail.range": .string,
             "pinnedChartsKey": .data,

@@ -12,6 +12,15 @@ Builds are installed with `~/.local/share/liteweight/tools/install-NN.sh`. Lane 
 
 ## 2026-11-08
 
+### Muscle Focus draws both weeks; every editable Home card has its own edit (build 117)
+- **Asked:** "maybe let's have 2 bars or a shaded bar inside of a filled bar? to indicate last week and this week in one go?", then "let the rings be modifiable individually? and the muscles to be modifiable individually! each card press and hold should have their own edit", "the home edit is primarily then for reordering and adding/removing!" and "maybe you can have an edit icon on each ... home widget". The owner chose bar inside a bar, the pale bar as the 4-week average, ring goals as Last Week or Custom, a range per muscle, the pencil plus hold menu, and Body rows.
+- **Decided:**
+  - Muscle Focus rows draw a wide pale average bar with a thin solid this-week bar on top; a neutral legend explains them by shape.
+  - Rings, Muscle Focus, Body and Pinned Charts have a pencil by their title and "Edit [card]" in their hold menu. Edit Rings, Edit Muscle Focus and Edit Body are new sheets; Pinned Charts reuses Edit Charts, and its in-card Edit Pins row is gone.
+  - Changing All Muscles resets every group's own range, as the approved design said. A group set back to the All Muscles range drops its own.
+  - Customize Home is now titled Edit Home and no longer holds the set target. The new keys are in the settings backup.
+- **Roll back:** revert this entry's commit.
+
 ### Muscle Focus shows this week; imported exercises get a muscle from their name; Watch library copies cleaned up (build 116)
 - **Asked:** "i did 3 sets TODAY of arms and it's showing 2?" Checked against the phone's data: Arms was 8 sets in 28 days, so 2 a week, correct. The owner then chose "relable the muscle focus and add this week!", "fill in muscles probably yeah?" and "sure fix the leftover copy".
 - **Decided:**

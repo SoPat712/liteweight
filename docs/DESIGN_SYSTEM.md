@@ -688,8 +688,11 @@ buttons on the right.
 ### 15.2 Home (`liteweight/UI/Feed/FeedView.swift`, `liteweight/UI/Components/HomeWeekViews.swift`)
 Board: *Round 3 → Home*, revised 2026-11-02 to read like Fitness and Health, then made
 customizable like Fitness's Edit Summary. Home is a list of cards the user adds, removes and
-reorders in Customize Home (from a week card's ••• menu or the button at the end of Home);
-the weekly set target is set there too. Cards live in `UserDefaults` under `home.cards`
+reorders in Edit Home (the toolbar pencil, or Edit Home in any card's hold menu). Edit Home does
+only that (build 117): a card with settings of its own (Rings, Muscle Focus, Body, Pinned Charts)
+has a 30 pt gray pencil (`field` circle, `secondaryText` glyph, 44 pt hit area) at the trailing
+end of its title, and "Edit [card]" first in its hold menu; both open that card's editor sheet,
+and VoiceOver reaches it as an action on the card's summary. Cards live in `UserDefaults` under `home.cards`
 (build 71's `home.weekStyle`, `home.sectionOrder` and `home.hiddenSections` carry over once);
 no Core Data change. Default cards, in order:
 1. Today's date as the navigation subtitle under "Home" (iOS 26 and later). No greeting.
@@ -701,8 +704,11 @@ no Core Data change. Default cards, in order:
    Start button stands alone at the top of Home. Each week card's ••• menu adds another week
    card directly below it, removes it, or opens Customize Home.
    - **Rings** (default): Fitness-style rings for Volume (outer, `metricVolume`), Sets
-     (`metricSets`) and Workouts (inner, accent) that close when this week matches last week;
-     tracks use each metric's container color. Beside them, each metric as "11.4k / 26.6k lb".
+     (`metricSets`) and Workouts (inner, accent), each closing at its goal; tracks use each
+     metric's container color. Edit Rings (build 117) gives each ring a Last Week | Custom
+     segmented control; Last Week (the default) follows last week's total, Custom shows a
+     stepper (volume by 1,000 lb or 500 kg, sets and workouts by 1), starting from last week's
+     total. Goals live in `home.ringGoal.volume` (kg), `.sets` and `.workouts`; 0 means last week. Beside them, each metric as "11.4k / 26.6k lb".
      Below: a row of small daily volume rings scaled to the week's best day, and the best-day line.
    - **Pace**: running volume this week (solid 3 pt `metricVolume`) over last week's running
      line (dashed `tertiaryText`); the rest of the week is shaded; a translucent bar at today
@@ -720,24 +726,29 @@ no Core Data change. Default cards, in order:
    Workout detail is one level below the recap. The full calendar follows the same rule.
 4. Recent Training rows: the title with the date at the trailing edge, then the shared
    `LiteweightWorkoutMetricLine` (duration, sets, volume).
-5. **Muscle Focus**: average sets a week per tracked group over the last four weeks, ranked,
-   as bars in each group's muscle color (§3.5) over a shaded target band (default 10–20, set in
-   Customize Home); the legend only explains the band. Two number columns (build 116): "Avg" (the
-   bar, secondary) and "This wk" (sets since the week began, primary); the owner read the single
-   "Week" column as this week's count. Header "N of 6 groups reach 10 sets a week"; the footer
-   names the lowest group in one line. Every
-   row lays out its own name, so nothing collides at large text sizes.
+5. **Muscle Focus**: average sets a week per tracked group over the last four weeks, ranked, in
+   each group's muscle color (§3.5) over a shaded target band. Each row is a bar inside a bar
+   (build 117): a wide 12 pt pale bar (the muscle color at 40%) for the four-week average, and a
+   thin 6 pt solid bar on top for this week, which keeps going past the pale end when this week
+   is ahead. A legend explains Avg, This week and the band by shape, in a neutral tint. Two
+   number columns (build 116): "Avg" (secondary) and "This wk" (primary). Edit Muscle Focus
+   sets the All Muscles range (default 10–20; changing it resets every group) and any group's
+   own range (`home.weeklySetTargetsByGroup`, "legs:12-20"); each row shades its own band.
+   Header "N of 6 groups reach 10 sets a week", or "reach their target" once ranges differ; the
+   footer names the group furthest below its target in one line. At accessibility text sizes
+   each row puts its name and numbers on one line with a full-width bar under them, and the
+   axis labels span the full width, so nothing collides.
 6. Body and Pinned Charts use headline row names and the shared metric/unit
    hierarchy. Recent dates use subheadline metadata. Body rows use native List spacing and
    reflow vertically at accessibility sizes; never add a second minimum row height. Body's
-   headline and 30-day chart carry body weight, so its rows list only the other measurements
-   (body fat, waist). Pinned chart titles use headline and chart axes use footnote. Pinned
+   headline and 30-day chart carry body weight, so its rows list the other measurements chosen
+   in Edit Body (`home.bodyRows`; default body fat and waist). Pinned chart titles use headline and chart axes use footnote. Pinned
    Charts stays off Home until something is pinned; pinning is the "Pin to Home" button on an
    exercise's chart (1RM and Volume; top weight has no Home chart). The Home calendar's trained
-   days take their main muscle's color.
-7. A **Customize Home** button ends the list. The sheet is always in edit mode: "On Home"
-   lists the cards with delete and reorder controls, "Add to Home" lists the rest with a
-   `success` plus, then the weekly set target steppers and Restore Default Layout.
+   days take their main muscle's color. Pinned Charts keeps its Pin Chart row; Edit Pins moved
+   to the card's pencil.
+7. **Edit Home** is always in edit mode: "On Home" lists the cards with delete and reorder
+   controls, "Add to Home" lists the rest with a `success` plus, then Restore Default Layout.
 
 ### 15.3 History (`liteweight/UI/History/HistoryView.swift`)
 Board: *Round 3 → History*, revised 2026-10-26. A segmented control (Workouts · Insights).
