@@ -451,6 +451,45 @@ final class DefaultsValueCache<Value: Equatable>: ObservableObject {
     }
 }
 
+enum PlanWeightEdits {
+    static let storageKey = "liteweight.planWeightEditedAt.v1"
+
+    static func editedAt(for setID: UUID?, defaults: UserDefaults = .standard) -> Date? {
+        guard let setID, let timestamp = (defaults.dictionary(forKey: storageKey) as? [String: Double])?[setID.uuidString] else { return nil }
+        return Date(timeIntervalSince1970: timestamp)
+    }
+
+    static func record(_ setIDs: [UUID], at date: Date, defaults: UserDefaults = .standard) {
+        guard !setIDs.isEmpty else { return }
+        var edits = defaults.dictionary(forKey: storageKey) as? [String: Double] ?? [:]
+        for id in setIDs { edits[id.uuidString] = date.timeIntervalSince1970 }
+        defaults.set(edits, forKey: storageKey)
+    }
+}
+
+enum PlanWeightPrefill {
+    struct HistorySet {
+        var weight: Double?
+        var isWarmup: Bool
+    }
+
+    static func resolve(planWeight: Double?, editedAt: Date?, lastWeight: Double?, lastEnd: Date?) -> Double? {
+        guard let planWeight else { return nil }
+        guard let lastWeight, let lastEnd else { return planWeight }
+        return (editedAt.map { lastEnd > $0 } ?? true) ? lastWeight : planWeight
+    }
+
+    static func matchingWeight(at index: Int, planWarmups: [Bool], history: [HistorySet], type: SetTrackingType) -> Double? {
+        guard planWarmups.indices.contains(index) else { return nil }
+        let isWarmup = planWarmups[index]
+        let ordinal = planWarmups.prefix(index).filter { $0 == isWarmup }.count
+        let matching = history.filter { $0.isWarmup == isWarmup }
+        guard let weight = (matching.indices.contains(ordinal) ? matching[ordinal] : matching.last)?.weight,
+              type == .assistedBodyweight || type == .weightedBodyweight || weight > 0 else { return nil }
+        return weight
+    }
+}
+
 /// Small non-schema preferences shared by phone and Watch. Updates merge by
 /// timestamp, with deterministic ties; peer saves don't emit local-edit notifications.
 struct SetTrackingPreferences: Codable, Equatable {

@@ -122,6 +122,8 @@ private struct WatchNowPage: View {
         }.frame(maxWidth: .infinity)
     }
 
+    /// Where the last set's rest lands: Finish is offered, never opened for you, and one more
+    /// set on the last exercise is a tap away (build 120).
     private var completedWorkout: some View {
         VStack(spacing: 10) {
             Text("Every set is logged").font(.headline).multilineTextAlignment(.center)
@@ -129,7 +131,26 @@ private struct WatchNowPage: View {
                 WatchActionLabel(title: "Finish", symbol: "flag.checkered")
             }.watchGlassButton(prominent: true)
                 .frame(height: LiteweightTheme.controlHeight + 8)
+            if let exercise = lastLoggedExercise {
+                Button { addSet(to: exercise.id) } label: {
+                    WatchActionLabel(title: "Add Set", symbol: "plus")
+                }.watchGlassButton()
+                    .accessibilityHint("Adds a set to \(exercise.name)")
+            }
         }.frame(maxWidth: .infinity)
+    }
+
+    private var lastLoggedExercise: WatchWorkoutExercise? {
+        snapshot.exercises.last { exercise in exercise.sets.contains { $0.completed } }
+    }
+
+    private func addSet(to exerciseID: UUID) {
+        store.updateCurrent { snapshot in
+            guard let index = snapshot.exercises.firstIndex(where: { $0.id == exerciseID }) else { return }
+            let set = WatchWorkoutSet(order: snapshot.exercises[index].sets.count + 1)
+            SetTrackingPreferences.setLoggerFields([], for: set.id)
+            snapshot.exercises[index].sets.append(set)
+        }
     }
 }
 
@@ -150,6 +171,9 @@ private struct WatchNowSet: View {
     @State private var focus: SetValueField?
     @State private var crown = 0.0
     @State private var crownOrigin = 0.0
+    @State private var crownSettling = false
+    @State private var settlingField: SetValueField?
+    @State private var crownSettleTask: Task<Void, Never>?
     @FocusState private var crownFocused: Bool
 
     private var trackingType: SetTrackingType { exercise.effectiveTrackingType(for: set) }
@@ -176,22 +200,28 @@ private struct WatchNowSet: View {
             // Large text keeps touch scrolling available so the action row stays
             // reachable while the selected tile continues to own the Crown.
             .scrollDisabled(focus != nil && !typeSize.isAccessibilitySize)
-            .watchReturnsCrown(afterEditing: focus != nil)
+            .watchReturnsCrown(afterEditing: focus != nil || crownSettling)
             .digitalCrownAccessory(.hidden)
         }
         // Once, on the first set ever shown on the Watch.
         .watchTipSheet(WatchCrownTip())
-        .onChange(of: crown) { persistCrown() }
-        .onChange(of: editingValue) { if !editingValue { endEditing() } }
+        .onChange(of: crown) {
+            persistCrown()
+            if crownSettling { restartCrownSettling() }
+        }
+        // Tap-off clears the highlight before the Crown is ready to return.
+        .onChange(of: editingValue) { if !editingValue && !crownSettling { endEditing() } }
         .onChange(of: reducedLuminance) { if reducedLuminance { endEditing() } }
         .onChange(of: trackingType) {
             // The old Crown origin belongs to a different measurement. Do not
             // flush it after the phone or Exercise Options changes the type.
+            cancelCrownSettling()
             crownFocused = false; focus = nil; editingValue = false
         }
         .onChange(of: unit) {
             // Already-saved values have been converted by the store. A Crown
             // origin in the old unit must not be written into the new unit.
+            cancelCrownSettling()
             crownFocused = false; focus = nil; editingValue = false
         }
         .onDisappear { endEditing() }
@@ -232,7 +262,7 @@ private struct WatchNowSet: View {
 
     private func crownTiles(width: CGFloat, height: CGFloat) -> some View {
         valueTiles(height: height, compact: width < 180)
-            .focusable(focus != nil).focused($crownFocused)
+            .focusable(focus != nil || crownSettling).focused($crownFocused)
             .focusEffectDisabled()
             .watchCrownRotation($crown, in: -crownMaximum...crownMaximum, by: 1, sensitivity: .medium, haptics: workoutHaptics)
     }
@@ -254,7 +284,7 @@ private struct WatchNowSet: View {
     }
 
     private var crownMaximum: Double {
-        guard let focus else { return 1 }
+        guard let focus = focus ?? settlingField else { return 1 }
         return focus.maximum / focus.step
     }
 
@@ -343,7 +373,8 @@ private struct WatchNowSet: View {
     }
 
     private func select(_ field: SetValueField) {
-        if focus == field { endEditing(); return }
+        if focus == field { endEditing(settling: true); return }
+        cancelCrownSettling()
         crownFocused = false
         crownOrigin = field.value(set, unit: unit)
         crown = 0
@@ -358,9 +389,31 @@ private struct WatchNowSet: View {
             if focus == field { crownFocused = true }
         }
     }
-    private func endEditing() {
+    private func endEditing(settling: Bool = false) {
         persistCrown()
-        crownFocused = false; focus = nil; editingValue = false
+        if settling, let focus {
+            settlingField = focus
+            self.focus = nil; editingValue = false
+            crownFocused = true; crownSettling = true
+            restartCrownSettling()
+        } else {
+            cancelCrownSettling()
+            crownFocused = false; focus = nil; editingValue = false
+        }
+    }
+    private func restartCrownSettling() {
+        crownSettleTask?.cancel()
+        crownSettleTask = Task { @MainActor in
+            do { try await Task.sleep(for: .milliseconds(300)) }
+            catch { return }
+            guard !Task.isCancelled, crownSettling else { return }
+            crownSettling = false; crownFocused = false
+            settlingField = nil; crownSettleTask = nil
+        }
+    }
+    private func cancelCrownSettling() {
+        crownSettleTask?.cancel()
+        crownSettleTask = nil; settlingField = nil; crownSettling = false
     }
     /// Weight buttons land on the 2.5 grid (139 → 140), as on the phone. The
     /// Crown keeps its 0.5 steps from the new value.

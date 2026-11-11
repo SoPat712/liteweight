@@ -122,6 +122,9 @@ struct ExerciseActiveFilterChips: View {
 
 struct ExerciseMuscleGroupsView : View {
     @EnvironmentObject var exerciseStore: ExerciseStore
+    @EnvironmentObject private var settingsStore: SettingsStore
+    @Environment(\.managedObjectContext) private var managedObjectContext
+    @ObservedObject private var historyStore = TrainingHistoryStore.shared
 
     @State private var search = ""
     @State private var selectedMuscleGroup: String? = nil
@@ -139,6 +142,7 @@ struct ExerciseMuscleGroupsView : View {
         .listStyle(.insetGrouped)
         .modifier(ExerciseLibraryChrome())
         .onAppear { refreshCatalog() }
+        .task { historyStore.observe(in: managedObjectContext) }
         .onReceive(exerciseStore.objectWillChange) { _ in
             // Read the published history after storage, even if this render replaces the subscription.
             DispatchQueue.main.async { refreshCatalog() }
@@ -188,6 +192,26 @@ struct ExerciseMuscleGroupsView : View {
         }
     }
 
+    /// The tab's voice: the most-trained exercise of the last 30 days and its heaviest set,
+    /// when that set is recent too (build 121). Nothing trained in 30 days: no line.
+    private var voiceLine: String? {
+        let since = Calendar.current.date(byAdding: .day, value: -30, to: Date()) ?? Date()
+        let snapshot = historyStore.snapshot
+        let entries = snapshot.sessions.flatMap { session in
+            session.exercises.map { (date: session.date, exercise: $0.uuid, sets: $0.setCount) }
+        }
+        guard let leader = TabVoiceLine.busiestExercise(entries, since: since),
+              let exercise = exerciseStore.exercisesByUUID[leader.id] else { return nil }
+        var heaviest: String?
+        if let best = snapshot.exerciseBests[leader.id]?.heaviest, best.date >= since, best.repetitions > 0 {
+            let unit = settingsStore.weightUnit
+            let value = WeightUnit.convert(weight: best.weight, from: .metric, to: unit)
+            heaviest = (unit.displayNumberFormatter.string(from: NSNumber(value: value)) ?? "\(value)")
+                + " \(unit.unit.symbol) × \(best.repetitions)"
+        }
+        return TabVoiceLine.exercises(leader: exercise.title, sets: leader.sets, heaviest: heaviest)
+    }
+
     private func refreshCatalog() {
         catalogSearch.refresh(exercises: exerciseStore.shownExercises, store: exerciseStore,
                               muscleGroup: selectedMuscleGroup, equipment: selectedEquipment)
@@ -208,6 +232,9 @@ struct ExerciseMuscleGroupsView : View {
         let results = catalogSearch.listing(for: search, showingAll: true).exercises
         return List {
             if search.isEmpty {
+                if !hasActiveFilter, let voice = voiceLine {
+                    LiteweightVoiceSection(text: TabVoiceLine.text(voice))
+                }
                 if hasActiveFilter {
                     filterRow
                 }

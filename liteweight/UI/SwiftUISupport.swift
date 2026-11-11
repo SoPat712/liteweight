@@ -1211,6 +1211,7 @@ enum LiteweightDurationFormat {
 
 private struct LiteweightTabTitle: ViewModifier {
     let title: String
+    var showsBrandMark = false
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var scrolled = false
 
@@ -1223,9 +1224,13 @@ private struct LiteweightTabTitle: ViewModifier {
                 .toolbar(removing: .title)
                 .toolbar {
                     ToolbarItem(placement: .topBarLeading) {
-                        Text(title)
-                            .font(.largeTitle.bold())
-                            .foregroundStyle(LiteweightTheme.primaryText)
+                        HStack(alignment: .center, spacing: 10) {
+                            Text(title)
+                                .font(.largeTitle.bold())
+                                .foregroundStyle(LiteweightTheme.primaryText)
+                            // TEMPORARY: the plate mark stands in until the owner's new logo (build 121).
+                            if showsBrandMark { LiteweightPlateMark() }
+                        }
                             .fixedSize()
                             .opacity(scrolled ? 0 : 1)
                             .accessibilityAddTraits(.isHeader)
@@ -1259,8 +1264,8 @@ extension View {
 
     /// A tab root's title: large beside the toolbar buttons, then gone once the list
     /// scrolls, so only the floating buttons stay over a translucent edge.
-    func liteweightTabTitle(_ title: String) -> some View {
-        modifier(LiteweightTabTitle(title: title))
+    func liteweightTabTitle(_ title: String, showsBrandMark: Bool = false) -> some View {
+        modifier(LiteweightTabTitle(title: title, showsBrandMark: showsBrandMark))
     }
 
     @ViewBuilder
@@ -1447,6 +1452,82 @@ private struct LiteweightChartScrubber: UIViewRepresentable {
 }
 
 // MARK: - Muscle colors
+
+/// One data-driven line in the app's voice under a tab's title (build 121): secondary text
+/// with its key facts in bold primary (compose with `Text` concatenation). It sits as the
+/// tab's first, unboxed list row so it scrolls away with the title.
+struct LiteweightVoiceLine: View {
+    let text: Text
+
+    var body: some View {
+        text
+            .font(.subheadline)
+            .foregroundStyle(LiteweightTheme.secondaryText)
+            .fixedSize(horizontal: false, vertical: true)
+            .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    /// A bold, primary-colored fact inside a voice line.
+    static func fact(_ value: String) -> Text {
+        Text(value).bold().foregroundColor(LiteweightTheme.primaryText)
+    }
+}
+
+/// A tab's voice line as an empty section's header (build 122). Rows keep a 44 pt minimum and
+/// sections add their full spacing, which left the line floating between the title and the first
+/// card; a header hugs its text and the custom spacing keeps the first card close.
+struct LiteweightVoiceSection: View {
+    let text: Text
+
+    var body: some View {
+        Section {
+        } header: {
+            LiteweightVoiceLine(text: text)
+                .textCase(nil)
+        }
+        .listSectionSpacing(10)
+    }
+}
+
+/// TEMPORARY brand mark: today's app icon's three plates (red, blue, yellow) as three small
+/// rounded bars. The owner is replacing the logo; swap this view and the `plate*` colors in
+/// `LiteweightTheme` when the new mark lands (build 121). Decorative, so hidden from VoiceOver.
+struct LiteweightPlateMark: View {
+    @ScaledMetric(relativeTo: .title) private var height: CGFloat = 26
+    var scale: CGFloat = 1
+
+    var body: some View {
+        let barHeight = height * scale
+        HStack(spacing: barHeight * 0.16) {
+            ForEach([LiteweightTheme.plateRed, LiteweightTheme.plateBlue, LiteweightTheme.plateYellow], id: \.self) { color in
+                RoundedRectangle(cornerRadius: barHeight * 0.14, style: .continuous)
+                    .fill(color)
+                    .frame(width: barHeight * 0.28, height: barHeight)
+            }
+        }
+        .accessibilityHidden(true)
+    }
+}
+
+/// Gold capsule for a personal record: a small spark and "PR" (build 121). Gold always means
+/// an achievement; the badge says so in words too, so it is never color alone.
+struct LiteweightPRBadge: View {
+    var body: some View {
+        HStack(spacing: 3) {
+            Image(systemName: "sparkle")
+                .font(.caption2.weight(.bold))
+            Text("PR")
+                .font(.caption.weight(.heavy))
+        }
+        .foregroundStyle(LiteweightTheme.onAchievement)
+        .padding(.horizontal, 8)
+        .padding(.vertical, 3)
+        .background(LiteweightTheme.achievement, in: Capsule())
+        .fixedSize()
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("Personal record")
+    }
+}
 
 /// A muscle group's chip: its color as a soft fill, the name in primary text, and an
 /// optional rest detail ("today", "3d") led by a status dot (amber still recovering,

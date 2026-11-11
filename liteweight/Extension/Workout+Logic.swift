@@ -12,6 +12,45 @@ import UIKit
 import WorkoutDataKit
 import os.log
 
+extension PlanWeightPrefill {
+    static func latestHistory(for exerciseID: UUID?, excluding workout: Workout? = nil,
+                              in context: NSManagedObjectContext) -> WorkoutExercise? {
+        guard let exerciseID else { return nil }
+        let request = WorkoutExercise.historyFetchRequest(of: exerciseID)
+        var predicates = [request.predicate ?? NSPredicate(value: true),
+                          NSPredicate(format: "%K != nil", #keyPath(WorkoutExercise.workout.end))]
+        if let workout { predicates.append(NSPredicate(format: "workout != %@", workout)) }
+        request.predicate = NSCompoundPredicate(andPredicateWithSubpredicates: predicates)
+        request.sortDescriptors = [NSSortDescriptor(keyPath: \WorkoutExercise.workout?.end, ascending: false)]
+        request.fetchLimit = 1
+        request.returnsObjectsAsFaults = false
+        request.relationshipKeyPathsForPrefetching = ["workoutSets"]
+        return (try? context.fetch(request))?.first
+    }
+
+    static func weights(for exercise: WorkoutRoutineExercise, type: SetTrackingType, excluding workout: Workout? = nil,
+                        defaults: UserDefaults = .standard) -> [Double?] {
+        let history = exercise.managedObjectContext.flatMap {
+            latestHistory(for: exercise.exerciseUuid, excluding: workout, in: $0)
+        }
+        return weights(for: exercise, type: type, history: history, defaults: defaults)
+    }
+
+    static func weights(for exercise: WorkoutRoutineExercise, type: SetTrackingType, history: WorkoutExercise?,
+                        defaults: UserDefaults = .standard) -> [Double?] {
+        let sets = exercise.workoutRoutineSets?.array as? [WorkoutRoutineSet] ?? []
+        let warmups = sets.map { $0.tagValue == .warmUp }
+        let previous = (history?.workoutSets?.array as? [WorkoutSet] ?? []).map {
+            HistorySet(weight: $0.weight?.doubleValue, isWarmup: $0.tagValue == .warmUp)
+        }
+        return sets.enumerated().map { index, set in
+            resolve(planWeight: set.weightValue, editedAt: PlanWeightEdits.editedAt(for: set.uuid, defaults: defaults),
+                    lastWeight: matchingWeight(at: index, planWarmups: warmups, history: previous, type: type),
+                    lastEnd: history?.workout?.end)
+        }
+    }
+}
+
 extension Workout {
     /// Kept outside Core Data's schema and independent of Health test/export state.
     var wasStartedOnWatch: Bool { WatchConnectionManager.shared.wasStartedOnWatch(self) }
@@ -62,7 +101,10 @@ extension Workout {
                 let type = source.setTrackingType
                 let targets = source.workoutRoutineSets?.array as? [WorkoutRoutineSet] ?? []
                 let sets = destination.workoutSets?.array as? [WorkoutSet] ?? []
-                for (target, set) in zip(targets, sets) {
+                let weights = PlanWeightPrefill.weights(for: source, type: type)
+                for (index, pair) in zip(targets, sets).enumerated() {
+                    let (target, set) = pair
+                    if let weight = weights[index] { set.weightValue = weight }
                     set.distanceValue = type.usesDistance ? SetTrackingPreferences.routineDistance(for: target.uuid) : nil
                     if type.usesReps { set.repetitionsValue = target.maxRepetitionsValue ?? target.minRepetitionsValue ?? 5 }
                     set.prepare(for: type)

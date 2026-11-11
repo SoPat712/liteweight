@@ -221,6 +221,49 @@ final class HomeWeekSummaryTests: XCTestCase {
         XCTAssertEqual(HomeBodyRows.decode(""), [])
         XCTAssertEqual(HomeBodyRows.decode("waist,bogus,chest,bodyWeight,chest"), [.chest, .waist])
     }
+
+    func testHomeVoicePrefersClosedRingsThenTopGroupThenAnEmptyWeek() {
+        XCTAssertEqual(HomeVoice.choose(groupSets: ["chest": 10, "arms": 5], workouts: 1, ringsClosed: true, streak: 30),
+                       .ringsClosed)
+        XCTAssertEqual(HomeVoice.choose(groupSets: ["chest": 10, "arms": 5], workouts: 1, ringsClosed: false, streak: 30),
+                       .carrying(group: "chest", sets: 10))
+        // A tie keeps Muscle Week's order.
+        XCTAssertEqual(HomeVoice.choose(groupSets: ["chest": 4, "legs": 4], workouts: 1, ringsClosed: false, streak: 0),
+                       .carrying(group: "legs", sets: 4))
+        XCTAssertEqual(HomeVoice.choose(groupSets: ["chest": 0], workouts: 2, ringsClosed: false, streak: 0), .workouts(2))
+        XCTAssertEqual(HomeVoice.choose(groupSets: [:], workouts: 0, ringsClosed: false, streak: 30), .freshWithStreak(30))
+        XCTAssertEqual(HomeVoice.choose(groupSets: [:], workouts: 0, ringsClosed: false, streak: 1), .fresh)
+    }
+
+    func testRingsCloseByTheRingsOwnRule() {
+        var summary = HomeWeekSummary()
+        XCTAssertFalse(summary.ringsClosed(goals: WeekRingGoals()))
+        summary.workouts = 1
+        summary.sets = 5
+        summary.volume = 1_000
+        // Nothing last week: any training closes each ring.
+        XCTAssertTrue(summary.ringsClosed(goals: WeekRingGoals()))
+        summary.lastSets = 10
+        XCTAssertFalse(summary.ringsClosed(goals: WeekRingGoals()))
+        XCTAssertTrue(summary.ringsClosed(goals: WeekRingGoals(sets: 5)))
+    }
+
+    func testLastWeekRecapShowsForThreeDaysUntilDismissed() {
+        let calendar = calendar
+        func day(_ day: Int) -> Date {
+            calendar.date(from: DateComponents(year: 2026, month: 11, day: day, hour: 10))!
+        }
+        // Weeks start on Monday here; Nov 9, 2026 is a Monday.
+        let previous = LastWeekRecap.previousWeek(of: day(9), calendar: calendar)
+        XCTAssertEqual(previous.map { LastWeekRecap.dayKey($0.start, calendar: calendar) }, "2026-11-02")
+        XCTAssertTrue(LastWeekRecap.isVisible(now: day(9), lastWeekWorkouts: 4, dismissedWeek: "", calendar: calendar))
+        XCTAssertTrue(LastWeekRecap.isVisible(now: day(11), lastWeekWorkouts: 4, dismissedWeek: "", calendar: calendar))
+        XCTAssertFalse(LastWeekRecap.isVisible(now: day(12), lastWeekWorkouts: 4, dismissedWeek: "", calendar: calendar))
+        XCTAssertFalse(LastWeekRecap.isVisible(now: day(9), lastWeekWorkouts: 0, dismissedWeek: "", calendar: calendar))
+        XCTAssertFalse(LastWeekRecap.isVisible(now: day(9), lastWeekWorkouts: 4, dismissedWeek: "2026-11-02", calendar: calendar))
+        // Last week's dismissal doesn't hide the next week's recap.
+        XCTAssertTrue(LastWeekRecap.isVisible(now: day(16), lastWeekWorkouts: 4, dismissedWeek: "2026-11-02", calendar: calendar))
+    }
 }
 
 final class ExerciseBestsTests: XCTestCase {

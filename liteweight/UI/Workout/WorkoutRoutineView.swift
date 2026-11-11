@@ -79,8 +79,7 @@ final class RoutineSetTrackingDraft: ObservableObject {
 
 /// A focused editor for one saved workout plan.
 ///
-/// Editable values stay close to the exercise they describe, using a dense
-/// separator-led canvas with Cupertino controls for direct input.
+/// Editable values stay close to the exercise they describe in logger-style cards.
 struct WorkoutRoutineView: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @EnvironmentObject var exerciseStore: ExerciseStore
@@ -255,61 +254,80 @@ struct WorkoutRoutineView: View {
         selectionFeedback += 1
     }
 
+    private var workoutDetailsCard: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            TextField("Title", text: workoutRoutineTitle)
+                .font(.title2.weight(.bold))
+                .foregroundStyle(LiteweightTheme.primaryText)
+                .textInputAutocapitalization(.words)
+                .onSubmit(saveRoutineFields)
+
+            TextField("Add notes…", text: workoutRoutineComment, axis: .vertical)
+                .font(.subheadline)
+                .foregroundStyle(LiteweightTheme.secondaryText)
+                .lineLimit(1...5)
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 14)
+        .background(
+            RoundedRectangle(cornerRadius: LiteweightTheme.heroCornerRadius, style: .continuous)
+                .fill(LiteweightTheme.surface)
+        )
+    }
+
     var body: some View {
-        List {
-            Section("Workout Details") {
-                TextField("Title", text: workoutRoutineTitle)
-                    .textInputAutocapitalization(.words)
-                    .onSubmit(saveRoutineFields)
+        ScrollView {
+            VStack(spacing: 12) {
+                workoutDetailsCard
 
-                TextField("Notes", text: workoutRoutineComment, axis: .vertical)
-                    .lineLimit(1...5)
-            }
-
-            if workoutRoutineExercises.isEmpty {
-                Section {
+                if workoutRoutineExercises.isEmpty {
                     ContentUnavailableView {
                         Label("No Exercises", systemImage: "dumbbell")
                     } description: {
                         Text("Add an exercise to start setting targets and rest times.")
                     } actions: {
                         Button("Add Exercise") { showExerciseSelector = true }
-                            .buttonStyle(.borderedProminent)
+                            .liteweightProminentGlassButtonStyle()
                             .buttonBorderShape(.capsule)
                             .controlSize(.large)
                             .fixedSize(horizontal: false, vertical: true)
                     }
-                    .listRowBackground(Color.clear)
-                }
-            } else {
-                ForEach(Array(workoutRoutineExercises.enumerated()), id: \.element.id) { index, routineExercise in
-                    WorkoutRoutineExerciseSection(
-                        routineExercise: routineExercise,
-                        exercise: routineExercise.exercise(in: exerciseStore.exercises),
-                        sets: sets(for: routineExercise),
-                        index: index,
-                        exerciseCount: workoutRoutineExercises.count,
-                        onSave: recordDraftChange,
-                        onSaveNote: { saveRoutineExerciseNote($0, for: routineExercise) },
-                        onMoveUp: { moveExercise(from: index, to: index - 1) },
-                        onMoveDown: { moveExercise(from: index, to: index + 1) },
-                        onDelete: { routineExerciseToDelete = routineExercise },
-                        onAddSet: { addSet(to: routineExercise) },
-                        onDeleteSet: { deleteSet($0) },
-                        onMoveSet: { source, destination in
-                            moveSet(in: routineExercise, from: source, to: destination)
-                        }
-                    )
-                }
-            }
+                } else {
+                    ForEach(Array(workoutRoutineExercises.enumerated()), id: \.element.id) { index, routineExercise in
+                        WorkoutRoutineExerciseSection(
+                            routineExercise: routineExercise,
+                            exercise: routineExercise.exercise(in: exerciseStore.exercises),
+                            index: index,
+                            exerciseCount: workoutRoutineExercises.count,
+                            onSave: recordDraftChange,
+                            onSaveNote: { saveRoutineExerciseNote($0, for: routineExercise) },
+                            onMoveUp: { moveExercise(from: index, to: index - 1) },
+                            onMoveDown: { moveExercise(from: index, to: index + 1) },
+                            onDelete: { routineExerciseToDelete = routineExercise },
+                            onAddSet: { addSet(to: routineExercise) },
+                            onDeleteSet: { deleteSet($0) },
+                            onMoveSet: { source, destination in
+                                moveSet(in: routineExercise, from: source, to: destination)
+                            }
+                        )
+                    }
 
-            Section {
-                Button("Add Exercise", systemImage: "plus") {
-                    showExerciseSelector = true
+                    Button {
+                        showExerciseSelector = true
+                    } label: {
+                        Label("Add Exercises", systemImage: "plus")
+                            .frame(maxWidth: .infinity)
+                    }
+                    .liteweightProminentGlassButtonStyle()
+                    .buttonBorderShape(.capsule)
+                    .controlSize(.large)
+                    .padding(.top, 6)
                 }
             }
+            .padding(.horizontal, 10)
+            .padding(.vertical, 14)
         }
-        .listStyle(.insetGrouped)
+        .background(LiteweightTheme.background)
         .environmentObject(trackingDraft)
         .sensoryFeedback(.selection, trigger: selectionFeedback) { _, _ in settingsStore.workoutHaptics }
         .sensoryFeedback(.impact(weight: .medium), trigger: deleteFeedback) { _, _ in settingsStore.workoutHaptics }
@@ -378,6 +396,7 @@ struct WorkoutRoutineView: View {
 private struct WorkoutRoutineExerciseSection: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+    @Environment(\.managedObjectContext) private var managedObjectContext
     @EnvironmentObject private var settingsStore: SettingsStore
 
     @EnvironmentObject private var trackingDraft: RoutineSetTrackingDraft
@@ -385,8 +404,8 @@ private struct WorkoutRoutineExerciseSection: View {
     @State private var showingRestTimerEditor = false
     @State private var showingNoteEditor = false
     @State private var selectionFeedback = 0
+    @State private var historySets: [WorkoutSet] = []
     let exercise: Exercise?
-    let sets: [WorkoutRoutineSet]
     let index: Int
     let exerciseCount: Int
     let onSave: () -> Void
@@ -398,12 +417,40 @@ private struct WorkoutRoutineExerciseSection: View {
     let onDeleteSet: (WorkoutRoutineSet) -> Void
     let onMoveSet: (Int, Int) -> Void
 
+    // Observe the relationship's owner instead of retaining a parent-render snapshot.
+    private var sets: [WorkoutRoutineSet] {
+        routineExercise.workoutRoutineSets?.array as? [WorkoutRoutineSet] ?? []
+    }
+
+    private func loadHistory() {
+        let request = WorkoutExercise.historyFetchRequest(of: routineExercise.exerciseUuid)
+        request.predicate = NSCompoundPredicate(andPredicateWithSubpredicates: [
+            request.predicate ?? NSPredicate(value: true),
+            NSPredicate(format: "%K != nil", #keyPath(WorkoutExercise.workout.end))
+        ])
+        request.sortDescriptors = [NSSortDescriptor(keyPath: \WorkoutExercise.workout?.end, ascending: false)]
+        request.fetchLimit = 1
+        request.returnsObjectsAsFaults = false
+        request.relationshipKeyPathsForPrefetching = ["workoutSets"]
+        let previousExercise = (try? managedObjectContext.fetch(request))?.first
+        historySets = previousExercise?.workoutSets?.array as? [WorkoutSet] ?? []
+    }
+
+    private func latestHistorySet(at index: Int) -> WorkoutSet? {
+        let currentSets = sets
+        guard currentSets.indices.contains(index) else { return nil }
+        // Warm-up insertion must not shift the working sets' Previous values.
+        let isWarmup = currentSets[index].tagValue == .warmUp
+        let matching = historySets.filter { ($0.tagValue == .warmUp) == isWarmup }
+        let ordinal = currentSets.prefix(index).filter { ($0.tagValue == .warmUp) == isWarmup }.count
+        return matching.indices.contains(ordinal) ? matching[ordinal] : matching.last
+    }
+
     private var restTimerTitle: String {
-        guard let duration = routineExercise.restTimerDurationValue,
-              let formatted = restTimerDurationFormatter.string(from: duration) else {
-            return "Workout default"
-        }
-        return "Rest \(formatted)"
+        let duration = routineExercise.restTimerDurationValue ?? workoutDefaultRestTimerDuration
+        let formatted = restTimerDurationFormatter.string(from: duration) ?? "0:00"
+        let time = formatted.count == 5 && formatted.hasPrefix("0") ? String(formatted.dropFirst()) : formatted
+        return "Rest \(time)"
     }
 
     @AppStorage(SetTrackingPreferences.storageKey) private var trackingPreferencesData: Data?
@@ -438,107 +485,206 @@ private struct WorkoutRoutineExerciseSection: View {
         selectionFeedback += 1
     }
 
-    var body: some View {
-        Section {
+    private var usesAccessibilityLayout: Bool { dynamicTypeSize.isAccessibilitySize }
+
+    private var exerciseHeader: some View {
+        HStack(alignment: .center, spacing: 10) {
             if let exercise {
-                NavigationLink {
-                    ExerciseDetailView(exercise: exercise)
-                } label: {
-                    HStack(spacing: 12) {
-                        ExerciseDiagramThumbnail(exercise: exercise, size: 40)
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text(exercise.title)
-                                .font(.headline)
-                                .foregroundStyle(LiteweightTheme.primaryText)
-                                .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 2)
-                            Text(exercise.primaryMuscleCommonName.first?.capitalized ?? exercise.muscleGroup.capitalized)
-                                .font(.subheadline)
-                                .foregroundStyle(LiteweightTheme.secondaryText)
-                        }
-                    }
-                }
+                ExerciseDiagramThumbnail(exercise: exercise, size: 42)
+                    .frame(width: LiteweightTheme.iconButtonSize, height: LiteweightTheme.controlHeight)
+            } else {
+                Circle()
+                    .fill(LiteweightTheme.tertiaryFill)
+                    .frame(width: LiteweightTheme.iconButtonSize, height: LiteweightTheme.controlHeight)
+                    .overlay(Image(systemName: "dumbbell.fill").foregroundStyle(LiteweightTheme.secondaryText))
             }
 
-            Button { showingNoteEditor = true } label: {
-                VStack(alignment: .leading, spacing: 6) {
-                    Label("Workout Plan Note", systemImage: "list.bullet")
-                        .font(.subheadline.weight(.semibold))
+            VStack(alignment: .leading, spacing: 0) {
+                if let exercise {
+                    NavigationLink {
+                        ExerciseDetailView(exercise: exercise)
+                    } label: {
+                        Text(exercise.title)
+                            .font(.headline)
+                            .foregroundStyle(LiteweightTheme.primaryText)
+                            .lineLimit(usesAccessibilityLayout ? nil : 2)
+                            .fixedSize(horizontal: false, vertical: true)
+                            .frame(maxWidth: .infinity, minHeight: 28, alignment: .leading)
+                            .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                } else {
+                    Text("Unknown Exercise")
+                        .font(.headline)
                         .foregroundStyle(LiteweightTheme.primaryText)
-                    Text(routineExercise.comment.flatMap { $0.isEmpty ? nil : $0 }
-                         ?? "Add a cue for this workout plan…")
-                        .font(.subheadline)
-                        .foregroundStyle(LiteweightTheme.secondaryText)
-                        .lineLimit(2)
+                        .lineLimit(usesAccessibilityLayout ? nil : 2)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .frame(maxWidth: .infinity, minHeight: 28, alignment: .leading)
                 }
+                exerciseMetadata
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+
+            Menu {
+                Button("Edit Workout Plan Note", systemImage: "list.bullet") { showingNoteEditor = true }
+                Picker("Set Type", selection: Binding(get: { trackingType }, set: setTrackingType)) {
+                    ForEach(SetTrackingType.allCases) { type in Text(type.title).tag(type) }
+                }
+                Button("Rest Timer", systemImage: "timer") { showingRestTimerEditor = true }
+                Divider()
+                if index > 0 {
+                    Button("Move Up", systemImage: "arrow.up", action: onMoveUp)
+                }
+                if index < exerciseCount - 1 {
+                    Button("Move Down", systemImage: "arrow.down", action: onMoveDown)
+                }
+                Section {
+                    Button("Remove Exercise", systemImage: "trash", role: .destructive, action: onDelete)
+                }
+            } label: {
+                Label("Exercise Actions", systemImage: "ellipsis")
+                    .labelStyle(.iconOnly)
+                    .frame(width: LiteweightTheme.iconButtonSize, height: LiteweightTheme.controlHeight)
+                    .contentShape(Rectangle())
+            }
+            .accessibilityLabel("Actions for \(exercise?.title ?? "exercise")")
+        }
+    }
+
+    private var exerciseMetadata: some View {
+        let layout = usesAccessibilityLayout
+            ? AnyLayout(VStackLayout(alignment: .leading, spacing: 0))
+            : AnyLayout(HStackLayout(alignment: .firstTextBaseline, spacing: 4))
+        let equipment = exercise?.equipment.map(\.equipmentTitle).joined(separator: ", ") ?? ""
+        let group = exercise?.muscleGroup
+        let lineTint: Color? = LiteweightPalette.hasMuscleColor(group) ? LiteweightTheme.muscleText(group) : nil
+        return layout {
+            if !equipment.isEmpty {
+                Text(equipment + (usesAccessibilityLayout ? "" : " ·"))
+                    .font(.subheadline)
+                    .foregroundStyle(lineTint ?? LiteweightTheme.secondaryText)
+                    .lineLimit(usesAccessibilityLayout ? 2 : 1)
+            }
+            Button {
+                showingRestTimerEditor = true
+            } label: {
+                Text(restTimerTitle)
+                    .font(.liteweightMetric(.subheadline, weight: .semibold))
+                    .foregroundStyle(lineTint ?? LiteweightTheme.metricTime)
+                    .lineLimit(usesAccessibilityLayout ? nil : 1)
+                    .minimumScaleFactor(0.85)
+                    .fixedSize(horizontal: !usesAccessibilityLayout, vertical: true)
+                    .contentTransition(reduceMotion ? .opacity : .numericText())
+                    .frame(minHeight: 24)
+                    .padding(.vertical, 4)
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .animation(LiteweightMotion.preferred(LiteweightMotion.snappy, reduceMotion: reduceMotion), value: restTimerTitle)
+            .accessibilityLabel("Exercise rest length")
+            .accessibilityValue(restTimerTitle)
+            .accessibilityHint("Opens the rest duration picker")
+        }
+    }
+
+    @ViewBuilder
+    private var workoutPlanNote: some View {
+        if let comment = routineExercise.comment,
+           !comment.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            Button { showingNoteEditor = true } label: {
+                HStack(alignment: .firstTextBaseline, spacing: 6) {
+                    Image(systemName: "list.bullet")
+                        .frame(width: 14)
+                        .accessibilityHidden(true)
+                    (Text("Workout plan: ").fontWeight(.semibold) + Text(comment))
+                        .lineLimit(2)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                }
+                .font(.subheadline)
+                .foregroundStyle(LiteweightTheme.secondaryText)
                 .frame(maxWidth: .infinity, minHeight: LiteweightTheme.controlHeight, alignment: .leading)
                 .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
+            .padding(.leading, LiteweightTheme.iconButtonSize + 10)
             .accessibilityHint("Shown whenever you start this saved workout")
+        }
+    }
 
-            Button {
-                showingRestTimerEditor = true
-            } label: {
-                LabeledContent("Rest Timer") {
-                    Text(restTimerTitle)
-                        .font(.liteweightMetric(.subheadline, weight: .semibold))
-                        .foregroundStyle(LiteweightTheme.metricTime)
-                        .contentTransition(reduceMotion ? .opacity : .numericText())
+    @ViewBuilder
+    private var setTableHeader: some View {
+        if !usesAccessibilityLayout {
+            HStack(spacing: InlineWorkoutSetLayout.spacing) {
+                Text("SET")
+                    .frame(width: InlineWorkoutSetLayout.setWidth)
+                Text("PREVIOUS")
+                    .frame(width: InlineWorkoutSetLayout.previousWidth, alignment: .center)
+                ForEach(trackingType.columns) { column in
+                    Text(trackingType.header(for: column, weightUnit: settingsStore.weightUnit.unit.symbol,
+                                             distanceUnit: WorkoutSet.distanceUnit(settingsStore.weightUnit)))
+                        .frame(maxWidth: .infinity)
                 }
             }
-            .accessibilityHint("Opens the rest duration picker")
+            .font(.caption2.weight(.semibold))
+            .foregroundStyle(LiteweightTheme.secondaryText)
+            .lineLimit(1)
+            .minimumScaleFactor(0.7)
+            .multilineTextAlignment(.center)
+            .padding(.top, 12)
+            .padding(.bottom, InlineWorkoutSetLayout.spacing)
+            .accessibilityHidden(true)
+        }
+    }
 
-            Picker("Set Type", selection: Binding(get: { trackingType }, set: setTrackingType)) {
-                ForEach(SetTrackingType.allCases) { type in Text(type.title).tag(type) }
-            }
+    var body: some View {
+        VStack(spacing: 0) {
+            exerciseHeader
+            workoutPlanNote
+            setTableHeader
 
             ForEach(Array(sets.enumerated()), id: \.element.id) { setIndex, routineSet in
                 WorkoutRoutineSetRow(
                     routineSet: routineSet,
                     index: setIndex,
+                    setCount: sets.count,
                     trackingType: trackingType,
+                    previousSet: latestHistorySet(at: setIndex),
                     onSave: onSave,
+                    onMoveUp: { onMoveSet(setIndex, setIndex - 1) },
+                    onMoveDown: { onMoveSet(setIndex, setIndex + 1) },
                     onDelete: { onDeleteSet(routineSet) }
                 )
                 .transition(reduceMotion ? .opacity : .opacity.combined(with: .scale(scale: 0.96)))
             }
-            .onMove { source, destination in
-                guard let from = source.first else { return }
-                onMoveSet(from, destination > from ? destination - 1 : destination)
-            }
-            .onDelete { offsets in
-                for offset in offsets where sets.indices.contains(offset) {
-                    onDeleteSet(sets[offset])
-                }
-            }
 
-            Button("Add Set", systemImage: "plus", action: onAddSet)
-        } header: {
-            HStack {
-                Text(exercise?.title ?? "Unknown Exercise")
-                Spacer()
-                Menu {
-                    if index > 0 {
-                        Button("Move Up", systemImage: "arrow.up", action: onMoveUp)
-                    }
-                    if index < exerciseCount - 1 {
-                        Button("Move Down", systemImage: "arrow.down", action: onMoveDown)
-                    }
-                    Divider()
-                    Button("Delete Exercise", systemImage: "trash", role: .destructive, action: onDelete)
-                } label: {
-                    Image(systemName: "ellipsis.circle")
-                        .font(.body)
-                }
-                .accessibilityLabel("Actions for \(exercise?.title ?? "exercise")")
-            }
-        } footer: {
             if sets.isEmpty {
                 Text("No target sets yet.")
+                    .font(.subheadline)
+                    .foregroundStyle(LiteweightTheme.secondaryText)
+                    .frame(maxWidth: .infinity, alignment: .leading)
             }
+
+            Button(action: onAddSet) {
+                Label("Add Set", systemImage: "plus")
+                    .font(.headline)
+                    .frame(maxWidth: .infinity)
+            }
+            .liteweightGlassButtonStyle()
+            .buttonBorderShape(.capsule)
+            .controlSize(.large)
+            .padding(.top, 12)
         }
+        .padding(.horizontal, 10)
+        .padding(.vertical, 14)
+        .background(
+            RoundedRectangle(cornerRadius: LiteweightTheme.heroCornerRadius, style: .continuous)
+                .fill(LiteweightTheme.surface)
+        )
+        .clipShape(RoundedRectangle(cornerRadius: LiteweightTheme.heroCornerRadius, style: .continuous))
         .animation(LiteweightMotion.preferred(LiteweightMotion.collapse, reduceMotion: reduceMotion), value: sets.map(\.objectID))
         .sensoryFeedback(.selection, trigger: selectionFeedback) { _, _ in settingsStore.workoutHaptics }
+        .task(id: routineExercise.exerciseUuid) { loadHistory() }
         .onDisappear(perform: onSave)
         .sheet(isPresented: $showingNoteEditor) {
             ExerciseNoteEditorSheet(
@@ -575,6 +721,7 @@ private struct WorkoutRoutineSetRow: View {
 
     @EnvironmentObject private var trackingDraft: RoutineSetTrackingDraft
     @ObservedObject var routineSet: WorkoutRoutineSet
+    @ScaledMetric(relativeTo: .footnote) private var previousFontSize: CGFloat = 13
     @State private var distanceInput: String?
     @AppStorage(SetTrackingPreferences.storageKey) private var trackingPreferencesData: Data?
     @State private var weightInput: String?
@@ -584,8 +731,12 @@ private struct WorkoutRoutineSetRow: View {
     @State private var selectionFeedback = 0
     @FocusState private var focusedField: EntryField?
     let index: Int
+    let setCount: Int
     let trackingType: SetTrackingType
+    let previousSet: WorkoutSet?
     let onSave: () -> Void
+    let onMoveUp: () -> Void
+    let onMoveDown: () -> Void
     let onDelete: () -> Void
 
     private enum EntryField: Hashable {
@@ -620,7 +771,7 @@ private struct WorkoutRoutineSetRow: View {
         Binding(
             get: { repetitionsInput ?? repetitionsTitle },
             set: { input in
-                let sanitized = sanitizedIntegerInput(input)
+                let sanitized = sanitizedRepetitionsInput(input)
                 guard input.isEmpty || !sanitized.isEmpty else { return }
                 repetitionsInput = sanitized
                 updateRepetitions(from: sanitized)
@@ -683,6 +834,21 @@ private struct WorkoutRoutineSetRow: View {
         return String(min(value, Int(WorkoutSet.MAX_REPETITIONS)))
     }
 
+    private func sanitizedRepetitionsInput(_ proposedValue: String) -> String {
+        let normalized = proposedValue.replacingOccurrences(of: "–", with: "-")
+            .replacingOccurrences(of: "−", with: "-")
+        if normalized.contains("-") {
+            return normalized.split(separator: "-", maxSplits: 1, omittingEmptySubsequences: false)
+                .map { sanitizedIntegerInput(String($0)) }
+                .joined(separator: "-")
+        }
+        let digits = sanitizedIntegerInput(normalized)
+        // Preserve the editor's existing open-ended target representations, too.
+        if normalized.hasPrefix("<") { return "<" + digits }
+        if normalized.hasSuffix("+") { return digits + "+" }
+        return digits
+    }
+
     private var repetitionsTitle: String {
         if let min = routineSet.minRepetitionsValue, let max = routineSet.maxRepetitionsValue {
             return min == max ? "\(max)" : "\(min)-\(max)"
@@ -700,18 +866,33 @@ private struct WorkoutRoutineSetRow: View {
             return
         }
 
-        guard let parsed = Int(value) else { return }
-        let repetitions = Int16(min(max(parsed, 0), Int(WorkoutSet.MAX_REPETITIONS)))
-        routineSet.minRepetitionsValue = repetitions
-        routineSet.maxRepetitionsValue = repetitions
+        if value.contains("-") {
+            let bounds = value.split(separator: "-", maxSplits: 1, omittingEmptySubsequences: false)
+            guard bounds.count == 2, let lower = Int16(bounds[0]), let upper = Int16(bounds[1]) else { return }
+            routineSet.minRepetitionsValue = min(lower, upper)
+            routineSet.maxRepetitionsValue = max(lower, upper)
+        } else if value.hasPrefix("<") {
+            guard let upper = Int16(value.dropFirst()) else { return }
+            routineSet.minRepetitionsValue = nil
+            routineSet.maxRepetitionsValue = upper
+        } else if value.hasSuffix("+") {
+            guard let lower = Int16(value.dropLast()) else { return }
+            routineSet.minRepetitionsValue = lower
+            routineSet.maxRepetitionsValue = nil
+        } else {
+            guard let parsed = Int(value) else { return }
+            let repetitions = Int16(min(max(parsed, 0), Int(WorkoutSet.MAX_REPETITIONS)))
+            routineSet.minRepetitionsValue = repetitions
+            routineSet.maxRepetitionsValue = repetitions
+        }
     }
 
     private var setLabel: String {
         switch routineSet.tagValue {
-        case .warmUp: return "Warm-Up"
-        case .dropSet: return "Drop Set"
-        case .failure: return "Failure"
-        case nil: return "Set \(index + 1)"
+        case .warmUp: return "W"
+        case .dropSet: return "D"
+        case .failure: return "F"
+        case nil: return "\(index + 1)"
         }
     }
 
@@ -719,80 +900,123 @@ private struct WorkoutRoutineSetRow: View {
         dynamicTypeSize.isAccessibilitySize
     }
 
-    private var setLabelView: some View {
-        Text(setLabel)
-            .font(.liteweightMetric(.subheadline, weight: .semibold))
-            .foregroundStyle(LiteweightTheme.metricSets)
-            .lineLimit(1)
+    private var previousTitle: String {
+        previousSet?.resultTitle(weightUnit: settingsStore.weightUnit) ?? "—"
+    }
+
+    private var compactPreviousTitle: String {
+        let title = previousTitle.isEmpty ? "—" : previousTitle
+        let font = UIFont.monospacedDigitSystemFont(ofSize: previousFontSize, weight: .semibold)
+        guard (title as NSString).size(withAttributes: [.font: font]).width > InlineWorkoutSetLayout.previousWidth,
+              !trackingType.usesDuration, title.contains(" × "), let previousSet else { return title }
+        let weight = WeightUnit.convert(weight: previousSet.weightValue, from: .metric, to: settingsStore.weightUnit)
+        let value = settingsStore.weightUnit.displayNumberFormatter.string(from: NSNumber(value: weight)) ?? "0"
+        let sign = title.hasPrefix("+") ? "+" : (title.hasPrefix("−") ? "−" : "")
+        return "\(sign)\(value) × \(previousSet.repetitionsValue)"
+    }
+
+    private var canFillFromPrevious: Bool {
+        guard let previousSet else { return false }
+        return (trackingType.usesWeight && previousSet.weight != nil)
+            || (trackingType.usesDuration && previousSet.durationValue != nil)
+            || (trackingType.usesDistance && previousSet.distanceValue != nil && routineSet.uuid != nil)
+    }
+
+    private func fillFromPrevious() {
+        guard canFillFromPrevious, let previousSet else { return }
+        focusedField = nil
+        if trackingType.usesWeight, let weight = previousSet.weight?.doubleValue {
+            routineSet.weightValue = weight
+        }
+        if trackingType.usesDuration, let duration = previousSet.durationValue {
+            routineSet.durationValue = duration
+        }
+        if trackingType.usesDistance, let distance = previousSet.distanceValue, let setID = routineSet.uuid {
+            trackingDraft.setDistance(distance, for: setID)
+        }
+        onSave()
+        weightInput = nil
+        repetitionsInput = nil
+        distanceInput = nil
+        selectionFeedback += 1
+    }
+
+    private var previousValue: some View {
+        Text(usesAccessibilityLayout ? previousTitle : compactPreviousTitle)
+            .font(.liteweightMetric(.footnote, weight: .semibold))
+            .foregroundStyle(LiteweightTheme.secondaryText)
+            .lineLimit(usesAccessibilityLayout ? nil : 3)
+            .minimumScaleFactor(0.75)
+            .fixedSize(horizontal: false, vertical: true)
+            .multilineTextAlignment(.center)
+            .frame(width: usesAccessibilityLayout ? nil : InlineWorkoutSetLayout.previousWidth, alignment: .center)
+            .frame(minHeight: InlineWorkoutSetLayout.visualHeight)
+            .background(LiteweightTheme.tertiaryFill, in: RoundedRectangle(cornerRadius: LiteweightTheme.compactCornerRadius, style: .continuous))
+            .accessibilityLabel("Previous: \(previousTitle)")
+    }
+
+    @ViewBuilder
+    private var previousCell: some View {
+        if canFillFromPrevious {
+            Button(action: fillFromPrevious) {
+                previousValue
+                    .frame(minHeight: LiteweightTheme.controlHeight)
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("Previous: \(previousTitle)")
+            .accessibilityHint("Fills this set from last time")
+        } else {
+            previousValue
+        }
     }
 
     private var weightField: some View {
-        TextField("—", text: weightText, onEditingChanged: { isEditing in
-            if isEditing {
-                weightInput = displayedWeightTitle
-            } else {
-                weightInput = nil
-                onSave()
-            }
-        })
-        .font(.liteweightMetric(.body, weight: .semibold))
-        .foregroundStyle(LiteweightTheme.metricVolume)
-        .keyboardType(.decimalPad)
-        .focused($focusedField, equals: .weight)
-        .multilineTextAlignment(.trailing)
-        .frame(width: usesAccessibilityLayout ? nil : 62)
-        .frame(maxWidth: usesAccessibilityLayout ? .infinity : nil)
-        .frame(minHeight: LiteweightTheme.controlHeight)
-        .accessibilityLabel("Weight")
+        setField(field: .weight, isFocused: focusedField == .weight) {
+            TextField("—", text: weightText, onEditingChanged: { isEditing in
+                if isEditing {
+                    weightInput = displayedWeightTitle
+                } else {
+                    weightInput = nil
+                    onSave()
+                }
+            })
+            .keyboardType(.decimalPad)
+            .focused($focusedField, equals: .weight)
+            .accessibilityLabel("\(weightTitle) in \(settingsStore.weightUnit.unit.symbol)")
+            .accessibilityValue(weightText.wrappedValue.isEmpty ? "Not set" : "\(weightText.wrappedValue) \(settingsStore.weightUnit.unit.symbol)")
+        }
     }
 
     private var repetitionsField: some View {
-        TextField("—", text: repetitionsText, onEditingChanged: { isEditing in
-            if isEditing {
-                repetitionsInput = repetitionsTitle
-            } else {
-                repetitionsInput = nil
-                onSave()
-            }
-        })
-        .font(.liteweightMetric(.body, weight: .semibold))
-        .foregroundStyle(LiteweightTheme.metricSets)
-        .keyboardType(.numberPad)
-        .focused($focusedField, equals: .repetitions)
-        .multilineTextAlignment(.trailing)
-        .frame(width: usesAccessibilityLayout ? nil : 46)
-        .frame(maxWidth: usesAccessibilityLayout ? .infinity : nil)
-        .frame(minHeight: LiteweightTheme.controlHeight)
-        .accessibilityLabel("Repetitions")
-    }
-
-    private var weightUnitLabel: some View {
-        Text(trackingType.weightPrefix + settingsStore.weightUnit.unit.symbol)
-            .font(.caption)
-            .foregroundStyle(LiteweightTheme.secondaryText)
-    }
-
-    private var repetitionsUnitLabel: some View {
-        Text("reps")
-            .font(.caption)
-            .foregroundStyle(LiteweightTheme.secondaryText)
+        setField(field: .repetitions, isFocused: focusedField == .repetitions) {
+            TextField("—", text: repetitionsText, onEditingChanged: { isEditing in
+                if isEditing {
+                    repetitionsInput = repetitionsTitle
+                } else {
+                    repetitionsInput = nil
+                    onSave()
+                }
+            })
+            .keyboardType(.numbersAndPunctuation)
+            .focused($focusedField, equals: .repetitions)
+            .accessibilityLabel("Target reps")
+            .accessibilityValue(repetitionsText.wrappedValue.isEmpty ? "Not set" : "\(repetitionsText.wrappedValue) reps")
+        }
     }
 
     private var durationControl: some View {
         Button {
             showingDurationPicker = true
         } label: {
-            Text(SetTrackingType.durationText(routineSet.durationValue ?? 60))
-                .font(.liteweightMetric(.body, weight: .semibold))
-                .foregroundStyle(LiteweightTheme.metricTime)
-                .contentTransition(reduceMotion ? .opacity : .numericText())
-                .animation(LiteweightMotion.preferred(LiteweightMotion.snappy, reduceMotion: reduceMotion), value: routineSet.durationValue)
+            setField(isFocused: showingDurationPicker) {
+                Text(SetTrackingType.durationText(routineSet.durationValue ?? 60))
+                    .contentTransition(reduceMotion ? .opacity : .numericText())
+                    .animation(LiteweightMotion.preferred(LiteweightMotion.snappy, reduceMotion: reduceMotion), value: routineSet.durationValue)
+            }
         }
-        .buttonStyle(.bordered)
-        .buttonBorderShape(.capsule)
-        .controlSize(.small)
-        .frame(minHeight: LiteweightTheme.controlHeight)
-        .accessibilityLabel("Set duration")
+        .buttonStyle(.plain)
+        .accessibilityLabel("Duration")
         .accessibilityValue(SetTrackingType.durationText(routineSet.durationValue ?? 60))
     }
 
@@ -812,61 +1036,187 @@ private struct WorkoutRoutineSetRow: View {
         })
     }
     private var distanceField: some View {
-        TextField("—", text: distanceText)
-            .font(.liteweightMetric(.body, weight: .semibold))
-            .keyboardType(.decimalPad)
-            .focused($focusedField, equals: .distance)
-            .multilineTextAlignment(.trailing)
-            .frame(minWidth: 44, minHeight: LiteweightTheme.controlHeight)
-            .accessibilityLabel("Distance in \(WorkoutSet.distanceUnit(settingsStore.weightUnit))")
+        setField(field: .distance, isFocused: focusedField == .distance) {
+            TextField("—", text: distanceText)
+                .keyboardType(.decimalPad)
+                .focused($focusedField, equals: .distance)
+                .accessibilityLabel("Distance in \(WorkoutSet.distanceUnit(settingsStore.weightUnit))")
+        }
     }
     private var weightTitle: String {
         trackingType == .assistedBodyweight ? "Assistance" : (trackingType == .weightedBodyweight ? "Added Weight" : "Weight")
     }
-    private var valueControlsLayout: AnyLayout {
-        usesAccessibilityLayout ? AnyLayout(VStackLayout(alignment: .leading, spacing: 8)) : AnyLayout(HStackLayout(spacing: 6))
+
+    private var badgeColor: Color {
+        routineSet.tagValue == .warmUp ? LiteweightTheme.metricSets : LiteweightTheme.secondaryText
     }
-    private var setValueControls: some View {
-        valueControlsLayout {
-            if trackingType.usesWeight {
-                HStack(spacing: 4) {
-                    if usesAccessibilityLayout { Text(weightTitle).font(.caption) }
-                    weightField.accessibilityLabel("\(weightTitle) in \(settingsStore.weightUnit.unit.symbol)")
-                    weightUnitLabel
-                }
+
+    private var badgeFill: Color {
+        routineSet.tagValue == .warmUp ? LiteweightTheme.metricSetsContainer : LiteweightTheme.field
+    }
+
+    private var setTagBinding: Binding<WorkoutSetTag?> {
+        Binding(
+            get: { routineSet.tagValue },
+            set: { newValue in
+                guard routineSet.tagValue != newValue else { return }
+                routineSet.tagValue = newValue
+                onSave()
+                selectionFeedback += 1
             }
-            if trackingType.usesReps {
-                HStack(spacing: 4) {
-                    repetitionsField
-                    repetitionsUnitLabel
-                }
-            }
-            if trackingType.usesDistance {
-                HStack(spacing: 4) {
-                    distanceField
-                    Text(WorkoutSet.distanceUnit(settingsStore.weightUnit)).font(.caption).foregroundStyle(LiteweightTheme.secondaryText)
-                }
-            }
-            if trackingType.usesDuration { durationControl }
+        )
+    }
+
+    private func setTypeIcon(for tag: WorkoutSetTag) -> String {
+        switch tag {
+        case .warmUp: return "flame"
+        case .dropSet: return "arrow.down.right"
+        case .failure: return "bolt.fill"
         }
+    }
+
+    @ViewBuilder
+    private var setTypeMenuItems: some View {
+        Picker("Set Type", selection: setTagBinding) {
+            Label("Normal Set", systemImage: "number").tag(WorkoutSetTag?.none)
+            ForEach(WorkoutRoutineSet.supportedTags, id: \.self) { tag in
+                Label(tag.title.capitalized, systemImage: setTypeIcon(for: tag))
+                    .tag(WorkoutSetTag?.some(tag))
+            }
+        }
+        if index > 0 {
+            Button("Move Up", systemImage: "arrow.up", action: onMoveUp)
+        }
+        if index < setCount - 1 {
+            Button("Move Down", systemImage: "arrow.down", action: onMoveDown)
+        }
+        Section {
+            Button("Delete Set", systemImage: "trash", role: .destructive, action: onDelete)
+        }
+    }
+
+    private var setTypeMenu: some View {
+        Menu { setTypeMenuItems } label: {
+            if usesAccessibilityLayout {
+                Text(routineSet.tagValue.map { "\($0.title.capitalized) · Set \(index + 1)" } ?? "Set \(index + 1)")
+                    .font(.liteweightMetric(.headline))
+                    .lineLimit(2)
+                    .minimumScaleFactor(0.85)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .foregroundStyle(badgeColor)
+                    .padding(.horizontal, 8)
+                    .frame(minHeight: LiteweightTheme.controlHeight)
+                    .background(badgeFill, in: Capsule())
+            } else {
+                Text(setLabel)
+                    .font(.liteweightMetric(.title3))
+                    .foregroundStyle(badgeColor)
+                    .frame(width: InlineWorkoutSetLayout.visualHeight, height: InlineWorkoutSetLayout.visualHeight)
+                    .background(badgeFill, in: Circle())
+                    .overlay(alignment: .bottomTrailing) {
+                        Image(systemName: "chevron.down.circle.fill")
+                            .font(.caption2.weight(.bold))
+                            .foregroundStyle(badgeColor, LiteweightTheme.surface)
+                            .offset(x: 2, y: 2)
+                            .accessibilityHidden(true)
+                    }
+                    .frame(width: LiteweightTheme.iconButtonSize, height: LiteweightTheme.controlHeight)
+                    .contentShape(Rectangle())
+                    .frame(width: InlineWorkoutSetLayout.setWidth)
+            }
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("Set \(index + 1) type")
+        .accessibilityValue(routineSet.tagValue?.title ?? "Normal set")
+        .accessibilityHint("Change set type or delete")
+    }
+
+    @ViewBuilder
+    private func measurementField(_ column: SetTrackingType.Column) -> some View {
+        switch column {
+        case .weight: weightField
+        case .reps: repetitionsField
+        case .distance: distanceField
+        case .duration: durationControl
+        }
+    }
+
+    private func setField<Content: View>(
+        field: EntryField? = nil,
+        isFocused: Bool = false,
+        @ViewBuilder content: () -> Content
+    ) -> some View {
+        content()
+            .font(.liteweightMetric(.title3))
+            .foregroundStyle(LiteweightTheme.primaryText)
+            .multilineTextAlignment(.center)
+            .lineLimit(1)
+            .minimumScaleFactor(0.85)
+            .frame(minWidth: 0, maxWidth: .infinity, minHeight: InlineWorkoutSetLayout.visualHeight)
+            .background(
+                RoundedRectangle(cornerRadius: LiteweightTheme.compactCornerRadius, style: .continuous)
+                    .fill(isFocused ? LiteweightTheme.accentSoft : LiteweightTheme.tertiaryFill)
+                    .overlay {
+                        RoundedRectangle(cornerRadius: LiteweightTheme.compactCornerRadius, style: .continuous)
+                            .strokeBorder(isFocused ? LiteweightTheme.accent : LiteweightTheme.outline, lineWidth: isFocused ? 2 : 0.5)
+                    }
+            )
+            .frame(minHeight: LiteweightTheme.controlHeight)
+            .contentShape(Rectangle())
+            .simultaneousGesture(TapGesture().onEnded {
+                if let field { focusedField = field }
+            }, including: field == nil ? .subviews : .all)
+            .animation(LiteweightMotion.preferred(LiteweightMotion.snappy, reduceMotion: reduceMotion), value: isFocused)
+    }
+
+    private var regularCompactRow: some View {
+        HStack(alignment: .center, spacing: InlineWorkoutSetLayout.spacing) {
+            setTypeMenu
+            previousCell
+            ForEach(trackingType.columns) { column in
+                measurementField(column)
+            }
+        }
+        .padding(.vertical, 2)
+        .frame(maxWidth: .infinity, minHeight: InlineWorkoutSetLayout.compactRowHeight)
+    }
+
+    private var accessibleCompactRow: some View {
+        VStack(alignment: .leading, spacing: InlineWorkoutSetLayout.stackedSpacing) {
+            setTypeMenu
+            VStack(alignment: .leading, spacing: InlineWorkoutSetLayout.labelSpacing) {
+                Text("PREVIOUS")
+                    .font(.caption)
+                    .foregroundStyle(LiteweightTheme.secondaryText)
+                    .accessibilityHidden(true)
+                previousCell
+            }
+            ForEach(trackingType.columns) { column in
+                VStack(alignment: .leading, spacing: InlineWorkoutSetLayout.labelSpacing) {
+                    Text(trackingType.header(for: column, weightUnit: settingsStore.weightUnit.unit.symbol,
+                                             distanceUnit: WorkoutSet.distanceUnit(settingsStore.weightUnit)))
+                        .font(.caption)
+                        .foregroundStyle(LiteweightTheme.secondaryText)
+                        .accessibilityHidden(true)
+                    measurementField(column)
+                }
+            }
+        }
+        .padding(.vertical, 8)
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 
     var body: some View {
         Group {
             if usesAccessibilityLayout {
-                VStack(alignment: .leading, spacing: 8) {
-                    setLabelView
-                    setValueControls
-                }
+                accessibleCompactRow
             } else {
-                HStack(spacing: 12) {
-                    setLabelView
-                    Spacer(minLength: 8)
-                    setValueControls
-                }
+                regularCompactRow
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
+        .accessibilityElement(children: .contain)
+        .accessibilityLabel(routineSet.tagValue.map { "Set \(index + 1), \($0.title)" } ?? "Set \(index + 1)")
         .onChange(of: trackingType) { _, _ in
             focusedField = nil
             weightInput = nil
@@ -880,22 +1230,7 @@ private struct WorkoutRoutineSetRow: View {
         }
         .sensoryFeedback(.selection, trigger: selectionFeedback) { _, _ in settingsStore.workoutHaptics }
         .contextMenu {
-            Picker("Set Type", selection: Binding(
-                get: { routineSet.tagValue },
-                set: { newValue in
-                    guard routineSet.tagValue != newValue else { return }
-                    routineSet.tagValue = newValue
-                    onSave()
-                    selectionFeedback += 1
-                }
-            )) {
-                Text("Normal").tag(WorkoutSetTag?.none)
-                ForEach(WorkoutRoutineSet.supportedTags, id: \.self) { tag in
-                    Text(tag.title.capitalized).tag(WorkoutSetTag?.some(tag))
-                }
-            }
-            Divider()
-            Button("Delete Set", systemImage: "trash", role: .destructive, action: onDelete)
+            setTypeMenuItems
         }
         .sheet(isPresented: $showingDurationPicker) {
             LiteweightDurationPickerSheet(

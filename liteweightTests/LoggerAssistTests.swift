@@ -145,6 +145,77 @@ final class LoggerAssistTests: XCTestCase {
         SetValuePrefill.resolve(currentSets: current, previousSets: previous, trackingType: type)
     }
 
+    func testNewerPlanWeightWinsOverLastLift() {
+        XCTAssertEqual(PlanWeightPrefill.resolve(planWeight: 65, editedAt: Date(timeIntervalSince1970: 20),
+                                                lastWeight: 70, lastEnd: Date(timeIntervalSince1970: 10)), 65)
+    }
+
+    func testNewerLastLiftWinsOverPlanWeight() {
+        XCTAssertEqual(PlanWeightPrefill.resolve(planWeight: 65, editedAt: Date(timeIntervalSince1970: 10),
+                                                lastWeight: 70, lastEnd: Date(timeIntervalSince1970: 20)), 70)
+    }
+
+    func testPlanWithoutEditTimeFollowsLastLift() {
+        XCTAssertEqual(PlanWeightPrefill.resolve(planWeight: 65, editedAt: nil,
+                                                lastWeight: 70, lastEnd: Date(timeIntervalSince1970: 10)), 70)
+    }
+
+    func testPlanWeightWithoutHistoryStaysPlanWeight() {
+        XCTAssertEqual(PlanWeightPrefill.resolve(planWeight: 65, editedAt: nil,
+                                                lastWeight: nil, lastEnd: nil), 65)
+        XCTAssertEqual(PlanWeightPrefill.resolve(planWeight: 65, editedAt: nil,
+                                                lastWeight: nil, lastEnd: Date(timeIntervalSince1970: 10)), 65)
+        XCTAssertEqual(PlanWeightPrefill.resolve(planWeight: 65, editedAt: nil,
+                                                lastWeight: 70, lastEnd: nil), 65)
+    }
+
+    func testBlankPlanWeightHasNoTargetEvenWithHistory() {
+        XCTAssertNil(PlanWeightPrefill.resolve(planWeight: nil, editedAt: Date(timeIntervalSince1970: 20),
+                                              lastWeight: 70, lastEnd: Date(timeIntervalSince1970: 30)))
+    }
+
+    func testEqualPlanAndLiftDatesKeepPlanWeight() {
+        let date = Date(timeIntervalSince1970: 10)
+        XCTAssertEqual(PlanWeightPrefill.resolve(planWeight: 65, editedAt: date, lastWeight: 70, lastEnd: date), 65)
+    }
+
+    func testPlanWeightHistoryMatchesOrdinalWithinEachKind() {
+        let history: [PlanWeightPrefill.HistorySet] = [
+            .init(weight: 20, isWarmup: true), .init(weight: 70, isWarmup: false),
+            .init(weight: 30, isWarmup: true), .init(weight: 75, isWarmup: false)
+        ]
+        let warmups = [true, true, false, true, false, false]
+        XCTAssertEqual(warmups.indices.map {
+            PlanWeightPrefill.matchingWeight(at: $0, planWarmups: warmups, history: history, type: .weightReps)
+        }, [20, 30, 70, 30, 75, 75])
+        XCTAssertNil(PlanWeightPrefill.matchingWeight(at: 0, planWarmups: [true],
+            history: [.init(weight: 70, isWarmup: false)], type: .weightReps))
+    }
+
+    func testPlanWeightHistoryRequiresValidMatchingWeight() {
+        let history: [PlanWeightPrefill.HistorySet] = [
+            .init(weight: 70, isWarmup: false), .init(weight: nil, isWarmup: false)
+        ]
+        XCTAssertNil(PlanWeightPrefill.matchingWeight(at: 1, planWarmups: [false, false], history: history, type: .weightReps))
+        for type in [SetTrackingType.weightReps, .weightDuration, .weightDistance] {
+            XCTAssertNil(PlanWeightPrefill.matchingWeight(at: 0, planWarmups: [false],
+                history: [.init(weight: 0, isWarmup: false)], type: type))
+        }
+        for type in [SetTrackingType.assistedBodyweight, .weightedBodyweight] {
+            XCTAssertEqual(PlanWeightPrefill.matchingWeight(at: 0, planWarmups: [false],
+                history: [.init(weight: 0, isWarmup: false)], type: type), 0)
+            XCTAssertNil(PlanWeightPrefill.matchingWeight(at: 0, planWarmups: [false],
+                history: [.init(weight: nil, isWarmup: false)], type: type))
+        }
+    }
+
+    func testTypedWeightBeatsARepeatedResolvedTargetButChangedTargetWins() {
+        XCTAssertEqual(filled([
+            .init(values: .init(weight: 80), userEnteredFields: [.weight], targets: .init(weight: 70)),
+            .init(targets: .init(weight: 70)), .init(targets: .init(weight: 75))
+        ]).map(\.weight), [80, 80, 75])
+    }
+
     func testSetTwoCopiesSetOneEvenWhenItIsNotCompleted() {
         let current: [Input] = [
             .init(values: .init(weight: 140, repetitions: 5), userEnteredFields: [.weight, .reps]), .init()

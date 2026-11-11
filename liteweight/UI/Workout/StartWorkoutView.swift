@@ -540,6 +540,100 @@ enum WorkoutSuggestion {
     }
 }
 
+/// The voice lines under the Workout, History and Exercises titles (build 121). Each builder
+/// takes plain values and returns markup where `**fact**` marks a bold primary fact, so the
+/// wording is unit-testable; `text(_:)` turns it into the line's `Text`.
+enum TabVoiceLine {
+    static func text(_ markup: String) -> Text {
+        markup.components(separatedBy: "**").enumerated().reduce(Text("")) { line, part in
+            line + (part.offset.isMultiple(of: 2) ? Text(part.element) : LiteweightVoiceLine.fact(part.element))
+        }
+    }
+
+    /// Workout: the tracked group rested longest, from the same last-trained dates as Most Rested.
+    static func workout(lastTrained: [String: Date], now: Date, calendar: Calendar = .current) -> String {
+        let today = calendar.startOfDay(for: now)
+        let rests = HomeWeekSummary.muscleGroups.compactMap { group -> (group: String, days: Int)? in
+            guard let date = lastTrained[group] else { return nil }
+            let days = calendar.dateComponents([.day], from: calendar.startOfDay(for: date), to: today).day ?? 0
+            return (group, max(0, days))
+        }
+        guard let rested = rests.max(by: { $0.days < $1.days }) else { return "Pick a saved workout or start empty." }
+        // Under two days every group is still recovering, as the rest chips say.
+        guard rested.days >= 2 else { return "Every group you train got work in the last day." }
+        let verb = ["back", "chest", "abdominals"].contains(rested.group) ? "has" : "have"
+        return "\(HomeWeekSummary.displayName(rested.group)) \(verb) rested **\(rested.days) days**. \(suggestion(for: rested.group))"
+    }
+
+    private static func suggestion(for group: String) -> String {
+        switch group {
+        case "legs": return "Squat day?"
+        case "chest": return "Bench day?"
+        case "back": return "Pull day?"
+        case "shoulders": return "Press day?"
+        case "arms": return "Arm day?"
+        default: return "Core day?"
+        }
+    }
+
+    /// History: last week's count, and how far back it was last matched. "Busiest since" needs
+    /// at least two quieter weeks in between, in an earlier month; a record with no match in
+    /// the loaded history gets no clause.
+    static func history(sessionDates: [Date], now: Date, calendar: Calendar = .current,
+                        locale: Locale = .current) -> String {
+        guard let latest = sessionDates.max() else { return "Finished workouts show up here." }
+        func week(_ date: Date) -> Date { calendar.dateInterval(of: .weekOfYear, for: date)?.start ?? date }
+        let counts = Dictionary(grouping: sessionDates, by: week).mapValues(\.count)
+        let thisWeek = week(now)
+        guard let lastWeek = calendar.date(byAdding: .weekOfYear, value: -1, to: thisWeek) else {
+            return "Finished workouts show up here."
+        }
+        func workouts(_ count: Int) -> String { "**\(count) workout\(count == 1 ? "" : "s")**" }
+        let last = counts[lastWeek] ?? 0
+        guard last > 0 else {
+            let current = counts[thisWeek] ?? 0
+            if current > 0 { return "\(workouts(current)) this week." }
+            var style = Date.FormatStyle.dateTime.month(.abbreviated).day()
+            style.calendar = calendar
+            style.timeZone = calendar.timeZone
+            style.locale = locale
+            return "Your last workout was **\(latest.formatted(style))**."
+        }
+        var line = "\(workouts(last)) last week"
+        if let matched = counts.filter({ $0.key < lastWeek && $0.value >= last }).keys.max(),
+           let gapEnd = calendar.date(byAdding: .weekOfYear, value: -2, to: lastWeek), matched < gapEnd,
+           !calendar.isDate(matched, equalTo: lastWeek, toGranularity: .month) {
+            var style = Date.FormatStyle.dateTime.month(.wide)
+            if !calendar.isDate(matched, equalTo: now, toGranularity: .year) { style = style.year() }
+            style.calendar = calendar
+            style.timeZone = calendar.timeZone
+            style.locale = locale
+            line += ", your busiest since \(matched.formatted(style))"
+        }
+        return line + "."
+    }
+
+    /// Exercises: the exercise with the most sets in the window, and its heaviest set when that
+    /// set falls inside the window too. Nothing trained: no line.
+    static func exercises(leader: String?, sets: Int, heaviest: String?) -> String? {
+        guard let leader, sets > 0 else { return nil }
+        if let heaviest { return "**\(leader)** leads this month at **\(heaviest)**." }
+        return "**\(leader)** leads this month with **\(sets) set\(sets == 1 ? "" : "s")**."
+    }
+
+    /// The exercise with the most completed sets on or after `since`; ties go to the most recent.
+    static func busiestExercise(_ entries: [(date: Date, exercise: UUID?, sets: Int)], since: Date) -> (id: UUID, sets: Int)? {
+        var totals: [UUID: (sets: Int, last: Date)] = [:]
+        for entry in entries where entry.date >= since && entry.sets > 0 {
+            guard let id = entry.exercise else { continue }
+            let current = totals[id] ?? (0, .distantPast)
+            totals[id] = (current.sets + entry.sets, max(current.last, entry.date))
+        }
+        return totals.max { ($0.value.sets, $0.value.last) < ($1.value.sets, $1.value.last) }
+            .map { ($0.key, $0.value.sets) }
+    }
+}
+
 private struct SuggestedWorkoutExercise: Identifiable {
     let id: NSManagedObjectID
     let title: String
@@ -575,6 +669,8 @@ struct StartWorkoutView: View {
     @State private var deletedWorkoutCount = 0
     @State private var rankedSuggestions: [WorkoutSuggestion.Ranked<NSManagedObjectID>] = []
     @State private var suggestedExercises: [SuggestedWorkoutExercise] = []
+    /// Each tracked group's last session, for the voice line (build 121).
+    @State private var lastTrainedByGroup: [String: Date] = [:]
     @Namespace private var zoomNamespace
 
     static var fetchRequest: NSFetchRequest<WorkoutPlan> {
@@ -607,6 +703,11 @@ struct StartWorkoutView: View {
     var body: some View {
         NavigationStack {
             List {
+                // The tab's voice: the longest-rested group. None mid-workout (build 121).
+                if currentWorkouts.isEmpty, watchConnection.watchWorkoutAwaitingOpen == nil, historyStore.hasLoaded {
+                    LiteweightVoiceSection(text: TabVoiceLine.text(
+                        TabVoiceLine.workout(lastTrained: lastTrainedByGroup, now: Date())))
+                }
                 if currentWorkouts.isEmpty, watchConnection.watchWorkoutAwaitingOpen == nil,
                    let suggestion = rankedSuggestions.first {
                     Section {
@@ -719,6 +820,13 @@ struct StartWorkoutView: View {
         .onAppear {
             historyStore.observe(in: managedObjectContext)
             refreshWorkoutSuggestions()
+            #if DEBUG
+            // Screenshot hook: open the saved-workout editor for the first plan.
+            if planEditorRoute == nil, ProcessInfo.processInfo.arguments.contains("-liteweightInspectPlanEditor"),
+               let plan = plans.first {
+                planEditorRoute = WorkoutPlanEditorRoute(kind: .edit(planID: plan.objectID))
+            }
+            #endif
         }
         .onReceive(historyStore.$snapshot) { refreshWorkoutSuggestions(snapshot: $0) }
         .onReceive(exerciseStore.$customExercises.dropFirst()) { _ in
@@ -806,6 +914,7 @@ struct StartWorkoutView: View {
         }
         let ranked = WorkoutSuggestion.ranked(candidates, lastTrained: summary.lastTrained, now: now)
         rankedSuggestions = ranked
+        lastTrainedByGroup = summary.lastTrained
         guard let best = ranked.first, let plan = plans.first(where: { $0.objectID == best.workout.id }) else {
             suggestedExercises = []
             return
@@ -854,17 +963,15 @@ struct StartWorkoutView: View {
         currentWorkouts.isEmpty && watchConnection.watchWorkoutAwaitingOpen == nil && rankedSuggestions.first != nil
     }
 
-    /// The suggested workout's main muscle tints the card, fading into the surface.
+    /// The suggested workout's main muscle tints the card.
     private func mostRestedBackground(_ suggestion: WorkoutSuggestion.Ranked<NSManagedObjectID>) -> some View {
         let counts = Dictionary(suggestion.workout.muscleGroups.map { ($0, 1) }, uniquingKeysWith: +)
         let main = suggestion.workout.muscleGroups.first { counts[$0] == counts.values.max() }
         let shape = RoundedRectangle(cornerRadius: LiteweightTheme.heroCornerRadius, style: .continuous)
+        // A flat tint, not a gradient: the owner finds gradients "so AI" (build 121).
         return ZStack {
             LiteweightTheme.surface
-            LinearGradient(
-                colors: [LiteweightTheme.muscle(main).opacity(historyStore.hasLoaded ? 0.30 : 0), .clear],
-                startPoint: .topLeading, endPoint: .center
-            )
+            LiteweightTheme.muscle(main).opacity(historyStore.hasLoaded ? 0.14 : 0)
         }
         .clipShape(shape)
         .animation(LiteweightMotion.preferred(LiteweightMotion.reveal, reduceMotion: reduceMotion), value: historyStore.hasLoaded)
@@ -929,8 +1036,78 @@ struct StartWorkoutView: View {
                 }
             }
             .fixedSize(horizontal: false, vertical: true)
+        } else if currentWorkouts.isEmpty {
+            idleStartCard
         } else {
             localQuickStartCard
+        }
+    }
+
+    /// Nothing running: the start card in the style of the Watch card above (build 121),
+    /// a small icon line, the suggested workout, its rest in blue, a big blue Start, and
+    /// Start Empty Workout under it. Without a saved workout it starts an empty one.
+    private var idleStartCard: some View {
+        // Most Rested already offers its workout with a Start button; this card then starts
+        // an empty workout, quieter, so the tab never shows two "Start Workout B" (build 121).
+        let suggestion = historyStore.hasLoaded && !showsMostRested ? rankedSuggestions.first : nil
+        return VStack(alignment: .leading, spacing: 14) {
+            Label(suggestion == nil ? "Ready when you are" : "Suggested",
+                  systemImage: suggestion == nil ? "dumbbell.fill" : "sparkles")
+                .font(.subheadline.weight(.semibold))
+                .foregroundStyle(LiteweightTheme.secondaryText)
+                .fixedSize(horizontal: false, vertical: true)
+            Text(suggestion?.workout.title ?? "Empty Workout")
+                .font(.headline)
+                .foregroundStyle(LiteweightTheme.primaryText)
+                .fixedSize(horizontal: false, vertical: true)
+            if let suggestion {
+                idleRestLine(suggestion)
+            } else {
+                Text("Add exercises as you go")
+                    .font(.subheadline)
+                    .foregroundStyle(LiteweightTheme.secondaryText)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            Button {
+                if let suggestion { startSuggestedWorkout(suggestion.workout.id) } else { startEmptyWorkout() }
+            } label: {
+                Label(suggestion.map { "Start \($0.workout.title)" } ?? (showsMostRested ? "Start Empty Workout" : "Start Workout"),
+                      systemImage: "play.fill")
+                    .font(.headline)
+                    .frame(maxWidth: .infinity)
+            }
+            .modifier(QuickStartButtonStyle(isSecondary: showsMostRested))
+            .buttonBorderShape(.capsule)
+            .controlSize(.large)
+            .frame(minHeight: 50)
+            if suggestion != nil {
+                Button("Start Empty Workout", action: startEmptyWorkout)
+                    .font(.subheadline.weight(.semibold))
+                    .buttonStyle(.borderless)
+                    .frame(maxWidth: .infinity, minHeight: LiteweightTheme.controlHeight)
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    /// "Legs rested 6 days", styled like the Watch card's "Elapsed": the least rested group
+    /// of the suggestion, since every other group in it has rested at least as long.
+    @ViewBuilder
+    private func idleRestLine(_ suggestion: WorkoutSuggestion.Ranked<NSManagedObjectID>) -> some View {
+        if let rest = suggestion.muscles.first(where: { $0.days != nil }), let days = rest.days {
+            HStack(spacing: 4) {
+                Text(days == 0 ? "\(rest.title) trained" : "\(rest.title) rested")
+                    .font(.subheadline)
+                    .foregroundStyle(LiteweightTheme.secondaryText)
+                Text(days == 0 ? "today" : "\(days) \(days == 1 ? "day" : "days")")
+                    .font(.liteweightMetric(.subheadline, weight: .semibold))
+                    .foregroundStyle(LiteweightTheme.metricTime)
+            }
+            .accessibilityElement(children: .combine)
+        } else {
+            Text("New to your history")
+                .font(.subheadline)
+                .foregroundStyle(LiteweightTheme.secondaryText)
         }
     }
 

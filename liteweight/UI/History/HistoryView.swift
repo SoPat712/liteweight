@@ -123,6 +123,11 @@ struct HistoryView: View {
     private var workoutHistoryContent: some View {
         let completed = visibleSessions
         let records = historyStore.snapshot.recordSetIDs
+        if searchText.isEmpty {
+            // The tab's voice: last week's count and how long since it was matched (build 121).
+            LiteweightVoiceSection(text: TabVoiceLine.text(
+                TabVoiceLine.history(sessionDates: completed.map(\.date), now: Date())))
+        }
         if !searchText.isEmpty {
             let matches = matchingSessions
             if matches.isEmpty {
@@ -386,11 +391,14 @@ private struct WorkoutHistoryRow: View {
                     .font(.footnote)
                     .foregroundStyle(LiteweightTheme.secondaryText)
                     .lineLimit(1)
-            } else if dynamicTypeSize.isAccessibilitySize {
-                // The figure is too small to read at these sizes; name the groups instead.
+            } else {
+                // Colored chips name the groups the figure lights, at every size (build 121);
+                // at accessibility sizes they stand in for the figure. The row's value already
+                // speaks the groups, so VoiceOver skips the chips.
                 LiteweightChipFlow(spacing: 5) {
                     ForEach(groups.prefix(3), id: \.self) { LiteweightMuscleChip(group: $0) }
                 }
+                .accessibilityHidden(true)
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)

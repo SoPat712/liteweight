@@ -268,6 +268,8 @@ struct CurrentWorkoutView: View {
     @State private var showingArrangeExercises = false
     @State private var selectedExerciseDetail: Exercise?
     @State private var personalRecordBanner: PersonalRecordBanner?
+    /// A record lands harder than an ordinary logged set (build 121).
+    @State private var recordFeedback = 0
     @State private var scrollRequest: LoggerScrollRequest?
     @State private var pendingCompletion: PendingLoggerCompletion?
     @State private var isFocusTransitionActive = false
@@ -755,6 +757,7 @@ struct CurrentWorkoutView: View {
         .sensoryFeedback(.selection, trigger: actionFeedback) { _, _ in settingsStore.workoutHaptics }
         .sensoryFeedback(.impact(weight: .medium), trigger: deleteFeedback) { _, _ in settingsStore.workoutHaptics }
         .sensoryFeedback(.error, trigger: persistenceError) { _, error in error != nil && settingsStore.workoutHaptics }
+        .sensoryFeedback(.impact(weight: .heavy), trigger: recordFeedback) { _, _ in settingsStore.workoutHaptics }
     }
 
     #if DEBUG
@@ -2049,15 +2052,19 @@ struct CurrentWorkoutView: View {
         let equipment = exercise?.equipment.map(\.equipmentTitle).joined(separator: ", ") ?? ""
         let showsRest = !sets.allSatisfy { $0.durationValue != nil }
             || sets.isEmpty || workoutExercise.restTimerDurationValue != nil
+        // The equipment · rest line wears the exercise's muscle color, matching its run of
+        // the progress bar; a running countdown keeps its own tint (build 121).
+        let group = exercise?.muscleGroup
+        let lineTint: Color? = LiteweightPalette.hasMuscleColor(group) ? LiteweightTheme.muscleText(group) : nil
         return layout {
             if !equipment.isEmpty {
                 Text(equipment + (showsRest && !usesAccessibilityHeaderLayout ? " ·" : ""))
                     .font(.subheadline)
-                    .foregroundStyle(LiteweightTheme.secondaryText)
+                    .foregroundStyle(lineTint ?? LiteweightTheme.secondaryText)
                     .lineLimit(usesAccessibilityHeaderLayout ? 2 : 1)
             }
             if showsRest {
-                exerciseRestButton(for: workoutExercise)
+                exerciseRestButton(for: workoutExercise, idleTint: lineTint ?? LiteweightTheme.metricTime)
             }
         }
     }
@@ -2418,7 +2425,7 @@ struct CurrentWorkoutView: View {
         WorkoutLiveActivityManager.shared.refreshRestTimer(for: workout)
     }
 
-    private func exerciseRestButton(for workoutExercise: WorkoutExercise) -> some View {
+    private func exerciseRestButton(for workoutExercise: WorkoutExercise, idleTint: Color) -> some View {
         TimelineView(.periodic(from: .now, by: 1)) { _ in
             let remaining = restTimerStore.restTimerRemainingTime ?? 0
             let running = activeRestTimerExercise?.objectID == workoutExercise.objectID && remaining > 0
@@ -2434,7 +2441,7 @@ struct CurrentWorkoutView: View {
             } label: {
                 Text("Rest \(time)")
                     .font(.liteweightMetric(.subheadline, weight: .semibold))
-                    .foregroundStyle(running ? restTimerTint : LiteweightTheme.metricTime)
+                    .foregroundStyle(running ? restTimerTint : idleTint)
                     .lineLimit(1)
                     .minimumScaleFactor(0.85)
                     .fixedSize(horizontal: true, vertical: false)
@@ -2482,6 +2489,10 @@ struct CurrentWorkoutView: View {
                 finishDiscardSection
             }
             .contentMargins(.horizontal, loggerHorizontalInset, for: .scrollContent)
+            // The app icon's plates burst once over the top of the recap (build 121).
+            .overlay(alignment: .top) {
+                if !reduceMotion { FinishPlateConfetti() }
+            }
             .safeAreaInset(edge: .bottom) {
                 finishSaveButton
             }
@@ -2551,12 +2562,9 @@ struct CurrentWorkoutView: View {
     private var finishHeaderSection: some View {
         Section {
             HStack(alignment: .top, spacing: 12) {
-                Image(systemName: "dumbbell.fill")
-                    .font(.title3.weight(.semibold))
-                    .foregroundStyle(LiteweightTheme.onAccent)
-                    .frame(width: 44, height: 44)
-                    .background(LiteweightTheme.accent, in: Circle())
-                    .accessibilityHidden(true)
+                // TEMPORARY: the plate mark stands in until the owner's new logo (build 121).
+                LiteweightPlateMark(scale: 1.3)
+                    .frame(minWidth: 44, minHeight: 44)
 
                 VStack(alignment: .leading, spacing: 4) {
                     Text(finishTitle.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
@@ -2605,7 +2613,9 @@ struct CurrentWorkoutView: View {
             finishMetric("Sets", value: "\(finishRecap.setCount)", color: LiteweightTheme.metricSets, index: 2)
             finishMetric("Exercises", value: "\(finishRecap.exerciseCount)", color: LiteweightTheme.accent, index: 3)
             finishMetric("Avg RPE", value: finishRecap.averageRPE, color: LiteweightTheme.metricEffort, index: 4)
-            finishMetric("Records", value: "\(finishRecap.records.count)", color: LiteweightTheme.metricRecord, index: 5)
+            // Gold is for achievements: the count turns gold once there is a record (build 121).
+            finishMetric("Records", value: "\(finishRecap.records.count)",
+                         color: finishRecap.records.isEmpty ? LiteweightTheme.metricRecord : LiteweightTheme.achievementText, index: 5)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
     }
@@ -3206,6 +3216,7 @@ struct CurrentWorkoutView: View {
         withAnimation(LiteweightMotion.preferred(LiteweightMotion.snappy, reduceMotion: reduceMotion)) {
             personalRecordBanner = PersonalRecordBanner(exerciseTitle: title, detail: detail)
         }
+        recordFeedback += 1
     }
 
     /// One exact anchor for ordinary sets, exercise changes and superset rounds.
@@ -3452,13 +3463,14 @@ struct CurrentWorkoutView: View {
     /// targets by set UUID before warm-up insertion can shift row positions.
     private func registerExistingSetFields(in exercise: WorkoutExercise, previous: [WorkoutSet], plan: WorkoutRoutineExercise?) {
         let plans = plan?.workoutRoutineSets?.array as? [WorkoutRoutineSet] ?? []
+        let weights = plan.map { PlanWeightPrefill.weights(for: $0, type: $0.setTrackingType, excluding: workout) } ?? []
         let isBarbell = exercise.exercise(in: exerciseStore.exercises)?.type == .barbell
         let defaultWeight = isBarbell
             ? WeightUnit.convert(weight: settingsStore.weightUnit.barbellWeight, from: settingsStore.weightUnit, to: .metric) : 0
         for (index, set) in workoutSets(for: exercise).enumerated() {
             guard SetTrackingPreferences.loggerFields(for: set.uuid) == nil else { continue }
             let target = plans.indices.contains(index) ? plans[index] : nil
-            let targets = SetValuePrefill.Values(weight: target?.weightValue,
+            let targets = SetValuePrefill.Values(weight: weights.indices.contains(index) ? weights[index] : nil,
                 repetitions: target == nil ? nil : (set.maxTargetRepetitionsValue.map(Int.init) ?? set.minTargetRepetitionsValue.map(Int.init)),
                 duration: target?.durationValue, distance: SetTrackingPreferences.routineDistance(for: target?.uuid))
             let old = previous.indices.contains(index) ? previous[index] : previous.last
@@ -4042,6 +4054,76 @@ private struct FinishWorkoutRecap {
     }
 }
 
+/// One burst of the app icon's three plates over the top of Workout Complete (build 121).
+/// The colors follow the TEMPORARY brand plates. One Canvas, no hit testing, hidden from
+/// VoiceOver, and gone after the fall; callers skip it under Reduce Motion.
+private struct FinishPlateConfetti: View {
+    private struct Piece {
+        let x: Double
+        let delay: Double
+        let travel: Double
+        let drift: Double
+        let sway: Double
+        let spin: Double
+        let size: CGSize
+        let color: Color
+    }
+
+    private static let duration: TimeInterval = 2.5
+    private static let pieces: [Piece] = {
+        let colors = [LiteweightTheme.plateRed, LiteweightTheme.plateBlue, LiteweightTheme.plateYellow]
+        return (0..<54).map { index in
+            Piece(x: .random(in: 0.02...0.98), delay: .random(in: 0...0.45), travel: .random(in: 0.7...1.15),
+                  drift: .random(in: 6...22), sway: .random(in: 2...5), spin: .random(in: -7...7),
+                  size: CGSize(width: .random(in: 5...7), height: .random(in: 11...16)),
+                  color: colors[index % colors.count])
+        }
+    }()
+
+    @State private var start = Date()
+    @State private var isDone = false
+
+    /// DEBUG `-liteweightHoldConfetti` freezes the burst mid-fall so a screenshot can show it.
+    private static var heldElapsed: TimeInterval? {
+        #if DEBUG
+        ProcessInfo.processInfo.arguments.contains("-liteweightHoldConfetti") ? 1.1 : nil
+        #else
+        nil
+        #endif
+    }
+
+    var body: some View {
+        if !isDone {
+            TimelineView(.animation) { timeline in
+                Canvas { context, size in
+                    let elapsed = Self.heldElapsed ?? timeline.date.timeIntervalSince(start)
+                    let fall = size.height * 0.4
+                    for piece in Self.pieces {
+                        let t = elapsed - piece.delay
+                        let progress = t / (Self.duration - piece.delay)
+                        guard t > 0, progress < 1 else { continue }
+                        var plate = context
+                        plate.opacity = progress > 0.7 ? (1 - progress) / 0.3 : 1
+                        plate.translateBy(x: CGFloat(piece.x) * size.width + CGFloat(sin(t * piece.sway) * piece.drift),
+                                          y: -16 + CGFloat(progress * piece.travel) * fall)
+                        plate.rotate(by: .radians(t * piece.spin))
+                        let rect = CGRect(x: -piece.size.width / 2, y: -piece.size.height / 2,
+                                          width: piece.size.width, height: piece.size.height)
+                        plate.fill(Path(roundedRect: rect, cornerRadius: 1.5), with: .color(piece.color))
+                    }
+                }
+            }
+            .allowsHitTesting(false)
+            .accessibilityHidden(true)
+            .task {
+                guard Self.heldElapsed == nil else { return }
+                try? await Task.sleep(for: .seconds(Self.duration + 0.1))
+                isDone = true
+            }
+        }
+    }
+}
+
 private struct FinishWorkoutRecordRow: View {
     let record: FinishWorkoutRecap.Record
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
@@ -4049,14 +4131,15 @@ private struct FinishWorkoutRecordRow: View {
 
     var body: some View {
         HStack(alignment: .top, spacing: 12) {
+            // Records wear the achievement gold and the same PR badge as the logger (build 121).
             Image(systemName: "trophy.fill")
                 .font(.subheadline.weight(.semibold))
-                .foregroundStyle(LiteweightTheme.metricRecord)
+                .foregroundStyle(LiteweightTheme.achievementText)
                 .modifier(if: !reduceMotion) {
                     $0.symbolEffect(.bounce, options: .nonRepeating, value: hasAppeared)
                 }
                 .frame(width: 36, height: 36)
-                .background(LiteweightTheme.metricRecordContainer, in: Circle())
+                .background(LiteweightTheme.achievementContainer, in: Circle())
                 .accessibilityHidden(true)
             VStack(alignment: .leading, spacing: 3) {
                 Text(record.exerciseName)
@@ -4069,6 +4152,8 @@ private struct FinishWorkoutRecordRow: View {
                     .foregroundStyle(LiteweightTheme.secondaryText)
             }
             .fixedSize(horizontal: false, vertical: true)
+            Spacer(minLength: 8)
+            LiteweightPRBadge()
         }
         .padding(.vertical, 4)
         .opacity(hasAppeared ? 1 : 0)
@@ -4278,13 +4363,18 @@ private struct WorkoutSessionProgressBar: View {
         let fillWidth = width * Double(completed.count) / Double(max(allSets.count, 1))
         // With very many sets the gaps would eat the bar, so it stays solid below 4 pt a set.
         let setGap = width / CGFloat(max(allSets.count, 1)) < 4 ? 0 : Self.setGap
+        // Each exercise's run wears its muscle's color, its to-do sets the same color at 25%;
+        // an exercise without a muscle group keeps accent on the neutral track (build 121).
+        let group = exercise.exerciseUuid.flatMap { exerciseStore.exercisesByUUID[$0] }?.muscleGroup
+        let hasMuscle = LiteweightPalette.hasMuscleColor(group)
+        let tint = hasMuscle ? LiteweightTheme.muscle(group) : LiteweightTheme.accent
         return Capsule()
-            .fill(LiteweightTheme.tertiaryFill)
+            .fill(hasMuscle ? tint.opacity(0.25) : LiteweightTheme.tertiaryFill)
             .overlay(alignment: .leading) {
                 HStack(spacing: 0) {
                     ForEach(completed, id: \.objectID) { set in
                         Rectangle()
-                            .fill(set.tagValue == nil ? LiteweightTheme.accent : LiteweightTheme.setFill(for: set.tagValue).tint.opacity(0.7))
+                            .fill(set.tagValue == nil ? tint : LiteweightTheme.setFill(for: set.tagValue).tint.opacity(0.7))
                     }
                 }
                 .frame(width: fillWidth)
@@ -4417,6 +4507,30 @@ struct InlineWorkoutSetRow: View {
     /// Log Set fades the editor's contents before its space closes, so the rows
     /// below never rise through it.
     @State private var hidesEditorContents = false
+    /// `isPersonalRecord` runs Core Data fetches, so the row asks once per change of its
+    /// values instead of on every redraw; a fresh record pops its badge in (build 121).
+    @State private var isRecord = false
+    @State private var hasCheckedRecord = false
+
+    private struct RecordCheck: Equatable {
+        let completed: Bool
+        let weight: Double
+        let repetitions: Int16
+        let duration: Double?
+        let distance: Double?
+        let alerts: Bool
+    }
+
+    private var recordCheck: RecordCheck {
+        RecordCheck(completed: set.isCompleted, weight: set.weightValue, repetitions: set.repetitionsValue,
+                    duration: set.durationValue, distance: set.distanceValue,
+                    alerts: settingsStore.personalRecordAlerts)
+    }
+
+    private var completionAccessibilityValue: String {
+        guard set.isCompleted else { return "Not completed" }
+        return isRecord ? "Completed, personal record" : "Completed"
+    }
 
     private var valueColor: Color {
         return showsCompleted || isRaisedCurrent ? LiteweightTheme.primaryText : LiteweightTheme.secondaryText
@@ -4663,6 +4777,23 @@ struct InlineWorkoutSetRow: View {
                 peakOpacity: LiteweightTheme.setFill(for: set.tagValue).peak,
                 sweeps: !fadesCompletion
             )
+            // A record keeps its completed fill and gains a gold outline with a PR badge
+            // on its top edge; the completion button's value says it for VoiceOver (build 121).
+            .overlay(alignment: .topTrailing) {
+                if isRecord && showsCompleted {
+                    ZStack(alignment: .topTrailing) {
+                        RoundedRectangle(cornerRadius: LiteweightTheme.compactCornerRadius, style: .continuous)
+                            .strokeBorder(LiteweightTheme.achievement.opacity(0.7), lineWidth: 1.5)
+                        LiteweightPRBadge()
+                            .offset(x: -14, y: -10)
+                    }
+                    .allowsHitTesting(false)
+                    .accessibilityHidden(true)
+                    .transition(reduceMotion
+                                ? AnyTransition.opacity
+                                : AnyTransition.scale(scale: 0.6, anchor: .topTrailing).combined(with: .opacity))
+                }
+            }
             .padding(.horizontal, -InlineWorkoutSetLayout.completedChromeExpansion)
             .animation(completionAnimation, value: showsCompleted)
             .animation(focusedLayoutAnimation, value: showsFocusedEditor)
@@ -4712,6 +4843,22 @@ struct InlineWorkoutSetRow: View {
         .sensoryFeedback(.selection, trigger: stepFeedback) { _, _ in settingsStore.workoutHaptics }
         .sensoryFeedback(.impact(weight: .light), trigger: suggestionFeedback) { _, _ in settingsStore.workoutHaptics }
         .sensoryFeedback(.success, trigger: completionFeedback) { _, _ in settingsStore.workoutHaptics }
+        .task(id: recordCheck) {
+            let record = recordCheck.alerts && recordCheck.completed && set.isPersonalRecord == true
+            guard record != isRecord else {
+                hasCheckedRecord = true
+                return
+            }
+            // Only a record that appears while the row is on screen pops in.
+            if hasCheckedRecord && record {
+                withAnimation(LiteweightMotion.preferred(LiteweightMotion.snappy, reduceMotion: reduceMotion)) {
+                    isRecord = true
+                }
+            } else {
+                isRecord = record
+            }
+            hasCheckedRecord = true
+        }
         .onChange(of: restReadyPulse) { _, pulse in
             guard pulse > 0, showsFocusedEditor, isFocusedEditorVisible else { return }
             restGlowRequest += 1
@@ -5390,7 +5537,7 @@ struct InlineWorkoutSetRow: View {
                 }
                 .buttonStyle(.plain)
                 .accessibilityLabel(set.isCompleted ? "Set \(index + 1) completed" : "Mark set \(index + 1) complete")
-                .accessibilityValue(set.isCompleted ? "Completed" : "Not completed")
+                .accessibilityValue(completionAccessibilityValue)
                 .accessibilityAddTraits(set.isCompleted ? .isSelected : [])
             }
             Text("Previous: \(previousTitle.isEmpty ? "—" : previousTitle)")
@@ -5510,7 +5657,7 @@ struct InlineWorkoutSetRow: View {
                     ? "Set \(index + 1) completed"
                     : "Mark set \(index + 1) complete"
             )
-            .accessibilityValue(set.isCompleted ? "Completed" : "Not completed")
+            .accessibilityValue(completionAccessibilityValue)
             .accessibilityRemoveTraits(.isSelected)
             .accessibilityAddTraits(set.isCompleted ? .isSelected : [])
         }

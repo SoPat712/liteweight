@@ -2129,10 +2129,11 @@ extension WatchConnectionManager {
         for (index, source) in sourceExercises.enumerated() {
             let exercise = source.exercise(in: catalog)
             let sourceSets = source.workoutRoutineSets?.array as? [WorkoutRoutineSet] ?? []
+            let weights = PlanWeightPrefill.weights(for: source, type: source.trackingType(catalogExercise: exercise))
             var sets: [WatchWorkoutSet] = []
             sets.reserveCapacity(sourceSets.count)
             for (setIndex, sourceSet) in sourceSets.enumerated() {
-                let weight = sourceSet.weightValue.map {
+                let weight = weights[setIndex].map {
                     WeightUnit.convert(weight: $0, from: .metric, to: appUnit)
                 }
                 sets.append(WatchWorkoutSet(

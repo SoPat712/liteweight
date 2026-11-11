@@ -370,6 +370,70 @@ struct HomeWeekSummary {
     static func runningTotals(_ volumes: [Double]) -> [Double] {
         volumes.reduce(into: [0]) { $0.append(($0.last ?? 0) + $1) }
     }
+
+    /// Sets this week for each tracked group.
+    var weekGroupSets: [String: Int] { muscleSets.mapValues { $0.reduce(0, +) } }
+
+    /// Whether all three rings are closed, by the rings' own rule: a goal of zero closes on any training.
+    func ringsClosed(goals: WeekRingGoals) -> Bool {
+        guard workouts > 0 else { return false }
+        func closed(_ value: Double, _ goal: Double) -> Bool { goal > 0 ? value >= goal : value > 0 }
+        return closed(volume, goals.volumeGoal(self))
+            && closed(Double(sets), Double(goals.setsGoal(self)))
+            && closed(Double(workouts), Double(goals.workoutsGoal(self)))
+    }
+}
+
+/// Home's one line in the app's voice under its title (build 121). Chosen from plain values so
+/// the rule is testable; FeedView turns it into text.
+enum HomeVoice: Equatable {
+    case ringsClosed
+    case carrying(group: String, sets: Int)
+    case workouts(Int)
+    case freshWithStreak(Int)
+    case fresh
+
+    /// Closed rings first, then the group with the most sets (ties keep Muscle Week's order),
+    /// then training outside the tracked groups, then an empty week.
+    static func choose(groupSets: [String: Int], workouts: Int, ringsClosed: Bool, streak: Int) -> HomeVoice {
+        if ringsClosed { return .ringsClosed }
+        var top: (group: String, sets: Int)?
+        for group in HomeWeekSummary.muscleGroups {
+            let count = groupSets[group] ?? 0
+            if count > (top?.sets ?? 0) { top = (group, count) }
+        }
+        if let top { return .carrying(group: top.group, sets: top.sets) }
+        if workouts > 0 { return .workouts(workouts) }
+        return streak >= 2 ? .freshWithStreak(streak) : .fresh
+    }
+}
+
+/// The Last Week card at the top of Home (build 121): shown for the first three days of a week
+/// when last week had a workout, until it is dismissed for that week.
+enum LastWeekRecap {
+    static let dismissedKey = "home.lastWeekRecapDismissed"
+
+    static func previousWeek(of now: Date, calendar: Calendar = .current) -> DateInterval? {
+        guard let week = calendar.dateInterval(of: .weekOfYear, for: now),
+              let start = calendar.date(byAdding: .weekOfYear, value: -1, to: week.start) else { return nil }
+        return DateInterval(start: start, end: week.start)
+    }
+
+    /// The dismissal key: the week's first day as an ISO day ("2026-11-01").
+    static func dayKey(_ date: Date, calendar: Calendar = .current) -> String {
+        let parts = calendar.dateComponents([.year, .month, .day], from: date)
+        return String(format: "%04d-%02d-%02d", parts.year ?? 0, parts.month ?? 0, parts.day ?? 0)
+    }
+
+    static func isVisible(now: Date, lastWeekWorkouts: Int, dismissedWeek: String,
+                          calendar: Calendar = .current) -> Bool {
+        guard lastWeekWorkouts > 0,
+              let week = calendar.dateInterval(of: .weekOfYear, for: now),
+              let previous = previousWeek(of: now, calendar: calendar),
+              let day = calendar.dateComponents([.day], from: week.start, to: calendar.startOfDay(for: now)).day,
+              (0...2).contains(day) else { return false }
+        return dismissedWeek != dayKey(previous.start, calendar: calendar)
+    }
 }
 
 // MARK: - A · Rings
@@ -378,7 +442,8 @@ struct HomeWeekSummary {
 struct WeekRingsView: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
-    @ScaledMetric(relativeTo: .title2) private var ringSize: CGFloat = 148
+    /// Bigger hero numbers (build 121): rings 148 → 168 pt, values at title size.
+    @ScaledMetric(relativeTo: .title2) private var ringSize: CGFloat = 168
     @State private var hasAppeared = false
     let summary: HomeWeekSummary
     let unit: String
@@ -425,7 +490,7 @@ struct WeekRingsView: View {
     var body: some View {
         let layout = dynamicTypeSize.isAccessibilitySize
             ? AnyLayout(VStackLayout(alignment: .leading, spacing: 16))
-            : AnyLayout(HStackLayout(alignment: .center, spacing: 20))
+            : AnyLayout(HStackLayout(alignment: .center, spacing: 16))
         VStack(alignment: .leading, spacing: 14) {
             layout {
                 ringStack
@@ -494,7 +559,7 @@ struct WeekRingsView: View {
                 .font(.caption.weight(.semibold))
                 .foregroundStyle(ring.tint)
                 .textCase(.uppercase)
-            (Text(ring.value).font(.liteweightMetric(.title2, weight: .bold)).foregroundColor(LiteweightTheme.primaryText)
+            (Text(ring.value).font(.liteweightMetric(.title, weight: .bold)).foregroundColor(LiteweightTheme.primaryText)
              + Text(suffix).font(.subheadline.weight(.medium)).foregroundColor(LiteweightTheme.secondaryText))
                 .lineLimit(1)
                 .minimumScaleFactor(0.7)
@@ -951,8 +1016,10 @@ struct WeeklySetsChart: View {
         }
     }
 
-    /// Both bars share one height; the owner found a thin bar inside a wide one odd (build 118).
-    private static let barThickness: CGFloat = 10
+    /// Both bars share one height; the owner found a thin bar inside a wide one odd (build 118),
+    /// then asked to separate them (build 122).
+    private static let barThickness: CGFloat = 7
+    private static let barGap: CGFloat = 3
     private static let averageOpacity = 0.4
 
     /// A bar's length on the axis; any sets at all show at least a dot as wide as the bar is tall.
@@ -1017,9 +1084,11 @@ struct WeeklySetsChart: View {
             Text("Avg")
                 .lineLimit(1)
                 .frame(width: valueWidth, alignment: .trailing)
+            // A small lead keeps it off "Avg" at larger text; it scales down instead (build 122).
             Text("This wk")
                 .lineLimit(1)
                 .minimumScaleFactor(0.7)
+                .padding(.leading, 6)
                 .frame(width: valueWidth + 8, alignment: .trailing)
         }
         .font(.caption2.weight(.semibold))
@@ -1066,24 +1135,16 @@ struct WeeklySetsChart: View {
                 bandShape
                     .frame(width: high - low)
                     .offset(x: low)
-                let averageLength = barLength(row.sets, width: width, thickness: Self.barThickness)
-                Capsule()
-                    .fill(LiteweightTheme.muscle(row.group).opacity(Self.averageOpacity))
-                    .frame(width: averageLength, height: Self.barThickness)
-                Capsule()
-                    .fill(LiteweightTheme.muscle(row.group))
-                    .frame(width: barLength(Double(row.thisWeek), width: width, thickness: Self.barThickness), height: Self.barThickness)
-                    .mask(alignment: .leading) {
-                        // Past the average, a 2 pt gap keeps the average's end visible.
-                        if Double(row.thisWeek) > row.sets, averageLength > 0 {
-                            HStack(spacing: 2) {
-                                Rectangle().frame(width: max(averageLength - 1, 0))
-                                Rectangle()
-                            }
-                        } else {
-                            Rectangle()
-                        }
-                    }
+                // Two separate bars, average above this week (owner, build 122): one bar drawn
+                // over the other hid the average once this week passed it.
+                VStack(alignment: .leading, spacing: Self.barGap) {
+                    Capsule()
+                        .fill(LiteweightTheme.muscle(row.group).opacity(Self.averageOpacity))
+                        .frame(width: barLength(row.sets, width: width, thickness: Self.barThickness), height: Self.barThickness)
+                    Capsule()
+                        .fill(LiteweightTheme.muscle(row.group))
+                        .frame(width: barLength(Double(row.thisWeek), width: width, thickness: Self.barThickness), height: Self.barThickness)
+                }
             }
             .frame(width: width, height: proxy.size.height, alignment: .leading)
         }

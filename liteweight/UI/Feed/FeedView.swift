@@ -49,6 +49,7 @@ struct FeedView : View {
     @AppStorage(WeekRingGoals.setsKey) private var setsGoal = 0
     @AppStorage(WeekRingGoals.workoutsKey) private var workoutsGoal = 0
     @AppStorage(HomeBodyRows.key) private var storedBodyRows: String?
+    @AppStorage(LastWeekRecap.dismissedKey) private var dismissedRecapWeek = ""
 
     private var ringGoals: WeekRingGoals {
         WeekRingGoals(volume: volumeGoal, sets: setsGoal, workouts: workoutsGoal)
@@ -212,7 +213,9 @@ struct FeedView : View {
     }
 
     /// A colored label over its number, as Fitness labels Move, Exercise and Stand.
-    private func weekMetric(value: String, label: String, unit: String? = nil, tint: Color, index: Int) -> some View {
+    /// `index` nil skips the staggered entrance: a row inserted after Home loads may never report
+    /// appearing, which left the Last Week card's numbers invisible (build 121).
+    private func weekMetric(value: String, label: String, unit: String? = nil, tint: Color, index: Int?) -> some View {
         VStack(alignment: .leading, spacing: 2) {
             Text(label)
                 .font(.caption.weight(.semibold))
@@ -225,7 +228,7 @@ struct FeedView : View {
                 .animation(LiteweightMotion.preferred(LiteweightMotion.snappy, reduceMotion: reduceMotion), value: value)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-        .liteweightStaggeredEntrance(index: index)
+        .modifier(OptionalStaggeredEntrance(index: index))
         .accessibilityElement(children: .combine)
         .accessibilityLabel("\(value)\(unit.map { " " + $0 } ?? "") \(label)")
     }
@@ -365,10 +368,19 @@ struct FeedView : View {
                 .listRowSeparator(.hidden)
                 .modifier(HomeCardAccessibilitySummary(title: HomeSection.calendar.title, value: calendarAccessibilityValue))
             } else {
-                HStack {
-                    cardTitle(HomeSection.calendar.title)
-                    Spacer(minLength: 8)
-                    streakChip
+                // The gold chip grew (build 121); when it and the title don't fit on one line,
+                // the chip drops under the title instead of wrapping "Last 4 Weeks" (build 122).
+                ViewThatFits(in: .horizontal) {
+                    HStack {
+                        cardTitle(HomeSection.calendar.title)
+                            .fixedSize()
+                        Spacer(minLength: 8)
+                        streakChip
+                    }
+                    VStack(alignment: .leading, spacing: 6) {
+                        cardTitle(HomeSection.calendar.title)
+                        streakChip
+                    }
                 }
                 .listRowSeparator(.hidden)
                 .modifier(HomeCardAccessibilitySummary(title: HomeSection.calendar.title, value: calendarAccessibilityValue))
@@ -404,13 +416,14 @@ struct FeedView : View {
                 Image(systemName: "flame.fill")
             }
             .labelStyle(.titleAndIcon)
-            .font(.liteweightMetric(.caption))
+            // Gold, and bigger: a streak is an achievement (build 121).
+            .font(.liteweightMetric(.body, weight: .semibold))
             .lineLimit(1)
             .fixedSize(horizontal: true, vertical: false)
-            .foregroundStyle(LiteweightTheme.accent)
-            .padding(.horizontal, 8)
-            .frame(minHeight: 24)
-            .background(LiteweightTheme.accentSoft, in: Capsule())
+            .foregroundStyle(LiteweightTheme.achievementText)
+            .padding(.horizontal, 12)
+            .padding(.vertical, 6)
+            .background(LiteweightTheme.achievementContainer, in: Capsule())
             .textCase(nil)
             .accessibilityLabel("\(streak) week training streak")
         }
@@ -939,6 +952,115 @@ struct FeedView : View {
 
     private var homeCards: [HomeSection] { HomeSection.resolve(storedCards) }
 
+    /// Home's voice line under the title (build 121); `HomeVoice.choose` picks it.
+    private func voiceText(_ voice: HomeVoice) -> Text {
+        switch voice {
+        case .ringsClosed:
+            return Text("Every ring is closed this week.")
+        case .carrying(let group, let sets):
+            return Text("\(HomeWeekSummary.displayName(group)) is carrying the week: ")
+                + LiteweightVoiceLine.fact("\(sets) \(sets == 1 ? "set" : "sets")") + Text(" so far.")
+        case .workouts(let count):
+            return LiteweightVoiceLine.fact("\(count) \(count == 1 ? "workout" : "workouts")") + Text(" logged this week.")
+        case .freshWithStreak(let weeks):
+            return Text("A fresh week. ") + LiteweightVoiceLine.fact("\(weeks)-week streak") + Text(" to keep going.")
+        case .fresh:
+            return Text("A fresh week.")
+        }
+    }
+
+    private var forcesLastWeekRecap: Bool {
+        #if DEBUG
+        return ProcessInfo.processInfo.arguments.contains("-liteweightForceLastWeekRecap")
+        #else
+        return false
+        #endif
+    }
+
+    /// Last week, while its recap card should show; `-liteweightForceLastWeekRecap` ignores the day and dismissal.
+    private func lastWeekRecapWeek(_ summary: HomeWeekSummary) -> DateInterval? {
+        let now = Date()
+        let visible = forcesLastWeekRecap
+            ? summary.lastWorkouts > 0
+            : LastWeekRecap.isVisible(now: now, lastWeekWorkouts: summary.lastWorkouts, dismissedWeek: dismissedRecapWeek)
+        return visible ? LastWeekRecap.previousWeek(of: now) : nil
+    }
+
+    /// Distinct record sets last week. Record events are newest first, as the records card reads them.
+    private func recordCount(in week: DateInterval) -> Int {
+        var sets = Set<NSManagedObjectID>()
+        for event in historyStore.snapshot.recordEvents {
+            guard event.date >= week.start else { break }
+            if event.date < week.end { sets.insert(event.id) }
+        }
+        return sets.count
+    }
+
+    /// The Last Week recap (build 121): last week's totals and records for the first days of a new week.
+    private func lastWeekRecapSection(_ summary: HomeWeekSummary, week: DateInterval) -> some View {
+        let records = recordCount(in: week)
+        let range = week.start.formatted(.dateTime.month(.abbreviated).day()) + " – "
+            + week.end.addingTimeInterval(-1).formatted(.dateTime.month(.abbreviated).day())
+        let layout = dynamicTypeSize.isAccessibilitySize
+            ? AnyLayout(VStackLayout(alignment: .leading, spacing: 12))
+            : AnyLayout(HStackLayout(alignment: .top, spacing: 12))
+        let recordsText = records == 1 ? "1 new personal record" : "\(records) new personal records"
+        let spoken = "\(HomeCardSpeech.count(summary.lastWorkouts, singular: "workout", plural: "workouts")), "
+            + "\(HomeCardSpeech.count(summary.lastSets, singular: "set", plural: "sets")), "
+            + "volume \(HomeCardSpeech.weight(summary.lastVolume, unit: settingsStore.weightUnit))."
+            + (records > 0 ? " \(recordsText)." : "")
+        return Section {
+            HStack(alignment: .center, spacing: 10) {
+                cardTitle("Last Week")
+                    .accessibilityAddTraits(.isHeader)
+                LiteweightPlateMark(scale: 0.6)
+                Spacer(minLength: 8)
+                Text(range)
+                    .font(.subheadline)
+                    .foregroundStyle(LiteweightTheme.secondaryText)
+                    .lineLimit(1)
+                Button {
+                    withAnimation(LiteweightMotion.preferred(LiteweightMotion.snappy, reduceMotion: reduceMotion)) {
+                        dismissedRecapWeek = LastWeekRecap.dayKey(week.start)
+                    }
+                } label: {
+                    Image(systemName: "xmark")
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(LiteweightTheme.secondaryText)
+                        .frame(width: 30, height: 30)
+                        .background(LiteweightTheme.field, in: Circle())
+                        .padding(7)
+                        .contentShape(Rectangle())
+                        .padding(-7)
+                }
+                .buttonStyle(.borderless)
+                .accessibilityLabel("Dismiss Last Week")
+            }
+            .listRowSeparator(.hidden)
+            VStack(alignment: .leading, spacing: 12) {
+                layout {
+                    weekMetric(value: "\(summary.lastWorkouts)", label: summary.lastWorkouts == 1 ? "Workout" : "Workouts",
+                               tint: LiteweightTheme.accent, index: nil)
+                    weekMetric(value: "\(summary.lastSets)", label: "Sets", tint: LiteweightTheme.metricSets, index: nil)
+                    weekMetric(value: compactWeight(summary.lastVolume), label: "Volume",
+                               unit: settingsStore.weightUnit.unit.symbol, tint: LiteweightTheme.metricVolume, index: nil)
+                }
+                if records > 0 {
+                    HStack(spacing: 8) {
+                        LiteweightPRBadge()
+                        Text(recordsText)
+                            .font(.subheadline)
+                            .foregroundStyle(LiteweightTheme.primaryText)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                }
+            }
+            .padding(.vertical, 4)
+            .modifier(HomeCardAccessibilitySummary(title: "Last Week", value: "\(range). \(spoken)"))
+        }
+        .modifier(HomeCardAccessibilityContainer())
+    }
+
     private func updateCards(_ change: (inout [HomeSection]) -> Void) {
         var cards = homeCards
         change(&cards)
@@ -1017,6 +1139,15 @@ struct FeedView : View {
                 // Pinned Charts waits for a pin (made from an exercise's chart) instead of showing empty.
                 let cards = homeCards.filter { $0 != .pinned || !pinnedChartsStore.pinnedCharts.isEmpty }
                 let firstWeekCard = cards.first(where: \.isWeekCard)
+                // One line in the app's voice, right under the title (build 121).
+                if !(historyStore.isLoading && completedWorkouts.isEmpty) {
+                    LiteweightVoiceSection(text: voiceText(HomeVoice.choose(
+                        groupSets: summary.weekGroupSets, workouts: summary.workouts,
+                        ringsClosed: summary.ringsClosed(goals: ringGoals), streak: trainingStreak)))
+                }
+                if let week = lastWeekRecapWeek(summary) {
+                    lastWeekRecapSection(summary, week: week)
+                }
                 // After the first finished workout, when Home has something worth arranging.
                 if !completedWorkouts.isEmpty, showsEditTip {
                     LiteweightTipSection(tip: EditHomeTip(generation: tipGeneration))
@@ -1030,8 +1161,11 @@ struct FeedView : View {
             .listStyle(.insetGrouped)
             .liteweightTracksTip(EditHomeTip(generation: tipGeneration), isShowing: $showsEditTip)
             .contentMargins(.bottom, LiteweightTheme.floatingWorkoutBottomClearance, for: .scrollContent)
+            // The voice line sits right under the large title (build 121).
+            .contentMargins(.top, 0, for: .scrollContent)
             .task { historyStore.observe(in: managedObjectContext) }
-            .liteweightTabTitle("Home")
+            // The plate mark beside the title is TEMPORARY until the owner's new logo (build 121).
+            .liteweightTabTitle("Home", showsBrandMark: true)
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
                     Button {
@@ -1070,6 +1204,14 @@ struct FeedView : View {
             }
             .modifier(HomeWorkoutStartErrorFeedback(persistenceError: persistenceError))
         }
+    }
+}
+
+private struct OptionalStaggeredEntrance: ViewModifier {
+    let index: Int?
+
+    @ViewBuilder func body(content: Content) -> some View {
+        if let index { content.liteweightStaggeredEntrance(index: index) } else { content }
     }
 }
 

@@ -52,7 +52,6 @@ final class WatchNavigation: ObservableObject {
             path == [.workout, .rpe(exerciseID, setID)]
     }
     private var flowWorkoutID: UUID?
-    private var offeredFinishForSets: Set<UUID>?
     private var nowVisible = false
     private var transitionID = UUID()
 
@@ -135,7 +134,6 @@ final class WatchNavigation: ObservableObject {
         // Appearance callbacks can precede the root's revision observer. Resolve
         // a durable local log before automatic rest routing changes its origin.
         resolveLog(snapshot)
-        if snapshot.nextSet != nil { offeredFinishForSets = nil }
         let onNow = path == [.workout] && workoutPage == .now && nowVisible
         let onRest = path.last == .rest
         let confirmedRPE = completingRPE && isShowingFlowRPE
@@ -150,14 +148,10 @@ final class WatchNavigation: ObservableObject {
         setFlow = nil
         automaticRPE = nil
         if onRest || confirmedRPE { workoutPage = .now; path = [.workout] }
-        if let next = snapshot.nextSet {
-            if let previousExercise, previousExercise != next.exercise.id { announceNextExercise(next.exercise.name) }
-        } else if !snapshot.completedSets.isEmpty {
-            let sets = Set(snapshot.allSets.map(\.id))
-            guard offeredFinishForSets != sets else { return }
-            // Consume before presenting so Keep Going/back can remain on Now.
-            offeredFinishForSets = sets
-            path = [.workout, .finish]
+        // After the last set, Now shows "Every set is logged" with Finish and Add Set;
+        // the Watch no longer opens Finish by itself (owner, build 120).
+        if let next = snapshot.nextSet, let previousExercise, previousExercise != next.exercise.id {
+            announceNextExercise(next.exercise.name)
         }
     }
 
@@ -174,7 +168,6 @@ final class WatchNavigation: ObservableObject {
 
     func finishPageAppeared(_ snapshot: WatchWorkoutSnapshot) {
         prepareFlow(for: snapshot)
-        if snapshot.nextSet == nil { offeredFinishForSets = Set(snapshot.allSets.map(\.id)) }
     }
 
     private func prepareFlow(for snapshot: WatchWorkoutSnapshot) {
@@ -182,7 +175,6 @@ final class WatchNavigation: ObservableObject {
         flowWorkoutID = snapshot.workoutID
         setFlow = nil
         automaticRPE = nil
-        offeredFinishForSets = nil
         nextExerciseName = nil
     }
 

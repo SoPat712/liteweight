@@ -129,6 +129,28 @@ enum LiteweightTheme {
     static let metricEffortContainer = LiteweightPalette.color(\.metricEffortContainer)
     static let metricRecord = LiteweightPalette.color(\.metricRecord)
     static let metricRecordContainer = LiteweightPalette.color(\.metricRecordContainer)
+
+    // TEMPORARY brand colors: the three plates of today's app icon. The owner is replacing
+    // the logo; when the new mark lands, change these and `LiteweightPlateMark` together (build 121).
+    static let plateRed = Color(red: 0xEB / 255, green: 0x57 / 255, blue: 0x57 / 255)
+    static let plateBlue = Color(red: 0x2F / 255, green: 0x80 / 255, blue: 0xED / 255)
+    static let plateYellow = Color(red: 0xF2 / 255, green: 0xC9 / 255, blue: 0x4C / 255)
+
+    /// Gold means an achievement: PR badges and the streak chip (build 121).
+    /// A filled badge is `achievement` with `onAchievement` text; gold text on a surface
+    /// uses `achievementText`, darkened in light mode to keep 4.5:1.
+    static let achievement = plateYellow
+    static let onAchievement = Color(red: 0x1E / 255, green: 0x1E / 255, blue: 0x1F / 255)
+    static let achievementContainer = plateYellow.opacity(0.18)
+    #if os(iOS)
+    static let achievementText = Color(UIColor { traits in
+        traits.userInterfaceStyle == .dark
+            ? UIColor(red: 0xF2 / 255, green: 0xC9 / 255, blue: 0x4C / 255, alpha: 1)
+            : UIColor(red: 0x8A / 255, green: 0x62 / 255, blue: 0x00 / 255, alpha: 1)
+    })
+    #else
+    static let achievementText = plateYellow
+    #endif
     static let metricBody = LiteweightPalette.color(\.metricBody)
     static let metricBodyContainer = LiteweightPalette.color(\.metricBodyContainer)
     static let metricHeartRate = LiteweightPalette.color(\.metricHeartRate)
@@ -156,6 +178,22 @@ enum LiteweightTheme {
     /// "shoulders", "arms", "abdominals"); anything else is neutral.
     static func muscle(_ group: String?) -> Color {
         Color(LiteweightPalette.muscle(group))
+    }
+
+    /// A muscle color for text and small glyphs on a surface (build 121): as is in dark mode,
+    /// darkened in light mode so it keeps 4.5:1 on white.
+    static func muscleText(_ group: String?) -> Color {
+        #if os(iOS)
+        let base = LiteweightPalette.muscle(group)
+        return Color(UIColor { traits in
+            guard traits.userInterfaceStyle != .dark else { return base }
+            var hue: CGFloat = 0, saturation: CGFloat = 0, brightness: CGFloat = 0, alpha: CGFloat = 0
+            base.getHue(&hue, saturation: &saturation, brightness: &brightness, alpha: &alpha)
+            return UIColor(hue: hue, saturation: min(1, saturation * 1.05), brightness: brightness * 0.62, alpha: alpha)
+        })
+        #else
+        return muscle(group)
+        #endif
     }
 
     /// Soft fill behind a muscle chip or tile; text on it stays `primaryText`.

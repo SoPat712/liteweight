@@ -83,6 +83,15 @@ struct ExerciseDiagramThumbnail: View {
                     .scaledToFit()
                     // Keep wide machine/cable movements inside the same canvas.
                     .frame(width: size * 0.66, height: size * 0.66)
+            } else if loadedRequest == request {
+                // No picture at all (a custom exercise, or art that failed to load): its muscle
+                // color with an equipment symbol instead of an empty circle (build 121). Pictures
+                // are never replaced; while one loads, the neutral placeholder below stays.
+                Circle()
+                    .fill(LiteweightTheme.muscle(exercise.muscleGroup))
+                Image(systemName: Self.equipmentSymbol(exercise.equipment))
+                    .font(.system(size: size * 0.42, weight: .semibold))
+                    .foregroundStyle(LiteweightTheme.onAccent)
             } else {
                 Image(systemName: "figure.strengthtraining.traditional")
                     .font(.title2.weight(.semibold))
@@ -108,6 +117,22 @@ struct ExerciseDiagramThumbnail: View {
             loadedRequest = request
         }
         .accessibilityHidden(true)
+    }
+
+    /// The no-picture tile's symbol for an exercise's first matching equipment (build 121).
+    static func equipmentSymbol(_ equipment: [String]) -> String {
+        let names = equipment.map { $0.lowercased() }
+        if names.contains(where: { $0.contains("dumbbell") }) { return "dumbbell.fill" }
+        if names.contains(where: { $0.contains("barbell") || $0 == "bar" || $0.contains("curl-bar") }) {
+            return "figure.strengthtraining.traditional"
+        }
+        if names.contains(where: { name in ["cable", "machine", "rope", "band", "kettlebell"].contains { name.contains($0) } }) {
+            return "figure.strengthtraining.functional"
+        }
+        if names.contains(where: { $0.contains("body") || $0 == "assisted" || $0 == "weighted" }) {
+            return "figure.core.training"
+        }
+        return "figure.mixed.cardio"
     }
 }
 

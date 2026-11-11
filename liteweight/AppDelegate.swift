@@ -16,6 +16,7 @@ import os.log
 @UIApplicationMain
 class AppDelegate: UIResponder, UIApplicationDelegate {
     private var protectedDataObserver: NSObjectProtocol?
+    private var planWeightObserver: NSObjectProtocol?
     func application(_ application: UIApplication, didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?) -> Bool {
         // TODO: remove in future when every user should've been migrated
         ExerciseStore.migrateCustomExercisesToAppGroupIfNecessary()
@@ -25,6 +26,17 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
         ExerciseStore.migrateHiddenExercisesToAppGroupIfNecessary()
         LiteweightSoundPlayer.shared.preload()
         LiteweightTips.configure()
+        planWeightObserver = NotificationCenter.default.addObserver(
+            forName: .NSManagedObjectContextWillSave,
+            object: WorkoutDataStorage.shared.persistentContainer.viewContext, queue: nil
+        ) { notification in
+            guard let context = notification.object as? NSManagedObjectContext else { return }
+            let inserted = context.insertedObjects.compactMap { $0 as? WorkoutRoutineSet }
+                .filter { $0.weightValue != nil }
+            let updated = context.updatedObjects.compactMap { $0 as? WorkoutRoutineSet }
+                .filter { $0.changedValues().keys.contains(#keyPath(WorkoutRoutineSet.weight)) }
+            PlanWeightEdits.record((inserted + updated).compactMap(\.uuid), at: Date())
+        }
         
         #if DEBUG
         seedSampleDataIfRequested()
@@ -71,6 +83,20 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
         if wantsActiveWorkout && arguments.contains("-liteweightSeedNotes") {
             seedActiveWorkoutNotes()
         }
+        if wantsActiveWorkout && arguments.contains("-liteweightSeedRecordSet") {
+            seedActiveRecordSet()
+        }
+    }
+
+    /// Makes the active workout's first exercise end on a set heavier than its history,
+    /// so the logger's PR badge can be screenshotted (build 121).
+    private func seedActiveRecordSet() {
+        let context = WorkoutDataStorage.shared.persistentContainer.viewContext
+        guard let workout = try? context.fetch(Workout.currentWorkoutFetchRequest).first,
+              let exercise = workout.workoutExercises?.firstObject as? WorkoutExercise,
+              let set = (exercise.workoutSets?.array as? [WorkoutSet])?.last(where: \.isCompleted) else { return }
+        set.weightValue += WeightUnit.convert(weight: 10, from: .imperial, to: .metric)
+        context.saveOrCrash()
     }
 
     private func seedActiveWorkoutNotes() {

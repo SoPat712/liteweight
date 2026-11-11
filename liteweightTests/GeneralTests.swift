@@ -136,6 +136,68 @@ final class WorkoutSuggestionTests: XCTestCase {
     }
 }
 
+final class TabVoiceLineTests: XCTestCase {
+    private var calendar: Calendar {
+        var value = Calendar(identifier: .gregorian)
+        value.timeZone = TimeZone(secondsFromGMT: 0)!
+        return value
+    }
+
+    /// Thursday, Nov 5 2026: this week starts Sun Nov 1, last week is Oct 25–31.
+    private var now: Date {
+        calendar.date(from: DateComponents(year: 2026, month: 11, day: 5, hour: 12))!
+    }
+
+    private func date(_ month: Int, _ day: Int) -> Date {
+        calendar.date(from: DateComponents(year: 2026, month: month, day: day, hour: 9))!
+    }
+
+    private func history(_ dates: [Date]) -> String {
+        TabVoiceLine.history(sessionDates: dates, now: now, calendar: calendar, locale: Locale(identifier: "en_US"))
+    }
+
+    func testWorkoutLineNamesTheLongestRestedGroupWithItsSuggestion() {
+        XCTAssertEqual(TabVoiceLine.workout(lastTrained: [:], now: now, calendar: calendar),
+                       "Pick a saved workout or start empty.")
+        XCTAssertEqual(TabVoiceLine.workout(lastTrained: ["legs": date(10, 30), "chest": date(11, 3)], now: now, calendar: calendar),
+                       "Legs have rested **6 days**. Squat day?")
+        XCTAssertEqual(TabVoiceLine.workout(lastTrained: ["back": date(11, 2), "legs": date(11, 4)], now: now, calendar: calendar),
+                       "Back has rested **3 days**. Pull day?")
+        XCTAssertEqual(TabVoiceLine.workout(lastTrained: ["arms": date(11, 5), "abdominals": date(11, 4)], now: now, calendar: calendar),
+                       "Every group you train got work in the last day.")
+    }
+
+    func testHistoryLineCountsLastWeekAndHowLongSinceItWasMatched() {
+        XCTAssertEqual(history([]), "Finished workouts show up here.")
+        let lastWeek = [date(10, 26), date(10, 27), date(10, 28), date(10, 30)]
+        let quiet = [date(10, 18), date(10, 11), date(10, 4), date(9, 27), date(9, 20)]
+        let busySeptember = [date(9, 14), date(9, 15), date(9, 16), date(9, 17)]
+        XCTAssertEqual(history(lastWeek + quiet + busySeptember),
+                       "**4 workouts** last week, your busiest since September.")
+        // Never matched in the loaded history, or matched only weeks ago: no clause.
+        XCTAssertEqual(history(lastWeek + quiet), "**4 workouts** last week.")
+        XCTAssertEqual(history([date(10, 26), date(10, 28), date(10, 19), date(10, 20)]), "**2 workouts** last week.")
+        XCTAssertEqual(history([date(11, 2)]), "**1 workout** this week.")
+        XCTAssertEqual(history([date(10, 10)]), "Your last workout was **Oct 10**.")
+    }
+
+    func testExercisesLinePicksTheBusiestRecentExercise() {
+        let bench = UUID(), row = UUID()
+        let since = date(10, 6)
+        let entries: [(date: Date, exercise: UUID?, sets: Int)] = [
+            (date(9, 1), bench, 20), (date(10, 20), bench, 5), (date(11, 2), row, 3), (date(11, 4), row, 2), (date(11, 4), nil, 9)
+        ]
+        XCTAssertEqual(TabVoiceLine.busiestExercise(entries, since: since)?.id, row)
+        XCTAssertEqual(TabVoiceLine.busiestExercise(entries, since: since)?.sets, 5)
+        XCTAssertNil(TabVoiceLine.busiestExercise([(date(9, 1), bench, 4)], since: since))
+        XCTAssertNil(TabVoiceLine.exercises(leader: nil, sets: 0, heaviest: nil))
+        XCTAssertEqual(TabVoiceLine.exercises(leader: "Bench Press", sets: 12, heaviest: "135 lb × 8"),
+                       "**Bench Press** leads this month at **135 lb × 8**.")
+        XCTAssertEqual(TabVoiceLine.exercises(leader: "Row", sets: 1, heaviest: nil),
+                       "**Row** leads this month with **1 set**.")
+    }
+}
+
 class GeneralTests: XCTestCase {
     
     override func setUp() {

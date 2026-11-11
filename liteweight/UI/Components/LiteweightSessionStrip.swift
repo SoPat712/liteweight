@@ -331,9 +331,10 @@ struct LiteweightSessionStrip: View {
                 .lineLimit(usesStackedRows ? nil : 1)
                 .minimumScaleFactor(0.75)
             if row.set.kind == .record {
+                // Records share the logger's gold (build 121).
                 Image(systemName: "trophy.fill")
                     .font(.caption2)
-                    .foregroundStyle(LiteweightTheme.metricRecord)
+                    .foregroundStyle(LiteweightTheme.achievementText)
             }
         }
     }

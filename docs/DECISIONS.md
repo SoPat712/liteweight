@@ -14,6 +14,53 @@ Builds are installed with `~/.local/share/liteweight/tools/install-NN.sh`. Lane 
 
 ## 2026-11-09
 
+### Watch: wheel scrolls the page after tapping a tile off mid-turn (build 125)
+- **Asked:** "i press on lbs to change it, i scroll from like 245-265. then i press it again. Try scrolling to get to settings, NOTHING happens!"
+- **Cause:** tapping the selected tile off rebuilt the ScrollView while wheel events were still arriving, so watchOS never gave the new page the wheel. The same sequence was reproduced in the Ultra simulator with real wheel input.
+- **Decided:** clear the tile highlight immediately, but keep its Crown focus and rotation range until the wheel has been quiet for 0.3 s. Each Crown value change restarts the cancellable timer; only then does the existing page hand-back rebuild run. A new selection cancels settling; all other editing exits still release immediately and cancel any timer. Touch scrolling stays available during settling. No visual or layout change.
+- **Roll back:** revert this entry's commit.
+
+### Newer of plan weight and last lift fills the set (build 124)
+- **Asked:** "the workout weight isn't a hard and fast rule, right? I'd prefer most recent workout ... Because I can set the weight but if i do a workout with 5 lbs over! that should inform and fill."
+- **Decided:** a typed plan weight yields to the matching warm-up or working set from the latest finished workout (including imports) when that workout ended after the plan weight's last edit. Match the ordinal within that kind, falling back to its last set. Plans without a recorded edit time follow history. iPhone and Watch share the rule; blank plan weights are unchanged. Reps, duration, distance and tags are unchanged. Edit times stay local and outside backups.
+- **Roll back:** revert this entry's commit.
+
+### Saved workout editor matches the logger; Add Set fixed (build 123)
+- **Asked:** "the saved workout creator needs an overhaul! should match the real workout player kind of in style! And right now I can't even add set!" The owner approved the simulator screenshots ("looks good! implement!").
+- **Cause of the bug:** each exercise section was handed its set list as a value computed by the parent. Adding a set changes the exercise, not the observed workout, so the parent never redrew and the section kept showing the old list. The section now reads its sets from the exercise it observes.
+- **Decided:** see DESIGN_SYSTEM §15.4.1. Judgment calls:
+  - Set reordering moved from List drag handles to Move Up/Down in the set badge menu. There is no swipe-to-delete; Delete Set is in the same menu and the long-press menu.
+  - The reps field uses the numbers-and-punctuation keyboard so ranges like "8-12" can be typed.
+  - The rest line always reads "Rest 3:00", like the logger, including when it follows the workout default; the rest sheet still offers "Use Workout Default".
+- **Roll back:** revert this entry's commit.
+
+### Voice lines sit tight to their titles; Muscle Focus bars separate (build 122)
+- **Asked:** on device, "these are spaced terribly??" (the Workout and Home voice lines), "move it above the search bar maybe?" (Exercises), and of Muscle Focus "the bars are dfiniely wrong? showing this week vs avg? maybe separtae them if you can't get ti right!"
+- **Decided:**
+  - Voice lines are an empty section's header on every tab, so they hug their text with 10 pt before the first card.
+  - The owner suggested moving Exercises' line above the search bar. The iOS 26 navigation subtitle does that, but it shrinks the large title and truncates the line, so it stays below the search field. I told the owner.
+  - Muscle Focus draws the average and this week as two separate same-height bars.
+- **Roll back:** revert this entry's commit.
+
+### Personality pass: brand plates, gold PRs, voice lines, muscle color on workouts (build 121)
+- **Asked:** "our app looks so ugly and boring!", then after Round 11: "I want something like what we have, with PERSONALITY!" On Round 12 the owner disliked the gradients ("so AI"). They liked the labels (chips), confetti, per-exercise color, the PR label, and the plate mark with the voice line ("make sure the code labels that logo as temporary"). Through questions they chose voice lines on every tab, the gold streak chip (bigger), bigger This Week numbers, the PR moment while logging, a Watch-style start card, a Monday recap card and muscle-colored exercise lines. "keep the diagrams/pictures!!!": exercise pictures are never replaced.
+- **Decided:** see DESIGN_SYSTEM §3.6. Judgment calls:
+  - Voice-line fallbacks and the "busiest since" rule.
+  - The recap shows for the week's first three days.
+  - Confetti draws above the list for 2.5 s with no hit testing (behind opaque rows it wouldn't show).
+  - The idle rest label takes the muscle color.
+  - Two sets in one workout can both show PR, since records compare with earlier workouts.
+- **Roll back:** revert this entry's commit. The brand mark and plate colors are marked TEMPORARY in code.
+
+### Watch no longer opens Finish by itself (build 120)
+- **Asked:** "having no sets left automatically shows finish workout screen on the watch? doesn't entirel make sense, right?"
+- **Found:** after the last set's rest, or its RPE when no rest followed, `WatchNavigation` pushed Finish once per set list. The Now page already had an end state, "Every set is logged" with a Finish button, so the push only took the choice away. DESIGN_SYSTEM §22 also says the next step is surfaced "without navigation".
+- **Decided:**
+  - The flow returns to Now, which offers Finish.
+  - A secondary Add Set adds one set to the last exercise with a logged set, the usual reason not to finish yet.
+  - The `offeredFinishForSets` bookkeeping is gone.
+- **Roll back:** revert this entry's commit.
+
 ### Apple Health page is informational; optional categories no longer warn (build 119)
 - **Asked:** "Why's it say that? If it can't read if it has access? Maybe this page should just be informational! And show previously synced workouts too maybe?" The owner chose the category list, the latest 5 plus Show All, and removing Sync Past Workouts.
 - **Found:** "Needs Review" appeared when any of the five save categories (workouts, weight, height, body fat, waist) was off or never asked, and that same state disabled Sync Past Workouts. So an optional body category blocked workout sync.

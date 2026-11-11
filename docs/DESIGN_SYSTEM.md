@@ -186,6 +186,50 @@ Always render front and back side by side (`gender: .male`, `side: .front` / `.b
 catalog muscle names with `liteweightMapMuscle(_:)` (`liteweight/UI/SwiftUISupport.swift`). Never write a
 second mapping table.
 
+### 3.6 Personality pass (build 121, owner-approved on Round 12)
+The owner wanted "something like what we have, with PERSONALITY". Layout and SF Pro stay the same.
+Gradients are out ("they're so AI!"), and so are stand-in fonts.
+
+- **Brand plates (TEMPORARY):** `LiteweightTheme.plateRed` #EB5757, `plateBlue` #2F80ED and
+  `plateYellow` #F2C94C are today's app icon plates. `LiteweightPlateMark` draws them as three small
+  rounded bars beside the Home title, on the Last Week card and in the Workout Complete header. The
+  owner is replacing the logo: swap the mark and these three colors together, and keep the
+  TEMPORARY comments until then.
+- **Gold means an achievement.**
+  - `achievement` is plate yellow, with `onAchievement` dark text on it.
+  - `achievementText` is gold text, darkened in light mode to 4.5:1.
+  - `LiteweightPRBadge` is a gold capsule with a sparkle and "PR". It appears on record set rows,
+    with a 1.5 pt gold outline (it pops in as the set is logged, with a firmer haptic), on Workout
+    Complete records and on the Last Week card.
+  - The streak chip is gold, at body semibold.
+- **Voice line:** one data-driven line under each tab title (under the search field on History
+  and Exercises), with key facts in bold primary and no exclamation marks. Placement (build 122):
+  every tab uses `LiteweightVoiceSection`, an empty section's header with 10 pt after it. A
+  row would keep its 44 pt minimum plus full section spacing.
+  - The iOS 26 navigation subtitle (above the search field) was tried. It shrank the large title
+    and truncated the line, so it isn't used.
+  - Home: the group carrying the week, closed rings, or a fresh week.
+  - Workout: the most rested group, plus a lift ("Squat day?").
+  - History: last week's count, and "your busiest since <month>".
+  - Exercises: the most-trained exercise this month and its best set.
+- **Muscle color on workouts:**
+  - The live workout's progress bar runs each exercise's segments in its muscle color: solid
+    done, 25% to do.
+  - Each exercise card's equipment and idle rest line use `muscleText(group)`, darkened in light
+    mode.
+  - History rows show colored muscle chips under the metric line at every size.
+- **Workout Complete:** plate confetti (red, blue and yellow plates) falls through the top 40% for
+  2.5 s when the sheet opens. There's no confetti under Reduce Motion.
+- **Workout tab, idle:** a start card in the "Workout running on Apple Watch" style.
+  - An icon line, the suggested saved workout (most rested) or Empty Workout, and a blue rest
+    detail.
+  - A big blue Start, plus Start Empty when a workout is suggested.
+- **Last Week card:** Home's first three days of the week, until dismissed
+  (`home.lastWeekRecapDismissed`). It shows workouts, sets, volume and any PRs.
+  `-liteweightForceLastWeekRecap` shows it in DEBUG.
+- **Exercise pictures always stay.** An exercise with no picture gets a circle in its muscle color
+  with a white equipment symbol, never a blank placeholder.
+
 ## 4. Typography
 
 San Francisco only, through SwiftUI text styles so Dynamic Type works. Sizes are at the
@@ -729,11 +773,10 @@ no Core Data change. Default cards, in order:
 4. Recent Training rows: the title with the date at the trailing edge, then the shared
    `LiteweightWorkoutMetricLine` (duration, sets, volume).
 5. **Muscle Focus**: average sets a week per tracked group over the last four weeks, ranked, in
-   each group's muscle color (§3.5) over a shaded target band. Each row draws two bars of one
-   10 pt height (build 118; build 117's thin bar inside a wide one felt odd to the owner): pale
-   (the muscle color at 40%) for the four-week average, solid on top for this week. When this
-   week passes the average, a 2 pt gap in the solid bar marks where the average ends. A legend
-   explains Avg, This week and the band in a neutral tint. Two
+   each group's muscle color (§3.5) over a shaded target band. Each row draws two separate 7 pt bars,
+   3 pt apart (build 122). The average is on top (the muscle color at 40%) and this week is
+   below, solid. Drawing one bar over the other hid the average once this week passed it. A
+   legend explains Avg, This week and the band in a neutral tint. Two
    number columns (build 116): "Avg" (secondary) and "This wk" (primary). Edit Muscle Focus
    sets the All Muscles range (default 10–20; changing it resets every group) and any group's
    own range (`home.weeklySetTargetsByGroup`, "legs:12-20"); each row shades its own band.
@@ -793,6 +836,25 @@ Saved workout rows show each muscle as a chip with its rest ("Chest today" with 
 "Back 3d" with green), least rested first; the metadata line is just exercises and last done.
 Start and Repeat use the regular bordered height. Last Workout leads with the same muscle figure as
 History (the tile at accessibility sizes).
+
+#### 15.4.1 Saved workout editor (`liteweight/UI/Workout/WorkoutRoutineView.swift`, build 123)
+New Workout / Edit Workout looks like the live logger (§15.6), so planning and logging read as one
+surface. It is a scroll view of `surface` cards (`heroCornerRadius`), not a grouped List.
+- **Details card:** the title as a `.title2` bold field and "Add notes…" below it.
+- **Exercise card:** the logger's header (picture or fallback, name opening the exercise page,
+  muscle-colored "Barbell · Rest 3:00" line whose rest opens the rest sheet, and a ••• menu with
+  Edit Workout Plan Note, Set Type, Rest Timer, Move Up/Down and Remove Exercise). A plan note shows
+  as the logger's "Workout plan:" line; then SET, PREVIOUS and one header per tracked column
+  (no RPE or check column).
+- **Set rows:** the logger's number badge (W/D for tags) opens Normal / Warm Up / Drop Set,
+  Move Up/Down and Delete Set; the same items are on long press. Values sit in the logger's field
+  boxes; tapping anywhere in a capsule focuses its field. Reps accept ranges ("8-12", "8+", "<12").
+  Previous uses the most recently finished workout for that exercise, matching warm-up/working
+  kind and ordinal, falling back to the last set of that kind. Tap to fill supported weight,
+  duration and distance targets, never reps. Accessibility sizes stack labeled columns with
+  the full Previous title above the fields.
+- **Buttons:** the logger's glass "+ Add Set" capsule in each card and the blue "Add Exercises"
+  capsule after the last card.
 
 ### 15.5 Exercises (`liteweight/UI/Exercises/*`)
 - **Library** (`ExerciseMuscleGroupsView`): search sits under the title and moves into the
@@ -1171,7 +1233,7 @@ A lane that took "native first" literally removed Log Set, gave vitals their own
 - **Value tiles** use one fixed font size per row, set from the width that fits "188.5", so turning the Crown never resizes the number. Weight/reps split 54/46 (50/50 below 180 pt width).
 - **Previous set** is read-only and always on the first screen; never tappable.
 - **Scrolling lists** (`WatchContentList`) are flat and full width, with no carousel scaling, even 4 pt spacing and bottom padding so the last row scrolls clear of the rounded corners.
-- **Crown:** every value control uses `watchCrownRotation`, never `digitalCrownRotation` directly. SwiftUI shows the green bar for any non-continuous rotation, and `.digitalCrownAccessory(.hidden)` doesn't affect it, so the helper uses continuous rotation and holds the value at its limits. A scrolling page with a tile that deselects uses `watchReturnsCrown(afterEditing:)`, so the wheel scrolls the page again as soon as the tile is released. Discrete scales use `sensitivity: .low`. The running rest countdown has no Crown binding; the rest-length picker does.
+- **Crown:** every value control uses `watchCrownRotation`, never `digitalCrownRotation` directly. SwiftUI shows the green bar for any non-continuous rotation, and `.digitalCrownAccessory(.hidden)` doesn't affect it, so the helper uses continuous rotation and holds the value at its limits. A scrolling page with a tile that deselects uses `watchReturnsCrown(afterEditing:)`, so the wheel scrolls the page again as soon as the tile is released. A tapped-off tile keeps the wheel until it has been still for 0.3 s, then the page gets it back. Discrete scales use `sensitivity: .low`. The running rest countdown has no Crown binding; the rest-length picker does.
 - **Use the whole screen:** measure with `GeometryReader` + `.ignoresSafeArea(.container, edges: .bottom)` where the bottom row is a capsule, centered text or tiles above the page dots. "So far from the bottom" is a repeated owner complaint. Only square-cornered graphics, such as RPE bars, must clear the display corners.
 - **RPE and effort:** ✓ in the toolbar (vitals hidden), then context line, number, rising graph, small description centered at the bottom. Auto-accept 5 s after the Crown stops only when RPE appeared by itself after Log Set; opened manually or for effort, only ✓ confirms.
 - **Notes** are text only. Rows say "Add Note" (accent) or preview two lines of the note, and an empty plan note has no row. On the note page the whole box is the control: a tap opens the system text input with the note filled in, Done saves, Cancel changes nothing. No Edit, Dictate, Save or Cancel buttons; Clear shows only when there is a note.
@@ -1202,7 +1264,7 @@ A lane that took "native first" literally removed Log Set, gave vitals their own
 - When fixing one screen, never change shared components (tiles, `WatchFirstScreenLayout`, the rating layout, safe-area modifiers) without listing every screen that uses them.
 
 ### 22.5 Interaction
-- Minimal interaction: the app predicts the next step (set → rest → RPE → next set → next exercise → finish) and surfaces it without navigation.
+- Minimal interaction: the app predicts the next step (set → rest → RPE → next set → next exercise → finish) and surfaces it without navigation. After the last set, Now shows "Every set is logged" with Finish and a secondary Add Set (on the last exercise logged); Finish never opens by itself (build 120).
 - The Crown adjusts, and there's one primary button. Remove redundant − / + and Clear when the Crown covers them.
 - Selection changes color only, never size. Widths never change while a value changes (base splits on field types and screen width, never on the live value).
 - Previous is a read-only reference, never a link to another weight/reps editor. It belongs in the measured first-screen layout below the tiles and above any content action. Reserve its full text height before sizing the tiles; never push it below the fold or let it clip.
