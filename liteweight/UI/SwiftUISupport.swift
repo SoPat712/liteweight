@@ -407,13 +407,15 @@ extension View {
     }
 }
 
-/// Rest countdown ring: pass the fraction remaining (1 = full, 0 = elapsed).
-/// Timer state and ticking stay with the caller. Hide from accessibility when
+/// Rest countdown ring: pass the fraction remaining (1 = full, 0 = elapsed) and, when known, the
+/// rest's length, so each one-second tick drains smoothly on Core Animation instead of springing
+/// on SwiftUI's frame loop (build 134). Timer state and ticking stay with the caller. Hide from accessibility when
 /// the containing pill already announces the remaining time.
 struct LiteweightRestRing: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     let progress: Double
+    var duration: TimeInterval? = nil
     var size: CGFloat = 34
     var tint: Color = LiteweightTheme.metricTime
     var accessibilityLabel: String = "Rest remaining"
@@ -425,26 +427,113 @@ struct LiteweightRestRing: View {
     var body: some View {
         ZStack {
             Circle().stroke(LiteweightTheme.tertiaryFill, lineWidth: 4)
-            if reduceMotion {
-                progressArc.id(fraction).transition(.opacity)
-            } else {
-                progressArc
-            }
+            LiteweightRestRingArc(fraction: fraction, duration: duration, tint: tint, reduceMotion: reduceMotion)
         }
         .padding(2)
         .frame(width: size, height: size)
-        .animation(LiteweightMotion.preferred(LiteweightMotion.snappy, reduceMotion: reduceMotion), value: fraction)
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(Text(accessibilityLabel))
         .accessibilityValue(Text(fraction, format: .percent.precision(.fractionLength(0))))
     }
+}
 
-    private var progressArc: some View {
-        Circle()
-            .trim(from: 0, to: fraction)
-            .stroke(tint, style: StrokeStyle(lineWidth: 4, lineCap: .round))
-            .rotationEffect(.degrees(-90))
-            .opacity(fraction > 0 ? 1 : 0)
+private struct LiteweightRestRingArc: UIViewRepresentable {
+    let fraction: Double
+    let duration: TimeInterval?
+    let tint: Color
+    let reduceMotion: Bool
+
+    func makeUIView(context: Context) -> RingView { RingView() }
+
+    func updateUIView(_ view: RingView, context: Context) {
+        view.update(fraction: fraction, duration: duration, tint: tint, reduceMotion: reduceMotion,
+                    environment: context.environment)
+    }
+
+    final class RingView: UIView {
+        override class var layerClass: AnyClass { CAShapeLayer.self }
+
+        private var arc: CAShapeLayer { layer as! CAShapeLayer }
+        private var previousFraction: Double?
+        private var tickDecrement: Double?
+        private var color: UIColor?
+        private var colorTraits = UITraitCollection()
+
+        init() {
+            super.init(frame: .zero)
+            isOpaque = false
+            isUserInteractionEnabled = false
+            isAccessibilityElement = false
+            arc.fillColor = nil
+            arc.lineWidth = 4
+            arc.lineCap = .round
+            arc.strokeEnd = 0
+        }
+
+        required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
+
+        override func layoutSubviews() {
+            super.layoutSubviews()
+            CATransaction.begin()
+            CATransaction.setDisableActions(true)
+            arc.path = UIBezierPath(arcCenter: CGPoint(x: bounds.midX, y: bounds.midY),
+                                   radius: min(bounds.width, bounds.height) / 2,
+                                   startAngle: -.pi / 2, endAngle: .pi * 1.5, clockwise: true).cgPath
+            CATransaction.commit()
+        }
+
+        override func traitCollectionDidChange(_ previousTraitCollection: UITraitCollection?) {
+            super.traitCollectionDidChange(previousTraitCollection)
+            updateColor()
+        }
+
+        func update(fraction: Double, duration: TimeInterval?, tint: Color, reduceMotion: Bool,
+                    environment: EnvironmentValues) {
+            color = UIColor(tint)
+            colorTraits = UITraitCollection(traitsFrom: [
+                UITraitCollection(userInterfaceStyle: environment.colorScheme == .dark ? .dark : .light),
+                UITraitCollection(accessibilityContrast: environment.colorSchemeContrast == .increased ? .high : .normal),
+                UITraitCollection(displayScale: environment.displayScale)
+            ])
+            updateColor()
+
+            let previous = previousFraction
+            guard previous != fraction || reduceMotion else { return }
+            let displayed = arc.presentation()?.strokeEnd ?? arc.strokeEnd
+            arc.removeAnimation(forKey: "restProgress")
+            CATransaction.begin()
+            CATransaction.setDisableActions(true)
+            arc.strokeEnd = fraction
+            arc.opacity = fraction > 0 ? 1 : 0
+            CATransaction.commit()
+            previousFraction = fraction
+
+            let decrement = (previous ?? 0) - fraction
+            // One second of the rest is a tick. Without its length, learn the tick size, starting
+            // from 30 s, the ruler's shortest rest.
+            let tickLimit = duration.flatMap { $0 > 0 ? 1.5 / $0 : nil }
+                ?? tickDecrement.map { $0 * 1.1 } ?? (1.0 / 30)
+            let isTick = previous != nil && decrement > 0 && decrement <= tickLimit + 0.000001
+            tickDecrement = isTick ? max(tickDecrement ?? 0, decrement) : nil
+            guard !reduceMotion, displayed != fraction else { return }
+
+            let animation = CABasicAnimation(keyPath: "strokeEnd")
+            animation.fromValue = displayed
+            animation.toValue = fraction
+            animation.duration = isTick ? 1 : 0.35 * LiteweightMotion.debugScale
+            animation.timingFunction = CAMediaTimingFunction(name: isTick ? .linear : .easeOut)
+            animation.preferredFrameRateRange = CAFrameRateRange(minimum: 80, maximum: 120, preferred: 120)
+            arc.add(animation, forKey: "restProgress")
+        }
+
+        private func updateColor() {
+            let traits = UITraitCollection(traitsFrom: [traitCollection, colorTraits])
+            CATransaction.begin()
+            CATransaction.setDisableActions(true)
+            arc.strokeColor = color?.resolvedColor(with: traits).cgColor
+            arc.contentsScale = traits.displayScale
+            CATransaction.commit()
+        }
     }
 }
 

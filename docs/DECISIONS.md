@@ -14,6 +14,14 @@ Builds are installed with `~/.local/share/liteweight/tools/install-NN.sh`. Lane 
 
 ## 2026-11-12
 
+### Workout animations: the logger stops re-laying out everything (build 134)
+- **Asked:** "can you please optimize every animation during the workout itself? like coreanimation if need be? 120 fps? smooth? the animation of opening/closing the active set, timer rolling in, modals coming in, everything?"
+- **Found:** a DEBUG frame meter and animation tour (commit 56fb80a) showed 150–640 ms stalls on almost every logger animation. The logger was one ~3,900-line view: any state change, even a sheet flag, re-evaluated and re-measured every exercise card, set row and text field. A fresh swipe binding made every set row re-evaluate about 2,000 times in two short tours. Idle UIKit text fields (one per exercise) were re-measured and updated on nearly every layout.
+- **Decided:** exercise cards and set rows are `Equatable` behind a stable `LoggerActions` relay with per-card snapshots; the open swipe is a plain value; idle text boxes draw as text until tapped; geometry state only publishes real changes; Add Set and swipe delete save after their animation instead of inside it. The rest ring and Finish confetti moved to Core Animation. Add Exercises caches its prepared catalog across opens and prepares it off the main thread.
+- **Result (simulator, 60 Hz, worst frame before → after):** header collapse 316 → 100 ms, header expand 320 → 120 ms, scroll to next exercise 353 → 105 ms, scroll to top 227 → 103 ms, rest strip removal 297 → 85 ms, unlog 216 → 164 ms. Sheets: an empty control sheet costs ~300 ms in this simulator; closing any sheet now costs the same as the control, and opening Rest, RPE, Finish and Add Exercises costs 100–450 ms more than it (next: Add Exercises' first list frame, Finish's arrival work, Log Set).
+- **Where:** `liteweight/UI/Workout/CurrentWorkoutView.swift`, `liteweight/UI/SwiftUISupport.swift` (`LiteweightRestRing`), `liteweight/UI/Components/LiteweightConfettiView.swift`, `liteweight/UI/Exercises/AddExercisesSheet.swift`, DESIGN_SYSTEM §11.
+- **Roll back:** revert this build's commit.
+
 ### Home sections no longer clip at rounded corners (build 133)
 - **Why:** the owner saw rounded clipping at the top left of Muscle Week and on the "D" of "Dot size shows sets". Build 130 made the cards clear but kept `.insetGrouped`, which still clips each section's rows to rounded corners. The 8 pt top inset from build 130 only hid it on This Week.
 - **What:** Home's `List` is `.grouped`, which has square, full-width sections. Rows set only vertical insets through `homeRowInsets` and keep the list's side margins, which match the large title; before iOS 26 they use 16 pt.

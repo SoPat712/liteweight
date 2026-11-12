@@ -15,39 +15,272 @@ import CoreData
 /// Query-independent library data, rebuilt only for catalog/history changes.
 /// Both exercise lists use the same prepared text and browse/search ordering.
 final class AddExerciseCatalog {
-    private struct Entry {
-        let exercise: Exercise
-        let prepared: ExerciseSearch.Prepared<UUID>
-        let isBrowsable: Bool
+    /// Exercise is an immutable value, but its module does not declare Sendable.
+    /// Copy its fields rather than sending the store or any managed objects.
+    struct ExerciseSnapshot: Sendable {
+        let uuid: UUID
+        let everkineticId: Int
+        let title: String
+        let originalTitle: String
+        let alias: [String]
+        let description: String?
+        let primaryMuscle: [String]
+        let secondaryMuscle: [String]
+        let equipment: [String]
+        let steps: [String]
+        let tips: [String]
+        let references: [String]
+        let pdfPaths: [String]
+        let imageFilename: String?
+        let animationFilename: String?
+
+        init(_ exercise: Exercise) {
+            uuid = exercise.uuid
+            everkineticId = exercise.everkineticId
+            title = exercise.title
+            originalTitle = exercise.originalTitle
+            alias = exercise.alias
+            description = exercise.description
+            primaryMuscle = exercise.primaryMuscle
+            secondaryMuscle = exercise.secondaryMuscle
+            equipment = exercise.equipment
+            steps = exercise.steps
+            tips = exercise.tips
+            references = exercise.references
+            pdfPaths = exercise.pdfPaths
+            imageFilename = exercise.imageFilename
+            animationFilename = exercise.animationFilename
+        }
+
+        var exercise: Exercise {
+            Exercise(uuid: uuid, everkineticId: everkineticId, title: title, alias: alias,
+                     description: description, primaryMuscle: primaryMuscle, secondaryMuscle: secondaryMuscle,
+                     equipment: equipment, steps: steps, tips: tips, references: references, pdfPaths: pdfPaths,
+                     imageFilename: imageFilename, animationFilename: animationFilename, originalTitle: originalTitle)
+        }
     }
 
-    private let entries: [Entry]
-    private let lastPerformedDates: [UUID: Date]
-    let muscleGroups: [String]
-    let equipment: [String]
-    let equipmentCounts: [String: Int]
-    let customCount: Int
-    let hiddenCount: Int
+    struct Snapshot: Sendable {
+        let exercises: [ExerciseSnapshot]
+        let lastPerformedDates: [UUID: Date]
+        let browsableIDs: Set<UUID>
+        let customCount: Int
+        let hiddenCount: Int
+        let ordersByRecency: Bool
+
+        init(exercises: [Exercise], store: ExerciseStore, ordersByRecency: Bool = false) {
+            self.exercises = exercises.map(ExerciseSnapshot.init)
+            lastPerformedDates = store.lastPerformedDates
+            browsableIDs = Set(exercises.filter(store.isBrowsable).map(\.uuid))
+            customCount = store.customExercises.count
+            hiddenCount = max(store.exercises.count - exercises.count, 0)
+            self.ordersByRecency = ordersByRecency
+        }
+    }
+
+    struct RowDisplay: Sendable {
+        let title: String
+        let accessibilityLabel: String
+        let hasPlayableDemonstration: Bool
+    }
+
+    fileprivate struct Entry: Sendable {
+        let id: UUID
+        let title: String
+        let muscleGroup: String
+        let equipment: [String]
+        let prepared: ExerciseSearch.Prepared<UUID>
+        let isBrowsable: Bool
+        let details: [String]
+        var display: RowDisplay
+    }
+
+    fileprivate struct ListingSnapshot: Sendable {
+        let ids: [UUID]
+        let recent: [UUID]
+        let remaining: [UUID]
+        let moreCount: Int
+    }
+
+    fileprivate struct LetterSnapshot: Sendable {
+        let letter: String
+        let ids: [UUID]
+    }
+
+    fileprivate struct CandidateSnapshot: Sendable {
+        let ids: [UUID]
+        let recent: [UUID]
+        let sections: [LetterSnapshot]
+        let collapsed: ListingSnapshot
+        let expanded: ListingSnapshot
+        let searchInput: SearchInput
+    }
+
+    struct Preparation: Sendable {
+        fileprivate private(set) var entries: [Entry]
+        private let alphabetical: [Entry]
+        fileprivate let unfiltered: CandidateSnapshot
+        fileprivate private(set) var captions: [Date: String]
+        let lastPerformedDates: [UUID: Date]
+        let muscleGroups: [String]
+        let equipment: [String]
+        let equipmentCounts: [String: Int]
+        let customCount: Int
+        let hiddenCount: Int
+
+        init(snapshot: Snapshot) {
+            let captured = snapshot.exercises.map(\.exercise)
+            let exercises = snapshot.ordersByRecency
+                ? ExerciseRecency.ordered(captured, dates: snapshot.lastPerformedDates) : captured
+            let sorted = exercises.sorted { $0.title.localizedCaseInsensitiveCompare($1.title) == .orderedAscending }
+            lastPerformedDates = snapshot.lastPerformedDates
+            let captions = Self.captions(dates: snapshot.lastPerformedDates)
+            self.captions = captions
+
+            let entries = ExerciseRecency.ordered(sorted, dates: snapshot.lastPerformedDates).map { exercise in
+                let muscleTitle = exercise.primaryMuscleCommonName.first?.capitalized ?? exercise.muscleGroup.capitalized
+                let details = [muscleTitle, exercise.equipment.first?.equipmentTitle].compactMap { $0 }
+                let recency = snapshot.lastPerformedDates[exercise.uuid].flatMap { captions[$0] }
+                let display = Self.display(title: exercise.title, details: details, recency: recency,
+                                           hasPlayableDemonstration: exercise.hasPlayableDemonstration)
+                return Entry(id: exercise.uuid, title: exercise.title, muscleGroup: exercise.muscleGroup,
+                             equipment: exercise.equipment, prepared: ExerciseSearch.Prepared(
+                                id: exercise.uuid, title: exercise.title, aliases: exercise.alias,
+                                originalTitle: exercise.originalTitle),
+                             isBrowsable: snapshot.browsableIDs.contains(exercise.uuid), details: details, display: display)
+            }
+            self.entries = entries
+            let alphabetical = entries.sorted { $0.title.localizedCaseInsensitiveCompare($1.title) == .orderedAscending }
+            self.alphabetical = alphabetical
+            unfiltered = Self.candidates(entries: entries, alphabetical: alphabetical,
+                                         dates: snapshot.lastPerformedDates, muscleGroup: nil, equipment: nil)
+            muscleGroups = Array(Set(entries.map(\.muscleGroup))).sorted()
+            var counts: [String: Int] = [:]
+            exercises.forEach { exercise in
+                exercise.equipment.forEach { counts[$0, default: 0] += 1 }
+            }
+            equipmentCounts = counts
+            equipment = counts.keys.sorted { (counts[$0] ?? 0) > (counts[$1] ?? 0) }
+            customCount = snapshot.customCount
+            hiddenCount = snapshot.hiddenCount
+        }
+
+        func refreshingCaptions() -> Preparation {
+            let captions = Self.captions(dates: lastPerformedDates)
+            guard captions != self.captions else { return self }
+            var refreshed = self
+            refreshed.captions = captions
+            refreshed.entries = entries.map { entry in
+                var entry = entry
+                let recency = lastPerformedDates[entry.id].flatMap { captions[$0] }
+                entry.display = Self.display(title: entry.title, details: entry.details, recency: recency,
+                                             hasPlayableDemonstration: entry.display.hasPlayableDemonstration)
+                return entry
+            }
+            return refreshed
+        }
+
+        private static func captions(dates: [UUID: Date]) -> [Date: String] {
+            let formatter = RelativeDateTimeFormatter()
+            formatter.dateTimeStyle = .named
+            formatter.unitsStyle = .full
+            let calendar = Calendar.current
+            let now = Date()
+            let today = calendar.startOfDay(for: now)
+            let yesterday = calendar.date(byAdding: .day, value: -1, to: today)
+            var captions: [Date: String] = [:]
+            for date in Set(dates.values) {
+                if calendar.isDate(date, inSameDayAs: today) {
+                    captions[date] = "Today"
+                } else if let yesterday, calendar.isDate(date, inSameDayAs: yesterday) {
+                    captions[date] = "Yesterday"
+                } else {
+                    captions[date] = formatter.localizedString(for: date, relativeTo: now)
+                }
+            }
+            return captions
+        }
+
+        private static func display(title: String, details: [String], recency: String?,
+                                    hasPlayableDemonstration: Bool) -> RowDisplay {
+            RowDisplay(title: (details + (recency.map { [$0] } ?? [])).joined(separator: " · "),
+                       accessibilityLabel: ([title] + details
+                        + (recency.map { ["last done \($0.lowercased())"] } ?? [])).joined(separator: ", "),
+                       hasPlayableDemonstration: hasPlayableDemonstration)
+        }
+
+        fileprivate func candidates(muscleGroup: String?, equipment: String?) -> CandidateSnapshot {
+            Self.candidates(entries: entries, alphabetical: alphabetical, dates: lastPerformedDates,
+                            muscleGroup: muscleGroup, equipment: equipment)
+        }
+
+        private static func candidates(entries: [Entry], alphabetical: [Entry], dates: [UUID: Date],
+                                       muscleGroup: String?, equipment: String?) -> CandidateSnapshot {
+            let filtered = entries.filter { entry in
+                (muscleGroup == nil || entry.muscleGroup == muscleGroup)
+                    && (equipment.map { entry.equipment.contains($0) } ?? true)
+            }
+            let ids = filtered.map(\.id)
+            let browsable = filtered.filter(\.isBrowsable).map(\.id)
+            let secondary = filtered.filter { !$0.isBrowsable }.map(\.id)
+            let collapsed = browsable.isEmpty ? ids : browsable
+            let filteredIDs = Set(ids)
+            let groups = Dictionary(grouping: alphabetical.filter { filteredIDs.contains($0.id) }) { entry in
+                let initial = String(entry.title.prefix(1)).uppercased()
+                return initial.count == 1 && "ABCDEFGHIJKLMNOPQRSTUVWXYZ".contains(initial) ? initial : "#"
+            }
+            let sections = groups.keys.sorted {
+                if $0 == "#" { return false }
+                if $1 == "#" { return true }
+                return $0 < $1
+            }.map { LetterSnapshot(letter: $0, ids: (groups[$0] ?? []).map(\.id)) }
+
+            func listing(_ listed: [UUID]) -> ListingSnapshot {
+                ListingSnapshot(ids: listed, recent: listed.filter { dates[$0] != nil },
+                                remaining: listed.filter { dates[$0] == nil }, moreCount: ids.count - listed.count)
+            }
+
+            return CandidateSnapshot(
+                ids: ids, recent: Array(ids.filter { dates[$0] != nil }.prefix(8)), sections: sections,
+                collapsed: listing(collapsed), expanded: listing(browsable + secondary),
+                searchInput: SearchInput(prepared: filtered.map(\.prepared), lastPerformedDates: dates,
+                                         browsableIDs: Set(browsable)))
+        }
+    }
+
+    private struct Filters: Hashable {
+        let muscleGroup: String?
+        let equipment: String?
+    }
+
+    struct Row: Identifiable {
+        let exercise: Exercise
+        let display: RowDisplay
+        var id: UUID { exercise.uuid }
+    }
+
+    private let preparation: Preparation
+    private let rowsByID: [UUID: Row]
+    private var cachedCandidates: [Filters: Candidates] = [:]
+    var muscleGroups: [String] { preparation.muscleGroups }
+    var equipment: [String] { preparation.equipment }
+    var equipmentCounts: [String: Int] { preparation.equipmentCounts }
+    var customCount: Int { preparation.customCount }
+    var hiddenCount: Int { preparation.hiddenCount }
     /// Matching exercises the last result left out until the person asks for more.
     private(set) var moreCount = 0
 
-    init(exercises: [Exercise], store: ExerciseStore) {
-        let sorted = exercises.sorted { $0.title.localizedCaseInsensitiveCompare($1.title) == .orderedAscending }
-        lastPerformedDates = store.lastPerformedDates
-        entries = store.orderedByRecency(sorted).map { exercise in
-            Entry(exercise: exercise, prepared: ExerciseSearch.Prepared(
-                id: exercise.uuid, title: exercise.title, aliases: exercise.alias, originalTitle: exercise.originalTitle),
-                  isBrowsable: store.isBrowsable(exercise))
-        }
-        muscleGroups = Array(Set(exercises.map(\.muscleGroup))).sorted()
-        var counts: [String: Int] = [:]
-        exercises.forEach { exercise in
-            exercise.equipment.forEach { counts[$0, default: 0] += 1 }
-        }
-        equipmentCounts = counts
-        equipment = counts.keys.sorted { (counts[$0] ?? 0) > (counts[$1] ?? 0) }
-        customCount = store.customExercises.count
-        hiddenCount = max(store.exercises.count - exercises.count, 0)
+    convenience init(exercises: [Exercise], store: ExerciseStore) {
+        self.init(exercises: exercises, preparation: Preparation(snapshot: Snapshot(exercises: exercises, store: store)))
+    }
+
+    init(exercises: [Exercise], preparation: Preparation) {
+        self.preparation = preparation
+        let exercisesByID = Dictionary(uniqueKeysWithValues: exercises.map { ($0.uuid, $0) })
+        rowsByID = Dictionary(uniqueKeysWithValues: preparation.entries.map { entry in
+            (entry.id, Row(exercise: exercisesByID[entry.id]!, display: entry.display))
+        })
+        cachedCandidates[Filters(muscleGroup: nil, equipment: nil)] = candidates(from: preparation.unfiltered)
     }
 
     struct Listing {
@@ -55,8 +288,21 @@ final class AddExerciseCatalog {
         let recent: [Exercise]
         let remaining: [Exercise]
         let moreCount: Int
+        let rows: [Row]
+        let recentRows: [Row]
+        let remainingRows: [Row]
 
-        static let empty = Listing(exercises: [], recent: [], remaining: [], moreCount: 0)
+        init(rows: [Row], recent: [Row], remaining: [Row], moreCount: Int) {
+            self.rows = rows
+            recentRows = recent
+            remainingRows = remaining
+            exercises = rows.map(\.exercise)
+            self.recent = recent.map(\.exercise)
+            self.remaining = remaining.map(\.exercise)
+            self.moreCount = moreCount
+        }
+
+        static let empty = Listing(rows: [], recent: [], remaining: [], moreCount: 0)
     }
 
     struct LetterSection {
@@ -87,50 +333,39 @@ final class AddExerciseCatalog {
         let collapsed: Listing
         let expanded: Listing
         let searchInput: SearchInput
+        let rowsByID: [UUID: Row]
 
         func searchListing(ids: [UUID]) -> Listing {
-            Listing(exercises: ids.compactMap { exercisesByID[$0] }, recent: [], remaining: [], moreCount: 0)
+            Listing(rows: ids.compactMap { rowsByID[$0] }, recent: [], remaining: [], moreCount: 0)
         }
     }
 
     func candidates(muscleGroup: String?, equipment: String?) -> Candidates {
-        let filtered = entries.filter { entry in
-            (muscleGroup == nil || entry.exercise.muscleGroup == muscleGroup)
-                && (equipment.map { entry.exercise.equipment.contains($0) } ?? true)
-        }
-        let exercises = filtered.map(\.exercise)
-        let browsable = filtered.filter(\.isBrowsable).map(\.exercise)
-        let secondary = filtered.filter { !$0.isBrowsable }.map(\.exercise)
-        let collapsed = browsable.isEmpty ? exercises : browsable
-        let recent = ExerciseRecency.ordered(exercises.filter { lastPerformedDates[$0.uuid] != nil },
-                                            dates: lastPerformedDates)
-        let alphabetical = exercises.sorted { $0.title.localizedCaseInsensitiveCompare($1.title) == .orderedAscending }
-        let groups = Dictionary(grouping: alphabetical) { exercise in
-            let initial = String(exercise.title.prefix(1)).uppercased()
-            return initial.count == 1 && "ABCDEFGHIJKLMNOPQRSTUVWXYZ".contains(initial) ? initial : "#"
-        }
-        let sections = groups.keys.sorted {
-            if $0 == "#" { return false }
-            if $1 == "#" { return true }
-            return $0 < $1
-        }.map { LetterSection(letter: $0, exercises: groups[$0] ?? []) }
+        let filters = Filters(muscleGroup: muscleGroup, equipment: equipment)
+        if let cached = cachedCandidates[filters] { return cached }
+        let candidates = candidates(from: preparation.candidates(muscleGroup: muscleGroup, equipment: equipment))
+        cachedCandidates[filters] = candidates
+        return candidates
+    }
 
-        func listing(_ listed: [Exercise]) -> Listing {
-            Listing(exercises: listed,
-                    recent: listed.filter { lastPerformedDates[$0.uuid] != nil },
-                    remaining: listed.filter { lastPerformedDates[$0.uuid] == nil },
-                    moreCount: exercises.count - listed.count)
+    private func candidates(from snapshot: CandidateSnapshot) -> Candidates {
+        func rows(_ ids: [UUID]) -> [Row] { ids.compactMap { rowsByID[$0] } }
+
+        func listing(_ snapshot: ListingSnapshot) -> Listing {
+            Listing(rows: rows(snapshot.ids), recent: rows(snapshot.recent), remaining: rows(snapshot.remaining),
+                    moreCount: snapshot.moreCount)
         }
 
+        let selectedRows = rows(snapshot.ids)
+        let exercises = selectedRows.map(\.exercise)
         return Candidates(
             exercises: exercises,
             exercisesByID: Dictionary(uniqueKeysWithValues: exercises.map { ($0.uuid, $0) }),
-            recent: Array(recent.prefix(8)),
-            sections: sections,
-            collapsed: listing(collapsed),
-            expanded: listing(browsable + secondary),
-            searchInput: SearchInput(prepared: filtered.map(\.prepared), lastPerformedDates: lastPerformedDates,
-                                     browsableIDs: Set(browsable.map(\.uuid)))
+            recent: rows(snapshot.recent).map(\.exercise),
+            sections: snapshot.sections.map { LetterSection(letter: $0.letter, exercises: rows($0.ids).map(\.exercise)) },
+            collapsed: listing(snapshot.collapsed), expanded: listing(snapshot.expanded),
+            searchInput: snapshot.searchInput,
+            rowsByID: Dictionary(uniqueKeysWithValues: selectedRows.map { ($0.id, $0) })
         )
     }
 
@@ -144,6 +379,110 @@ final class AddExerciseCatalog {
             : candidates.searchListing(ids: candidates.searchInput.rankedIDs(matching: query))
         moreCount = listing.moreCount
         return listing.exercises
+    }
+}
+
+@MainActor
+private final class AddExerciseCatalogCache {
+    static let shared = AddExerciseCatalogCache()
+
+    private struct Key: Equatable {
+        let revision: UUID
+        let hiddenIDs: Set<UUID>
+        let fallback: [Exercise]?
+        let locale: String
+        let calendar: Calendar
+    }
+
+    @MainActor
+    final class Preparation {
+        let revision = UUID()
+        private let exercises: [Exercise]
+        private let worker: Task<AddExerciseCatalog.Preparation, Never>
+        private var prepared: AddExerciseCatalog.Preparation?
+        private var catalog: AddExerciseCatalog?
+        private(set) var isCurrent = true
+
+        init(exercises: [Exercise], store: ExerciseStore, ordersByRecency: Bool) {
+            self.exercises = exercises
+            let snapshot = AddExerciseCatalog.Snapshot(exercises: exercises, store: store,
+                                                       ordersByRecency: ordersByRecency)
+            worker = Task.detached(priority: .userInitiated) {
+                AddExerciseCatalog.Preparation(snapshot: snapshot)
+            }
+        }
+
+        func value() async -> AddExerciseCatalog {
+            let prepared: AddExerciseCatalog.Preparation
+            if let previous = self.prepared {
+                // Relative labels can change without a history edit. Recheck just
+                // those strings off main, retaining search text and browse order.
+                prepared = await Task.detached(priority: .userInitiated) {
+                    previous.refreshingCaptions()
+                }.value
+            } else {
+                prepared = await worker.value
+            }
+            if let catalog, self.prepared?.captions == prepared.captions { return catalog }
+            let catalog = AddExerciseCatalog(exercises: exercises, preparation: prepared)
+            self.prepared = prepared
+            self.catalog = catalog
+            return catalog
+        }
+
+        func invalidate() {
+            isCurrent = false
+        }
+    }
+
+    @MainActor
+    private final class StoreRevision {
+        weak var store: ExerciseStore?
+        var revision = UUID()
+        var key: Key?
+        var preparation: Preparation?
+        private var observation: AnyCancellable?
+
+        init(store: ExerciseStore) {
+            self.store = store
+            // Keep observing while sheets are dismissed. Every mutable catalog,
+            // visibility and history input publishes through this store.
+            observation = store.objectWillChange.sink { [weak self] _ in
+                self?.preparation?.invalidate()
+                self?.revision = UUID()
+            }
+        }
+    }
+
+    private var stores: [ObjectIdentifier: StoreRevision] = [:]
+
+    func preparation(store: ExerciseStore, fallback: [Exercise]) -> Preparation {
+        let id = ObjectIdentifier(store)
+        let entry: StoreRevision
+        if let existing = stores[id], existing.store === store {
+            entry = existing
+        } else {
+            stores = stores.filter { $0.value.store != nil }
+            entry = StoreRevision(store: store)
+            stores[id] = entry
+        }
+
+        // This boundary also refreshes hidden defaults changed by another process.
+        // Avoid shownExercises: its recency sort belongs in the detached worker.
+        let hidden = store.hiddenExercises
+        let hiddenIDs = Set(hidden.map(\.uuid))
+        let exercises = store.exercises
+        let usesFallback = hidden.count == exercises.count
+        let calendar = Calendar.current
+        let key = Key(revision: entry.revision, hiddenIDs: hiddenIDs, fallback: usesFallback ? fallback : nil,
+                      locale: Locale.current.identifier, calendar: calendar)
+        if entry.key == key, let preparation = entry.preparation { return preparation }
+        entry.preparation?.invalidate()
+        let shown = usesFallback ? fallback : exercises.filter { !hiddenIDs.contains($0.uuid) }
+        let preparation = Preparation(exercises: shown, store: store, ordersByRecency: !usesFallback)
+        entry.key = key
+        entry.preparation = preparation
+        return preparation
     }
 }
 
@@ -171,6 +510,41 @@ final class ExerciseCatalogSearch: ObservableObject {
     private var completedRequest: Request?
     private var source: Source?
     private var activeFilters: [String?]?
+    private var preparationRevision: UUID?
+    private var preparationTask: Task<Void, Never>?
+
+    /// "Today" and "Yesterday" move at midnight without a catalog change; the next refresh rechecks them.
+    func expireCaptions() {
+        preparationRevision = nil
+    }
+
+    func refresh(store: ExerciseStore, fallback: [Exercise], muscleGroup: String?, equipment: String?) {
+        let preparation = AddExerciseCatalogCache.shared.preparation(store: store, fallback: fallback)
+        guard preparationRevision != preparation.revision else {
+            applyFilters(muscleGroup: muscleGroup, equipment: equipment)
+            return
+        }
+        preparationRevision = preparation.revision
+        preparationTask?.cancel()
+        source = nil
+        activeFilters = [muscleGroup, equipment]
+        preparationTask = Task { [weak self] in
+            // The shared worker survives dismissal so the next open can reuse it.
+            let catalog = await preparation.value()
+            guard !Task.isCancelled, preparation.isCurrent, let self,
+                  self.preparationRevision == preparation.revision else { return }
+            self.publish(catalog)
+        }
+    }
+
+    private func publish(_ catalog: AddExerciseCatalog) {
+        var transaction = Transaction(animation: nil)
+        transaction.disablesAnimations = true
+        withTransaction(transaction) {
+            self.catalog = catalog
+            applyFilters(muscleGroup: activeFilters?[0], equipment: activeFilters?[1], force: true)
+        }
+    }
 
     func refresh(exercises: [Exercise], store: ExerciseStore, muscleGroup: String?, equipment: String?) {
         let source = Source(exercises: exercises, dates: store.lastPerformedDates,
@@ -180,6 +554,8 @@ final class ExerciseCatalogSearch: ObservableObject {
             applyFilters(muscleGroup: muscleGroup, equipment: equipment)
             return
         }
+        preparationRevision = nil
+        preparationTask?.cancel()
         self.source = source
         catalog = AddExerciseCatalog(exercises: exercises, store: store)
         applyFilters(muscleGroup: muscleGroup, equipment: equipment, force: true)
@@ -288,8 +664,7 @@ struct AddExercisesSheet: View {
     }
 
     private func refreshCatalog() {
-        let shown = exerciseStore.shownExercises
-        catalogSearch.refresh(exercises: shown.isEmpty ? exercises : shown, store: exerciseStore,
+        catalogSearch.refresh(store: exerciseStore, fallback: exercises,
                               muscleGroup: selectedMuscleGroup, equipment: selectedEquipment)
     }
 
@@ -356,21 +731,21 @@ struct AddExercisesSheet: View {
                     emptyState
                 } else if showsRecents {
                     Section("Recent") {
-                        ForEach(listing.recent) { exercise in
-                            exerciseRow(exercise)
+                        ForEach(listing.recentRows) { row in
+                            exerciseRow(row)
                         }
                     }
 
                     Section("All Exercises") {
-                        ForEach(listing.remaining) { exercise in
-                            exerciseRow(exercise)
+                        ForEach(listing.remainingRows) { row in
+                            exerciseRow(row)
                         }
                         showMoreRow(count: listing.moreCount)
                     }
                 } else {
                     Section {
-                        ForEach(matches) { exercise in
-                            exerciseRow(exercise)
+                        ForEach(listing.rows) { row in
+                            exerciseRow(row)
                         }
                         showMoreRow(count: listing.moreCount)
                     } footer: {
@@ -416,6 +791,10 @@ struct AddExercisesSheet: View {
             }
         }
         .onAppear { refreshCatalog() }
+        .onReceive(NotificationCenter.default.publisher(for: .NSCalendarDayChanged).receive(on: RunLoop.main)) { _ in
+            catalogSearch.expireCaptions()
+            refreshCatalog()
+        }
         .onReceive(exerciseStore.objectWillChange) { _ in
             // objectWillChange precedes storage. Queue the read itself instead of
             // debouncing a subscription SwiftUI can replace during that change.
@@ -506,12 +885,10 @@ struct AddExercisesSheet: View {
     }
 
     @ViewBuilder
-    private func exerciseRow(_ exercise: Exercise) -> some View {
+    private func exerciseRow(_ prepared: AddExerciseCatalog.Row) -> some View {
+        let exercise = prepared.exercise
         let selectionNumber = exerciseSelectorSelection.firstIndex(of: exercise).map { $0 + 1 }
-        let metadata = ExerciseLibraryMetadata(
-            exercise: exercise,
-            lastPerformed: exerciseStore.lastPerformedDates[exercise.uuid]
-        )
+        let metadata = prepared.display
 
         let row = Button(action: { toggle(exercise) }) {
             HStack(spacing: 12) {
@@ -527,7 +904,7 @@ struct AddExercisesSheet: View {
                             .onEnded { result in
                                 switch result {
                                 case .first:
-                                    guard exercise.hasPlayableDemonstration else { return }
+                                    guard metadata.hasPlayableDemonstration else { return }
                                     mediaExercise = exercise
                                     mediaFeedback += 1
                                 case .second:
@@ -564,7 +941,7 @@ struct AddExercisesSheet: View {
             detailExercise = exercise
         }
 
-        if exercise.hasPlayableDemonstration {
+        if metadata.hasPlayableDemonstration {
             row.accessibilityAction(named: Text("Play Demonstration")) {
                 mediaExercise = exercise
             }
