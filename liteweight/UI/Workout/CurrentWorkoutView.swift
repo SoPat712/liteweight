@@ -1115,6 +1115,12 @@ struct CurrentWorkoutView: View {
         _ label: String, milliseconds: Double, action: @MainActor () -> Void
     ) async throws {
         try Task.checkCancellation()
+        // `-liteweightAnimationTourSteps a,b` runs only the named steps, to profile one animation.
+        let arguments = ProcessInfo.processInfo.arguments
+        if let index = arguments.firstIndex(of: "-liteweightAnimationTourSteps"), arguments.indices.contains(index + 1),
+           !arguments[index + 1].split(separator: ",").contains(Substring(label)) {
+            return
+        }
         LiteweightFrameMeter.shared.begin(label)
         action()
         do {
