@@ -184,11 +184,12 @@ struct LiteweightWorkoutMetricLine: View {
     let sets: Int
     let volume: String
     let unit: String
+    var animatesDuration = true
 
     var body: some View {
         line
             .contentTransition(reduceMotion ? .opacity : .numericText())
-            .animation(LiteweightMotion.preferred(LiteweightMotion.snappy, reduceMotion: reduceMotion), value: "\(duration)|\(sets)|\(volume)|\(unit)")
+            .animation(LiteweightMotion.preferred(LiteweightMotion.snappy, reduceMotion: reduceMotion), value: "\(animatesDuration ? duration : "")|\(sets)|\(volume)|\(unit)")
     }
 
     private var line: some View {

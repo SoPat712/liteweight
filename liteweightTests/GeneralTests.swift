@@ -2579,6 +2579,119 @@ final class PreferenceCacheRegressionTests: XCTestCase {
         XCTAssertEqual(liteweight.WorkoutRoutineNoteLinks.routineExerciseID(for: loggedID, defaults: storage), routineID)
     }
 
+    func testTrackingSnapshotFollowsLocalWritesAndKeepsDefaultsIsolated() throws {
+        let storage = try defaults(), other = try defaults()
+        let exerciseID = UUID(), setID = UUID(), workoutID = UUID()
+        XCTAssertTrue(liteweight.SetTrackingPreferences.load(defaults: storage).isEmpty)
+        XCTAssertTrue(liteweight.SetTrackingPreferences.load(defaults: other).isEmpty)
+
+        liteweight.SetTrackingPreferences.setOverride(.weightDistance, for: exerciseID, defaults: storage)
+        XCTAssertEqual(liteweight.SetTrackingPreferences.override(for: exerciseID, defaults: storage), .weightDistance)
+        liteweight.SetTrackingPreferences.setRoutineDistance(400, for: setID, defaults: storage)
+        XCTAssertEqual(liteweight.SetTrackingPreferences.routineDistance(for: setID, defaults: storage), 400)
+        let beforeRemoval = liteweight.SetTrackingPreferences.load(defaults: storage)
+        liteweight.SetTrackingPreferences.setRoutineDistance(nil, for: setID, defaults: storage)
+        XCTAssertNil(liteweight.SetTrackingPreferences.routineDistance(for: setID, defaults: storage))
+        XCTAssertEqual(liteweight.SetTrackingPreferences.load(defaults: storage).routineDistances[setID.uuidString]?.meters, 0)
+        XCTAssertEqual(beforeRemoval.routineDistances[setID.uuidString]?.meters, 400)
+
+        liteweight.SetTrackingPreferences.beginLoggerSession(workoutID: workoutID,
+            startedAt: Date(timeIntervalSince1970: 10), defaults: storage)
+        liteweight.SetTrackingPreferences.setLoggerFields([.weight], for: setID,
+            targets: .init(weight: 50, distance: 400), defaults: storage)
+        let beforeEdit = liteweight.SetTrackingPreferences.load(defaults: storage)
+        liteweight.SetTrackingPreferences.setLoggerFields([.weight, .distance], for: setID, defaults: storage)
+        XCTAssertEqual(liteweight.SetTrackingPreferences.loggerFields(for: setID, defaults: storage), [.weight, .distance])
+        XCTAssertEqual(liteweight.SetTrackingPreferences.load(defaults: storage).loggerFields?[setID.uuidString]?.targets,
+                       .init(weight: 50, distance: 400))
+        XCTAssertEqual(beforeEdit.loggerFields?[setID.uuidString]?.fields, [.weight])
+
+        let nextWorkoutID = UUID()
+        liteweight.SetTrackingPreferences.beginLoggerSession(workoutID: nextWorkoutID,
+            startedAt: Date(timeIntervalSince1970: 20), defaults: storage)
+        let next = liteweight.SetTrackingPreferences.load(defaults: storage)
+        XCTAssertEqual(next.loggerWorkoutID, nextWorkoutID)
+        XCTAssertEqual(next.loggerWorkoutStartedAt, 20)
+        XCTAssertNil(next.loggerFields)
+        XCTAssertEqual(next.overrides[exerciseID.uuidString]?.type, .weightDistance)
+        XCTAssertTrue(liteweight.SetTrackingPreferences.load(defaults: other).isEmpty)
+    }
+
+    func testTrackingSnapshotRebuildsAfterTimestampOnlyReceiptsWithoutRewritingContent() throws {
+        let storage = try defaults()
+        let exerciseID = UUID().uuidString, setID = UUID().uuidString
+        var original = liteweight.SetTrackingPreferences()
+        original.overrides[exerciseID] = .init(type: .weightDistance, updatedAt: 10)
+        original.routineDistances[setID] = .init(meters: 400, updatedAt: 10)
+        original.loggerWorkoutID = UUID()
+        original.loggerWorkoutStartedAt = 10
+        original.loggerFields = [setID: .init(fields: [.weight], targets: .init(distance: 400), updatedAt: 10)]
+        original.save(defaults: storage)
+        XCTAssertEqual(liteweight.SetTrackingPreferences.load(defaults: storage), original)
+        let contentData = storage.data(forKey: liteweight.SetTrackingPreferences.storageKey)
+
+        var receipt = original
+        receipt.overrides[exerciseID]?.updatedAt = 30
+        receipt.routineDistances[setID]?.updatedAt = 30
+        receipt.loggerFields?[setID]?.updatedAt = 30
+        receipt.save(defaults: storage)
+        for _ in 0..<100 {
+            XCTAssertEqual(liteweight.SetTrackingPreferences.load(defaults: storage), receipt)
+        }
+        XCTAssertEqual(storage.data(forKey: liteweight.SetTrackingPreferences.storageKey), contentData)
+
+        var older = original
+        older.overrides[exerciseID]?.updatedAt = 20
+        older.routineDistances[setID]?.updatedAt = 20
+        older.loggerFields?[setID]?.updatedAt = 20
+        older.save(defaults: storage)
+        XCTAssertEqual(liteweight.SetTrackingPreferences.load(defaults: storage), receipt)
+        XCTAssertEqual(storage.data(forKey: liteweight.SetTrackingPreferences.storageKey), contentData)
+    }
+
+    func testTrackingSnapshotFollowsExternalWatermarksReplacementAndRemoval() throws {
+        let storage = try defaults()
+        let key = liteweight.SetTrackingPreferences.storageKey
+        let watermarkKey = key + ".mergeWatermarks.v1"
+        let exerciseID = UUID().uuidString, setID = UUID().uuidString
+        var original = liteweight.SetTrackingPreferences()
+        original.overrides[exerciseID] = .init(type: .weightDistance, updatedAt: 10)
+        original.routineDistances[setID] = .init(meters: 400, updatedAt: 10)
+        original.loggerWorkoutID = UUID()
+        original.loggerWorkoutStartedAt = 10
+        original.loggerFields = [setID: .init(fields: [.weight], targets: .init(distance: 400), updatedAt: 10)]
+        original.save(defaults: storage)
+        XCTAssertEqual(liteweight.SetTrackingPreferences.load(defaults: storage), original)
+
+        var receipt = original
+        receipt.overrides[exerciseID]?.updatedAt = 50
+        receipt.routineDistances[setID]?.updatedAt = 50
+        receipt.loggerFields?[setID]?.updatedAt = 50
+        storage.set(try JSONEncoder().encode(receipt), forKey: watermarkKey)
+        NotificationCenter.default.post(name: UserDefaults.didChangeNotification, object: storage)
+        XCTAssertEqual(liteweight.SetTrackingPreferences.load(defaults: storage), receipt)
+
+        var replacement = original
+        replacement.overrides[exerciseID] = .init(type: .duration, updatedAt: 5)
+        replacement.routineDistances[setID] = .init(meters: 500, updatedAt: 5)
+        replacement.loggerFields = [setID: .init(fields: [.distance], targets: .init(distance: 500), updatedAt: 5)]
+        storage.set(try JSONEncoder().encode(replacement), forKey: key)
+        NotificationCenter.default.post(name: liteweight.SetTrackingPreferences.didChangeNotification, object: storage)
+        XCTAssertEqual(liteweight.SetTrackingPreferences.load(defaults: storage), replacement,
+                       "Unrelated restored content must not inherit old receipt timestamps")
+
+        replacement.loggerWorkoutID = UUID()
+        replacement.loggerFields = original.loggerFields
+        storage.set(try JSONEncoder().encode(replacement), forKey: key)
+        NotificationCenter.default.post(name: UserDefaults.didChangeNotification, object: storage)
+        XCTAssertEqual(liteweight.SetTrackingPreferences.load(defaults: storage), replacement,
+                       "A different workout must not inherit logger receipt timestamps")
+        storage.removeObject(forKey: watermarkKey)
+        storage.removeObject(forKey: key)
+        NotificationCenter.default.post(name: UserDefaults.didChangeNotification, object: storage)
+        XCTAssertTrue(liteweight.SetTrackingPreferences.load(defaults: storage).isEmpty)
+    }
+
     func testWriteThroughRefreshesAnotherCacheInstanceWithoutLocalEditNotification() throws {
         let storage = try defaults()
         let center = NotificationCenter()

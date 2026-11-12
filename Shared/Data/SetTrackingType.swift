@@ -359,6 +359,7 @@ final class DefaultsValueCache<Value: Equatable>: ObservableObject {
         weak var defaults: UserDefaults?
         var data: Data?
         var value: Value
+        var revision: UInt64 = 0
         /// Writes staged here whose defaults write hasn't run yet; refresh leaves them be.
         var pendingWrites = 0
 
@@ -396,6 +397,13 @@ final class DefaultsValueCache<Value: Equatable>: ObservableObject {
         return entry(for: defaults).value
     }
 
+    func snapshot(defaults: UserDefaults) -> (value: Value, revision: UInt64) {
+        lock.lock()
+        defer { lock.unlock() }
+        let entry = entry(for: defaults)
+        return (entry.value, entry.revision)
+    }
+
     /// Write through before defaults can notify observers. Local and peer saves
     /// retain their existing content/timestamp guards and notification rules.
     func store(_ value: Value, data: Data, defaults: UserDefaults) {
@@ -404,6 +412,7 @@ final class DefaultsValueCache<Value: Equatable>: ObservableObject {
         let changed = entry.value != value
         entry.data = data
         entry.value = value
+        entry.revision &+= 1
         entry.pendingWrites += 1
         lock.unlock()
         // Readers see the value now. Never hold a cache lock, or the preference
@@ -439,6 +448,7 @@ final class DefaultsValueCache<Value: Equatable>: ObservableObject {
             let changed = value != entry.value
             entry.data = data
             entry.value = value
+            entry.revision &+= 1
             if changed { publishChange() }
         }
     }
@@ -540,9 +550,27 @@ struct SetTrackingPreferences: Codable, Equatable {
         data.flatMap { try? JSONDecoder().decode(Self.self, from: $0) }
     }
 
+    private struct Snapshot {
+        weak var defaults: UserDefaults?
+        let contentRevision: UInt64
+        let watermarkRevision: UInt64
+        let value: SetTrackingPreferences
+    }
+    private static let snapshotLock = NSLock()
+    private static var snapshots: [ObjectIdentifier: Snapshot] = [:]
+
     static func load(defaults: UserDefaults = .standard) -> Self {
-        var stored = cache.load(defaults: defaults)
-        if let watermarks = mergeWatermarks.load(defaults: defaults) {
+        snapshotLock.lock()
+        defer { snapshotLock.unlock() }
+        let content = cache.snapshot(defaults: defaults)
+        let receipt = mergeWatermarks.snapshot(defaults: defaults)
+        let id = ObjectIdentifier(defaults)
+        if let snapshot = snapshots[id], snapshot.defaults === defaults,
+           snapshot.contentRevision == content.revision, snapshot.watermarkRevision == receipt.revision {
+            return snapshot.value
+        }
+        var stored = content.value
+        if let watermarks = receipt.value {
             for (key, entry) in stored.overrides {
                 if let watermark = watermarks.overrides[key], watermark.type == entry.type,
                    watermark.updatedAt > entry.updatedAt {
@@ -562,6 +590,9 @@ struct SetTrackingPreferences: Codable, Equatable {
                 }
             }
         }
+        snapshots = snapshots.filter { $0.value.defaults != nil }
+        snapshots[id] = Snapshot(defaults: defaults, contentRevision: content.revision,
+                                 watermarkRevision: receipt.revision, value: stored)
         return stored
     }
     static func override(for exerciseID: UUID?, defaults: UserDefaults = .standard) -> SetTrackingType? {

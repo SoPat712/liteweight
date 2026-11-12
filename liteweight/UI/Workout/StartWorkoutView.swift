@@ -1138,9 +1138,7 @@ struct StartWorkoutView: View {
                         .foregroundStyle(LiteweightTheme.primaryText)
                         .fixedSize(horizontal: false, vertical: true)
                     if let workout = currentWorkouts.first {
-                        TimelineView(.periodic(from: .now, by: 1)) { timeline in
-                            WorkoutPreviewMetricLine(workout: workout, now: timeline.date)
-                        }
+                        WorkoutPreviewMetricLine(workout: workout, ticks: true)
                         if isWaitingForWatch {
                             Text("Waiting for Apple Watch…")
                                 .font(.subheadline)
@@ -2309,9 +2307,9 @@ private struct WorkoutPreviewMetricLine: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @EnvironmentObject private var settingsStore: SettingsStore
     @ObservedObject var workout: Workout
-    var now: Date = .now
+    var ticks = false
 
-    private var duration: String {
+    private func duration(at now: Date) -> String {
         guard workout.isCurrentWorkout else {
             return LiteweightFormat.duration(workout.duration ?? 0)
         }
@@ -2325,14 +2323,27 @@ private struct WorkoutPreviewMetricLine: View {
     var body: some View {
         let value = WeightUnit.convert(weight: workout.trackedCompletedVolume, from: .metric, to: settingsStore.weightUnit)
         let volume = WorkoutPreviewFormatting.volume(value)
+        let sets = workout.numberOfCompletedSets ?? 0
+        Group {
+            if ticks {
+                TimelineView(.periodic(from: .now, by: 1)) { context in
+                    metricLine(duration: duration(at: context.date), sets: sets, volume: volume)
+                }
+            } else {
+                metricLine(duration: duration(at: .now), sets: sets, volume: volume)
+            }
+        }
+    }
+
+    private func metricLine(duration: String, sets: Int, volume: String) -> some View {
         LiteweightWorkoutMetricLine(
-            duration: duration, sets: workout.numberOfCompletedSets ?? 0,
-            volume: volume, unit: settingsStore.weightUnit.unit.symbol
+            duration: duration, sets: sets,
+            volume: volume, unit: settingsStore.weightUnit.unit.symbol, animatesDuration: !ticks
         )
             .contentTransition(reduceMotion ? .opacity : .numericText())
-            .animation(LiteweightMotion.preferred(LiteweightMotion.snappy, reduceMotion: reduceMotion), value: duration)
+            .animation(LiteweightMotion.preferred(LiteweightMotion.snappy, reduceMotion: reduceMotion), value: ticks ? "" : duration)
             .animation(LiteweightMotion.preferred(LiteweightMotion.snappy, reduceMotion: reduceMotion), value: volume)
-            .animation(LiteweightMotion.preferred(LiteweightMotion.snappy, reduceMotion: reduceMotion), value: workout.numberOfCompletedSets)
+            .animation(LiteweightMotion.preferred(LiteweightMotion.snappy, reduceMotion: reduceMotion), value: sets)
             .accessibilityElement(children: .combine)
     }
 }

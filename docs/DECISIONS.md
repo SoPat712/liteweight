@@ -14,6 +14,13 @@ Builds are installed with `~/.local/share/liteweight/tools/install-NN.sh`. Lane 
 
 ## 2026-11-12
 
+### Nothing ticks unless it's counting (build 132)
+- **Asked:** "This app needs to be promotion supporting and not hitch!" and "just want it 120fps with no hitching!"
+- **Found:** the Workout tab summary still rolled elapsed digits, stopped set stopwatches ticked twice a second, and paused/finished rest controls kept timelines alive. Collapsed pills and tab accessories refreshed whole surfaces every second; a DEBUG metrics timer accumulated across appearances, and held confetti kept an animation timeline running.
+- **Decided:** elapsed clocks tick plainly, with model-driven sets/volume retaining their rolls. Set stopwatches use start-aligned one-second timelines only while running; rest controls tick only while unpaused with time remaining. Pill/accessory timelines refresh elapsed text and current vitals/accessibility reads, with titles and aggregates outside the clock; DEBUG metrics polling cancels on disappear, and held confetti uses a static Canvas.
+- **Also (build 132):** per-row data lookups got cheaper with identical results: `SetTrackingPreferences.load()` returns a cached merged snapshot until its content or watermark revision changes; `ExerciseStore` keeps the joined catalog and uuid indexes instead of concatenating and searching per lookup; `WeightUnit.format(weight:from:to:)` reuses locked measurement formatters per unit and locale. Formatters handed to callers stay new, because a copy of a cached formatter shares ICU state and crashed a concurrent test. Optimized simulator logger: idle 4% → 1–2% busy, scrolling 23%/24% → 22%/18% (down/up). 634/634 tests.
+- **Roll back:** revert this entry's commit.
+
 ### The logger stops redrawing every second (build 131)
 - **Asked:** "I quite like our current workout view, just want it 120fps with no hitching! like promotion and no stutters!"
 - **Found:** with the logger open and untouched, the main thread was 44% busy (Home: 0%, logger collapsed: 2%), and scrolling was 39%/30% busy (down/up) in an optimized simulator build. `LiteweightMetricValue` rolled its digits on every value change, so the Duration clock's `ticks: true` couldn't stop a numeric-text animation every second, which kept SwiftUI's display link running. Every exercise card's "Rest 3:00" label also re-evaluated each second.

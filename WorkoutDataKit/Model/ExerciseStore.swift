@@ -28,9 +28,20 @@ public class ExerciseStore: ObservableObject {
         didSet { rebuildExerciseLookup() }
     }
     public private(set) var exercisesByUUID: [UUID: Exercise] = [:]
+    private var firstExercisesByUUID: [UUID: Exercise] = [:]
+    private var cachedExercises: [Exercise] = []
 
     private func rebuildExerciseLookup() {
-        exercisesByUUID = (builtInExercises + customExercises).reduce(into: [:]) { $0[$1.uuid] = $1 }
+        cachedExercises = builtInExercises + customExercises
+        var first: [UUID: Exercise] = [:]
+        var last: [UUID: Exercise] = [:]
+        // find(with:) keeps the first match; the public index keeps the last.
+        for exercise in cachedExercises {
+            if first[exercise.uuid] == nil { first[exercise.uuid] = exercise }
+            last[exercise.uuid] = exercise
+        }
+        firstExercisesByUUID = first
+        exercisesByUUID = last
     }
 
     /// Shared history snapshot. Searching and rendering only read this cache.
@@ -43,7 +54,7 @@ public class ExerciseStore: ObservableObject {
     private var recencyRefreshPending = false
     
     public var exercises: [Exercise] {
-        builtInExercises + customExercises
+        cachedExercises
     }
     
     public var shownExercises: [Exercise] {
@@ -358,7 +369,7 @@ extension ExerciseStore {
 // MARK: - Find
 extension ExerciseStore {
     public func find(with uuid: UUID) -> Exercise? {
-        Self.find(in: exercises, with: uuid)
+        firstExercisesByUUID[uuid]
     }
     
     public static func find(in exercises: [Exercise], with uuid: UUID?) -> Exercise? {

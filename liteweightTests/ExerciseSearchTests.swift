@@ -372,6 +372,78 @@ final class ExerciseSearchTests: XCTestCase {
         }
     }
 
+    func testCatalogLookupPreservesLinearPrecedenceAndPublicIndexPrecedence() throws {
+        let sharedID = UUID(), customID = UUID()
+        let firstBuiltIn = exercise("First Catalog Lift", id: sharedID)
+        let laterBuiltIn = exercise("Later Catalog Lift", id: sharedID)
+        let shadow = exercise("Custom Shadow", id: sharedID, everkineticID: Exercise.customEverkineticId)
+        let firstCustom = exercise("First Custom Lift", id: customID, everkineticID: Exercise.customEverkineticId)
+        let laterCustom = exercise("Later Custom Lift", id: customID, everkineticID: Exercise.customEverkineticId)
+        let catalog = try store([firstBuiltIn, laterBuiltIn], customExercises: [shadow, firstCustom, laterCustom])
+        let expected = catalog.builtInExercises + catalog.customExercises
+        XCTAssertEqual(catalog.exercises, expected)
+        for id in [sharedID, customID, UUID()] {
+            XCTAssertEqual(catalog.find(with: id), expected.first { $0.uuid == id })
+            XCTAssertEqual(catalog.find(with: id), ExerciseStore.find(in: expected, with: id))
+            XCTAssertEqual(catalog.exercisesByUUID[id], expected.last { $0.uuid == id })
+        }
+        XCTAssertEqual(catalog.find(with: sharedID), firstBuiltIn)
+        XCTAssertEqual(catalog.find(with: customID), firstCustom)
+        XCTAssertNil(ExerciseStore.find(in: expected, with: nil))
+    }
+
+    func testCatalogLookupRebuildsAfterCustomEditsPublicationReplacementAndDeletion() throws {
+        let folder = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: folder) }
+        let builtInURL = folder.appendingPathComponent("exercises.json")
+        let builtIn = exercise("Catalog Lift")
+        try JSONEncoder().encode([builtIn]).write(to: builtInURL)
+        let suite = "ExerciseSearchTests.Lookup.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let catalog = ExerciseStore(builtInExercisesURL: builtInURL,
+                                    customExercisesURL: folder.appendingPathComponent("custom.json"), userDefaults: defaults)
+        let originalExercises = catalog.exercises
+        let created = try catalog.createCustomExercise(title: "My Curl", description: nil,
+            primaryMuscle: ["biceps"], secondaryMuscle: [], type: .dumbbell)
+        XCTAssertEqual(catalog.find(with: created.uuid), created)
+        XCTAssertEqual(catalog.exercisesByUUID[created.uuid], created)
+        XCTAssertEqual(catalog.exercises, originalExercises + [created])
+
+        let updated = try catalog.updateCustomExercise(with: created.uuid, title: "My Updated Curl", description: "Updated",
+            primaryMuscle: ["biceps"], secondaryMuscle: [], type: .barbell)
+        XCTAssertEqual(catalog.find(with: created.uuid), updated)
+        XCTAssertEqual(catalog.exercisesByUUID[created.uuid], updated)
+        XCTAssertEqual(catalog.exercises, originalExercises + [updated])
+        XCTAssertEqual(originalExercises, catalog.builtInExercises)
+
+        let staged = try XCTUnwrap(catalog.stageCreatingCustomExercises([.init(title: "My Staged Curl", type: .barbell)]))
+        let stagedID = try XCTUnwrap(staged.exercises.last?.uuid)
+        XCTAssertNil(catalog.find(with: stagedID))
+        try catalog.write(staged)
+        XCTAssertNil(catalog.find(with: stagedID))
+        catalog.publish(staged)
+        XCTAssertEqual(catalog.find(with: stagedID), catalog.customExercises.last)
+        XCTAssertEqual(catalog.exercisesByUUID[stagedID], catalog.customExercises.last)
+        XCTAssertEqual(catalog.exercises, catalog.builtInExercises + catalog.customExercises)
+
+        let replacement = exercise("Custom Shadow", id: builtIn.uuid, everkineticID: Exercise.customEverkineticId)
+        try catalog.replaceCustomExercises(with: [replacement])
+        XCTAssertNil(catalog.find(with: created.uuid))
+        XCTAssertNil(catalog.find(with: stagedID))
+        XCTAssertNil(catalog.exercisesByUUID[created.uuid])
+        XCTAssertNil(catalog.exercisesByUUID[stagedID])
+        XCTAssertEqual(catalog.find(with: builtIn.uuid), catalog.builtInExercises.first)
+        XCTAssertEqual(catalog.exercisesByUUID[builtIn.uuid], replacement)
+        XCTAssertEqual(catalog.exercises, catalog.builtInExercises + [replacement])
+
+        try catalog.deleteCustomExercise(with: replacement.uuid)
+        XCTAssertEqual(catalog.find(with: builtIn.uuid), catalog.builtInExercises.first)
+        XCTAssertEqual(catalog.exercisesByUUID[builtIn.uuid], catalog.builtInExercises.first)
+        XCTAssertEqual(catalog.exercises, catalog.builtInExercises)
+    }
+
     func testAddCatalogRetainsOriginalTitlePriorityAfterRenaming() throws {
         let original = exercise("Barbell Bench Press", equipment: ["barbell"])
         let partial = exercise("Barbell Bench Press Close Grip", equipment: ["barbell"])

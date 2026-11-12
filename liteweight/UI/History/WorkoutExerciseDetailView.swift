@@ -1009,18 +1009,14 @@ private struct HistoryWorkoutSetRow: View {
     @ViewBuilder
     private var durationControl: some View {
         if settingsStore.inlineSetTimer, !set.isCompleted {
-            TimelineView(.periodic(from: Date(), by: 0.5)) { context in
-                Button {
-                    selectionFeedback += 1
-                    toggleInlineTimer()
-                } label: {
-                    durationLabel(
-                        text: inlineTimerText(now: context.date),
-                        isRunning: inlineTimerStart != nil
-                    )
+            Group {
+                if let start = inlineTimerStart {
+                    TimelineView(.periodic(from: start, by: 1)) { context in
+                        inlineTimerButton(now: context.date)
+                    }
+                } else {
+                    inlineTimerButton(now: .now)
                 }
-                .buttonStyle(.plain)
-                .accessibilityLabel(inlineTimerStart == nil ? "Start set timer" : "Stop set timer")
             }
             .contextMenu {
                 Button("Enter Duration", systemImage: "keyboard") { showingDurationPicker = true }
@@ -1037,6 +1033,17 @@ private struct HistoryWorkoutSetRow: View {
         }
     }
 
+    private func inlineTimerButton(now: Date) -> some View {
+        Button {
+            selectionFeedback += 1
+            toggleInlineTimer()
+        } label: {
+            durationLabel(text: inlineTimerText(now: now), isRunning: inlineTimerStart != nil)
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(inlineTimerStart == nil ? "Start set timer" : "Stop set timer")
+    }
+
     private func durationLabel(text: String, isRunning: Bool) -> some View {
         HStack(spacing: 6) {
             Image(systemName: isRunning ? "stop.fill" : "stopwatch")
@@ -1049,8 +1056,8 @@ private struct HistoryWorkoutSetRow: View {
                 .foregroundColor(valueColor)
                 .lineLimit(1)
                 .minimumScaleFactor(0.85)
-                .contentTransition(reduceMotion ? .opacity : .numericText())
-                .animation(LiteweightMotion.preferred(LiteweightMotion.snappy, reduceMotion: reduceMotion), value: text)
+                .contentTransition(isRunning ? .identity : reduceMotion ? .opacity : .numericText())
+                .animation(isRunning ? nil : LiteweightMotion.preferred(LiteweightMotion.snappy, reduceMotion: reduceMotion), value: text)
         }
         .frame(maxWidth: .infinity, minHeight: 40)
     }

@@ -44,27 +44,115 @@ extension WeightUnit {
     }
     
     var numberFormatter: NumberFormatter {
-        let numberFormatter = NumberFormatter()
-        numberFormatter.allowsFloats = true
-        numberFormatter.usesGroupingSeparator = false
-        numberFormatter.minimumFractionDigits = minimumFractionDigits
-        numberFormatter.maximumFractionDigits = maximumFractionDigits
-        return numberFormatter
+        numberFormatter(locale: .current, grouped: false)
     }
     
     /// Grouped presentation values; numeric editors keep `numberFormatter`.
     var displayNumberFormatter: NumberFormatter {
-        let formatter = numberFormatter
-        formatter.numberStyle = .decimal
-        formatter.usesGroupingSeparator = true
-        return formatter
+        numberFormatter(locale: .current, grouped: true)
     }
 
     var formatter: MeasurementFormatter {
-        let formatter = MeasurementFormatter()
-        formatter.unitOptions = .providedUnit
-        formatter.numberFormatter = displayNumberFormatter
+        formatter(locale: .current)
+    }
+
+    /// Formatters handed to callers are always new. A copy of a cached formatter still shares
+    /// its ICU state, and using one off the main thread while the cache formatted crashed
+    /// (build 132), so only `format(weight:from:to:)` uses the cache, under its lock.
+    func numberFormatter(locale: Locale, grouped: Bool) -> NumberFormatter {
+        Self.makeNumberFormatter(minimumFractionDigits: minimumFractionDigits,
+                                 maximumFractionDigits: maximumFractionDigits, locale: locale, grouped: grouped)
+    }
+
+    func formatter(locale: Locale) -> MeasurementFormatter {
+        Self.makeMeasurementFormatter(numberFormatter: numberFormatter(locale: locale, grouped: true), locale: locale)
+    }
+
+    fileprivate static func makeNumberFormatter(minimumFractionDigits: Int, maximumFractionDigits: Int,
+                                                locale: Locale, grouped: Bool) -> NumberFormatter {
+        let formatter = NumberFormatter()
+        formatter.locale = locale
+        formatter.allowsFloats = true
+        formatter.usesGroupingSeparator = false
+        formatter.minimumFractionDigits = minimumFractionDigits
+        formatter.maximumFractionDigits = maximumFractionDigits
+        if grouped {
+            formatter.numberStyle = .decimal
+            formatter.usesGroupingSeparator = true
+        }
         return formatter
+    }
+
+    fileprivate static func makeMeasurementFormatter(numberFormatter: NumberFormatter, locale: Locale) -> MeasurementFormatter {
+        let formatter = MeasurementFormatter()
+        formatter.locale = locale
+        formatter.unitOptions = .providedUnit
+        formatter.numberFormatter = numberFormatter
+        return formatter
+    }
+
+    private static let formatterCache = FormatterCache()
+
+    private final class FormatterCache {
+        private struct NumberKey: Hashable {
+            let unit: WeightUnit
+            let localeIdentifier: String
+            let minimumFractionDigits: Int
+            let maximumFractionDigits: Int
+            let style: NumberFormatter.Style
+            let usesGroupingSeparator: Bool
+
+            init(unit: WeightUnit, locale: Locale, grouped: Bool) {
+                self.unit = unit
+                localeIdentifier = locale.identifier
+                minimumFractionDigits = unit.minimumFractionDigits
+                maximumFractionDigits = unit.maximumFractionDigits
+                style = grouped ? .decimal : .none
+                usesGroupingSeparator = grouped
+            }
+        }
+
+        private struct MeasurementKey: Hashable {
+            let number: NumberKey
+            let unitOptions: MeasurementFormatter.UnitOptions.RawValue
+            let style: Formatter.UnitStyle
+        }
+
+        private let lock = NSLock()
+        private var measurements: [MeasurementKey: MeasurementFormatter] = [:]
+        private var localeObserver: NSObjectProtocol?
+
+        init() {
+            localeObserver = NotificationCenter.default.addObserver(
+                forName: NSLocale.currentLocaleDidChangeNotification, object: nil, queue: nil
+            ) { [weak self] _ in
+                guard let self else { return }
+                self.lock.lock()
+                self.measurements.removeAll()
+                self.lock.unlock()
+            }
+        }
+
+        deinit {
+            if let localeObserver { NotificationCenter.default.removeObserver(localeObserver) }
+        }
+
+        func string(from measurement: Measurement<UnitMass>, unit: WeightUnit, locale: Locale) -> String {
+            lock.lock()
+            defer { lock.unlock() }
+            return cachedMeasurementFormatter(unit: unit, locale: locale).string(from: measurement)
+        }
+
+        private func cachedMeasurementFormatter(unit: WeightUnit, locale: Locale) -> MeasurementFormatter {
+            let key = MeasurementKey(number: NumberKey(unit: unit, locale: locale, grouped: true),
+                                     unitOptions: MeasurementFormatter.UnitOptions.providedUnit.rawValue,
+                                     style: .medium)
+            if let formatter = measurements[key] { return formatter }
+            let formatter = WeightUnit.makeMeasurementFormatter(
+                numberFormatter: unit.numberFormatter(locale: locale, grouped: true), locale: locale)
+            measurements[key] = formatter
+            return formatter
+        }
     }
 }
 
@@ -111,7 +199,12 @@ extension WeightUnit {
     }
     
     static func format(weight: Double, from: WeightUnit, to: WeightUnit) -> String {
-        to.formatter.string(from: Measurement(value: weight, unit: from.unit).converted(to: to.unit))
+        format(weight: weight, from: from, to: to, locale: .current)
+    }
+
+    static func format(weight: Double, from: WeightUnit, to: WeightUnit, locale: Locale) -> String {
+        formatterCache.string(from: Measurement(value: weight, unit: from.unit).converted(to: to.unit),
+                              unit: to, locale: locale)
     }
 }
 

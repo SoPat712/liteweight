@@ -508,7 +508,12 @@ struct ContentView : View {
     }
 
     private func collapsedActiveWorkoutAccessory(_ workout: Workout) -> some View {
-        TimelineView(.periodic(from: Date(), by: 1)) { _ in
+        ActiveWorkoutAccessoryContent(workout: workout) {
+            let title = activeWorkoutTitle(workout)
+            let volumeTitle = activeWorkoutVolumeTitle(workout)
+            let completedSets = activeWorkoutCompletedSets(workout)
+            let volume = workout.trackedCompletedVolume
+            let setCount = workout.numberOfCompletedSets
             HStack(spacing: 5) {
                 Button(action: expandCurrentWorkout) {
                     HStack(spacing: 9) {
@@ -520,7 +525,7 @@ struct ContentView : View {
 
                         VStack(alignment: .leading, spacing: 1) {
                             HStack(spacing: 8) {
-                                Text(activeWorkoutTitle(workout))
+                                Text(title)
                                     .font(.subheadline.weight(.bold))
                                     .foregroundColor(LiteweightTheme.primaryText)
                                     .lineLimit(1)
@@ -536,20 +541,20 @@ struct ContentView : View {
                                     .fill(LiteweightTheme.accent)
                                     .frame(width: 5, height: 5)
                                     .accessibilityHidden(true)
-                                Text(activeWorkoutDurationFormatter.string(from: activeWorkoutDuration(workout)) ?? "0:00")
+                                activeWorkoutElapsedText(workout)
                                     .foregroundStyle(LiteweightTheme.metricTime)
                                 Text("•").foregroundColor(LiteweightTheme.tertiaryText)
-                                (Text(activeWorkoutVolumeTitle(workout))
+                                (Text(volumeTitle)
                                  + Text(" " + settingsStore.weightUnit.unit.symbol)
                                     .font(.caption2).foregroundColor(LiteweightTheme.secondaryText))
                                     .foregroundStyle(LiteweightTheme.metricVolume)
                                     .contentTransition(reduceMotion ? .opacity : .numericText())
-                                    .animation(LiteweightMotion.preferred(LiteweightMotion.snappy, reduceMotion: reduceMotion), value: workout.trackedCompletedVolume)
+                                    .animation(LiteweightMotion.preferred(LiteweightMotion.snappy, reduceMotion: reduceMotion), value: volume)
                                 Text("•").foregroundColor(LiteweightTheme.tertiaryText)
-                                Text("^[\(activeWorkoutCompletedSets(workout)) set](inflect: true)")
+                                Text("^[\(completedSets) set](inflect: true)")
                                     .foregroundStyle(LiteweightTheme.metricSets)
                                     .contentTransition(reduceMotion ? .opacity : .numericText())
-                                    .animation(LiteweightMotion.preferred(LiteweightMotion.snappy, reduceMotion: reduceMotion), value: workout.numberOfCompletedSets)
+                                    .animation(LiteweightMotion.preferred(LiteweightMotion.snappy, reduceMotion: reduceMotion), value: setCount)
                             }
                             .font(.liteweightMetric(.caption2, weight: .semibold))
                             .foregroundColor(LiteweightTheme.secondaryText)
@@ -562,8 +567,7 @@ struct ContentView : View {
                     .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
-                .accessibilityLabel(activeWorkoutOpenLabel(workout))
-                .accessibilityValue(activeWorkoutVitalsAccessibilityValue(workout))
+                .accessibilityRepresentation { activeWorkoutAccessibility(workout) }
 
                 compactWorkoutActionButton(
                     systemImage: "chevron.up",
@@ -591,7 +595,8 @@ struct ContentView : View {
     }
 
     private func inlineActiveWorkoutAccessory(_ workout: Workout) -> some View {
-        TimelineView(.periodic(from: Date(), by: 1)) { _ in
+        ActiveWorkoutAccessoryContent(workout: workout) {
+            let title = activeWorkoutTitle(workout)
             Button(action: expandCurrentWorkout) {
                 HStack(spacing: 7) {
                     Image(systemName: activeWorkoutIsOnWatch(workout) ? "applewatch" : "dumbbell.fill")
@@ -601,13 +606,13 @@ struct ContentView : View {
                         .background(Circle().fill(LiteweightTheme.accent))
 
                     VStack(alignment: .leading, spacing: 0) {
-                        Text(activeWorkoutTitle(workout))
+                        Text(title)
                             .font(.caption.weight(.semibold))
                             .foregroundColor(LiteweightTheme.primaryText)
                             .lineLimit(1)
 
                         HStack(spacing: 6) {
-                            Text(activeWorkoutDurationFormatter.string(from: activeWorkoutDuration(workout)) ?? "0:00")
+                            activeWorkoutElapsedText(workout)
                                 .font(.liteweightMetric(.caption2, weight: .semibold))
                                 .foregroundColor(LiteweightTheme.metricTime)
                                 .lineLimit(1)
@@ -625,8 +630,25 @@ struct ContentView : View {
             }
             .buttonStyle(.plain)
             .padding(.horizontal, 5)
-            .accessibilityLabel(activeWorkoutOpenLabel(workout))
-            .accessibilityValue(activeWorkoutVitalsAccessibilityValue(workout))
+            .accessibilityRepresentation { activeWorkoutAccessibility(workout) }
+        }
+    }
+
+    private func activeWorkoutElapsedText(_ workout: Workout) -> some View {
+        let watchStart = preferredDeferredWatchWorkout?.startDate
+        return TimelineView(.periodic(from: .now, by: 1)) { context in
+            let duration = watchStart.map { max(0, context.date.timeIntervalSince($0)) } ?? workout.safeDuration
+            Text(activeWorkoutDurationFormatter.string(from: duration) ?? "0:00")
+                .contentTransition(.identity)
+        }
+    }
+
+    private func activeWorkoutAccessibility(_ workout: Workout) -> some View {
+        let label = activeWorkoutOpenLabel(workout)
+        let workoutID = preferredDeferredWatchWorkout?.workoutID ?? workout.uuid
+        return TimelineView(.periodic(from: .now, by: 1)) { context in
+            Button(label, action: expandCurrentWorkout)
+                .accessibilityValue(activeWorkoutVitalsAccessibilityValue(workoutID: workoutID, at: context.date))
         }
     }
 
@@ -689,10 +711,9 @@ struct ContentView : View {
 
     /// The pill's visual vitals sit inside a button with its own label, so
     /// VoiceOver hears them as the button's value. The 1 s timeline keeps it fresh.
-    private func activeWorkoutVitalsAccessibilityValue(_ workout: Workout) -> String {
-        let now = Date()
+    private func activeWorkoutVitalsAccessibilityValue(workoutID: UUID?, at now: Date) -> String {
         guard let metrics = WatchConnectionManager.shared.liveMetrics.latest,
-              metrics.workoutID == (preferredDeferredWatchWorkout?.workoutID ?? workout.uuid) else { return "" }
+              metrics.workoutID == workoutID else { return "" }
         return [
             metrics.currentHeartRate(at: now).map { "\(Int($0.rounded())) beats per minute" },
             metrics.currentActiveEnergy(at: now).map { "\(Int($0.rounded())) active kilocalories" }
@@ -733,10 +754,6 @@ struct ContentView : View {
 
     private func activeWorkoutTitle(_ workout: Workout) -> String {
         preferredDeferredWatchWorkout?.title ?? workout.displayTitle(in: exerciseStore.exercises)
-    }
-
-    private func activeWorkoutDuration(_ workout: Workout) -> TimeInterval {
-        preferredDeferredWatchWorkout.map { max(0, Date().timeIntervalSince($0.startDate)) } ?? workout.safeDuration
     }
 
     private func activeWorkoutCompletedSets(_ workout: Workout) -> Int {
@@ -894,6 +911,30 @@ struct ContentView : View {
             }
             .productionEnvironment()
         }
+    }
+}
+
+private struct ActiveWorkoutAccessoryContent<Content: View>: View {
+    @Environment(\.managedObjectContext) private var managedObjectContext
+    @ObservedObject var workout: Workout
+    @ViewBuilder let content: () -> Content
+
+    var body: some View {
+        content()
+            .onReceive(managedObjectContext.publisher) { changes in
+                let changed = changes.inserted.union(changes.updated).union(changes.deleted)
+                if changed.contains(where: { object in
+                    if let exercise = object as? WorkoutExercise {
+                        return exercise.isDeleted || exercise.workout == workout
+                    }
+                    if let set = object as? WorkoutSet {
+                        return set.isDeleted || set.workoutExercise?.workout == workout
+                    }
+                    return false
+                }) {
+                    workout.objectWillChange.send()
+                }
+            }
     }
 }
 

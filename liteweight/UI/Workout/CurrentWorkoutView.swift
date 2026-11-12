@@ -301,6 +301,9 @@ struct CurrentWorkoutView: View {
     @State private var restStripHighlightRequest = 0
     @State private var restStripHighlighted = false
     @State private var recentExerciseSuggestions: [RecentExerciseSuggestion] = []
+    #if DEBUG
+    @State private var inspectionMetricsTimer: Timer?
+    #endif
 
     private let loggerHorizontalInset: CGFloat = 10
 
@@ -689,19 +692,25 @@ struct CurrentWorkoutView: View {
             } else if ProcessInfo.processInfo.arguments.contains("-liteweightInspectCollapsedSummary") {
                 workoutSummaryState.collapsedWorkouts.insert(workoutSummaryKey)
                 if let workoutID = workout.uuid {
-                    Timer.scheduledTimer(withTimeInterval: 5, repeats: true) { _ in
+                    inspectionMetricsTimer?.invalidate()
+                    inspectionMetricsTimer = Timer.scheduledTimer(withTimeInterval: 5, repeats: true) { _ in
                         watchConnection.liveMetrics.receive(
                             WatchWorkoutMetrics(workoutID: workoutID, state: .running, heartRate: 188,
                                                 heartRateDate: Date(), activeEnergyKilocalories: 1024),
                             workoutID: workoutID
                         )
-                    }.fire()
+                    }
+                    inspectionMetricsTimer?.fire()
                 }
             }
             #endif
             applyIdleTimerPreference()
         }
         .onDisappear {
+            #if DEBUG
+            inspectionMetricsTimer?.invalidate()
+            inspectionMetricsTimer = nil
+            #endif
             flushDeferredLoggerChanges()
             UIApplication.shared.isIdleTimerDisabled = false
         }
@@ -1035,22 +1044,12 @@ struct CurrentWorkoutView: View {
             actionFeedback += 1
             activeSheet = .restTimer
         } label: {
-            TimelineView(.periodic(from: .now, by: 1)) { _ in
-                if let remaining = restTimerStore.restTimerRemainingTime {
-                    Text(restTimerCountdownText(remaining))
-                        .font(.liteweightMetric(.subheadline, weight: .semibold))
-                        .fixedSize(horizontal: true, vertical: false)
-                        .foregroundStyle(restTimerTint)
-                        .contentTransition(reduceMotion ? .opacity : .numericText())
-                        .animation(LiteweightMotion.preferred(LiteweightMotion.snappy, reduceMotion: reduceMotion), value: Int(remaining))
-                        .padding(.horizontal, 10)
-                        .accessibilityValue(remaining <= 0 ? "Finished" : restTimerTimeText(remaining))
-                } else {
-                    Image(systemName: "timer")
-                        .font(.body.weight(.semibold))
-                        .foregroundStyle(LiteweightTheme.metricTime)
-                        .frame(width: 32, height: 32)
+            if restTimerIsCounting {
+                TimelineView(.periodic(from: .now, by: 1)) { _ in
+                    restTimerTopBarLabel
                 }
+            } else {
+                restTimerTopBarLabel
             }
         }
         .buttonStyle(.plain)
@@ -1061,6 +1060,30 @@ struct CurrentWorkoutView: View {
         .tint(restTimerTint)
         .animation(LiteweightMotion.preferred(LiteweightMotion.fade, reduceMotion: reduceMotion), value: restTimerStore.isPaused)
         .accessibilityLabel("Rest timer")
+    }
+
+    @ViewBuilder
+    private var restTimerTopBarLabel: some View {
+        if let remaining = restTimerStore.restTimerRemainingTime {
+            Text(restTimerCountdownText(remaining))
+                .font(.liteweightMetric(.subheadline, weight: .semibold))
+                .fixedSize(horizontal: true, vertical: false)
+                .foregroundStyle(restTimerTint)
+                .contentTransition(reduceMotion ? .opacity : .numericText())
+                .animation(LiteweightMotion.preferred(LiteweightMotion.snappy, reduceMotion: reduceMotion), value: Int(remaining))
+                .padding(.horizontal, 10)
+                .accessibilityValue(remaining <= 0 ? "Finished" : restTimerTimeText(remaining))
+        } else {
+            Image(systemName: "timer")
+                .font(.body.weight(.semibold))
+                .foregroundStyle(LiteweightTheme.metricTime)
+                .frame(width: 32, height: 32)
+        }
+    }
+
+    private var restTimerIsCounting: Bool {
+        !restTimerStore.isPaused && restTimerStore.restTimerEnd != nil
+            && (restTimerStore.restTimerRemainingTime ?? 0) > 0
     }
 
     /// Paused rest keeps the warning tint so it reads differently from a live countdown.
@@ -1342,83 +1365,100 @@ struct CurrentWorkoutView: View {
         let sets = collapsedSets
         let volumeTitle = workoutVolumeTitle
         let setCount = workout.numberOfCompletedSets ?? 0
-        return TimelineView(.periodic(from: Date(), by: 1)) { context in
-            let durationTitle = workoutDurationTitle
-            // The clock already redraws this pill every second, so reading the store
-            // here adds no sensor invalidation to the rest of the logger.
-            let metrics = watchConnection.liveMetrics.latest.flatMap { $0.workoutID == workout.uuid ? $0 : nil }
-            let heartRate = metrics?.currentHeartRate(at: context.date)
-                .map { $0.formatted(.number.precision(.fractionLength(0))) }
-            let energy = metrics?.currentActiveEnergy(at: context.date)
-                .map { $0.formatted(.number.precision(.fractionLength(0))) }
-            let hasVitals = heartRate != nil || energy != nil
-            Button(action: { setSessionHeaderCollapsed(false) }) {
-                HStack(spacing: 8) {
-                    Circle()
-                        .fill(.tint)
-                        .frame(width: 7, height: 7)
+        return Button(action: { setSessionHeaderCollapsed(false) }) {
+            HStack(spacing: 8) {
+                Circle()
+                    .fill(.tint)
+                    .frame(width: 7, height: 7)
 
-                    if usesAccessibilityHeaderLayout {
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text(durationTitle)
-                                .font(.liteweightMetric(.subheadline, weight: .semibold))
-                                .foregroundStyle(LiteweightTheme.metricTime)
-                            volume
-                            sets
-                            if hasVitals {
-                                collapsedVitals(heartRate: heartRate, energy: energy)
-                            }
-                        }
-                        .lineLimit(1)
-                        .minimumScaleFactor(0.85)
-                        .padding(.vertical, 8)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                    } else {
-                        // The vitals replace the dots so the row doesn't reflow as numbers grow.
-                        // If the type is too large for them, they give way to the expanded header.
-                        // Only the row meant to show carries the morph IDs, so the two
-                        // candidates never both claim them.
-                        ViewThatFits(in: .horizontal) {
-                            if hasVitals {
-                                collapsedSummaryRow(durationTitle, volume: volume, sets: sets,
-                                                    heartRate: heartRate, energy: energy, showsDots: false, morphs: true)
-                            }
-                            collapsedSummaryRow(durationTitle, volume: volume, sets: sets,
-                                                heartRate: nil, energy: nil, showsDots: true, morphs: !hasVitals)
-                        }
-                        // A Spacer here would take half the row from the fit test.
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                    }
+                collapsedSummaryContent(volume: volume, sets: sets)
 
-                    Image(systemName: "chevron.down")
-                        .font(.caption.weight(.semibold))
-                        .foregroundStyle(.tint)
-                }
-                .font(.caption)
-                .contentTransition(reduceMotion ? .opacity : .numericText())
-                .animation(LiteweightMotion.preferred(LiteweightMotion.snappy, reduceMotion: reduceMotion), value: volumeTitle)
-                .animation(LiteweightMotion.preferred(LiteweightMotion.snappy, reduceMotion: reduceMotion), value: setCount)
-                .animation(LiteweightMotion.preferred(LiteweightMotion.snappy, reduceMotion: reduceMotion), value: heartRate)
-                .animation(LiteweightMotion.preferred(LiteweightMotion.snappy, reduceMotion: reduceMotion), value: energy)
-                .padding(.horizontal, 14)
-                .frame(maxWidth: .infinity, minHeight: 46)
-                .contentShape(Capsule(style: .continuous))
+                Image(systemName: "chevron.down")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(.tint)
             }
-            .buttonStyle(.plain)
-            // The opaque backing prevents labels in scrolling cards bleeding through.
-            .background(LiteweightTheme.surface, in: Capsule(style: .continuous))
-            .liteweightLiquidGlassPill(tint: .clear)
-            .clipShape(Capsule(style: .continuous))
-            .shadow(color: LiteweightTheme.outline.opacity(0.16), radius: 16, x: 0, y: 7)
-            .accessibilityLabel("Expand workout summary")
-            .accessibilityValue(
-                ["\(durationTitle), \(volumeTitle), \(setCount) \(setCount == 1 ? "set" : "sets")",
-                 heartRate.map { "\($0) beats per minute" },
-                 energy.map { "\($0) active kilocalories" }]
-                    .compactMap { $0 }
-                    .joined(separator: ", ")
-            )
+            .font(.caption)
+            .contentTransition(reduceMotion ? .opacity : .numericText())
+            .animation(LiteweightMotion.preferred(LiteweightMotion.snappy, reduceMotion: reduceMotion), value: volumeTitle)
+            .animation(LiteweightMotion.preferred(LiteweightMotion.snappy, reduceMotion: reduceMotion), value: setCount)
+            .padding(.horizontal, 14)
+            .frame(maxWidth: .infinity, minHeight: 46)
+            .contentShape(Capsule(style: .continuous))
         }
+        .buttonStyle(.plain)
+        // The opaque backing prevents labels in scrolling cards bleeding through.
+        .background(LiteweightTheme.surface, in: Capsule(style: .continuous))
+        .liteweightLiquidGlassPill(tint: .clear)
+        .clipShape(Capsule(style: .continuous))
+        .shadow(color: LiteweightTheme.outline.opacity(0.16), radius: 16, x: 0, y: 7)
+        .accessibilityRepresentation {
+            TimelineView(.periodic(from: .now, by: 1)) { context in
+                let vitals = collapsedSummaryVitals(at: context.date)
+                Button("Expand workout summary", action: { setSessionHeaderCollapsed(false) })
+                    .accessibilityValue(
+                        ["\(workoutDurationTitle), \(volumeTitle), \(setCount) \(setCount == 1 ? "set" : "sets")",
+                         vitals.heartRate.map { "\($0) beats per minute" },
+                         vitals.energy.map { "\($0) active kilocalories" }]
+                            .compactMap { $0 }
+                            .joined(separator: ", ")
+                    )
+            }
+        }
+    }
+
+    /// Fresh vitals choose the fit layout; the model's metric views are already built.
+    private func collapsedSummaryContent(volume: LiteweightMetricValue, sets: LiteweightMetricValue) -> some View {
+        TimelineView(.periodic(from: .now, by: 1)) { context in
+            let durationTitle = workoutDurationTitle
+            let (heartRate, energy) = collapsedSummaryVitals(at: context.date)
+            let hasVitals = heartRate != nil || energy != nil
+
+            Group {
+                if usesAccessibilityHeaderLayout {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(durationTitle)
+                            .font(.liteweightMetric(.subheadline, weight: .semibold))
+                            .foregroundStyle(LiteweightTheme.metricTime)
+                            .contentTransition(.identity)
+                        volume
+                        sets
+                        if hasVitals {
+                            collapsedVitals(heartRate: heartRate, energy: energy)
+                        }
+                    }
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.85)
+                    .padding(.vertical, 8)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                } else {
+                    // The vitals replace the dots so the row doesn't reflow as numbers grow.
+                    // If the type is too large for them, they give way to the expanded header.
+                    // Only the row meant to show carries the morph IDs, so the two
+                    // candidates never both claim them.
+                    ViewThatFits(in: .horizontal) {
+                        if hasVitals {
+                            collapsedSummaryRow(durationTitle, volume: volume, sets: sets,
+                                                heartRate: heartRate, energy: energy, showsDots: false, morphs: true)
+                        }
+                        collapsedSummaryRow(durationTitle, volume: volume, sets: sets,
+                                            heartRate: nil, energy: nil, showsDots: true, morphs: !hasVitals)
+                    }
+                    // A Spacer here would take half the row from the fit test.
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                }
+            }
+            .animation(LiteweightMotion.preferred(LiteweightMotion.snappy, reduceMotion: reduceMotion), value: heartRate)
+            .animation(LiteweightMotion.preferred(LiteweightMotion.snappy, reduceMotion: reduceMotion), value: energy)
+        }
+    }
+
+    private func collapsedSummaryVitals(at date: Date) -> (heartRate: String?, energy: String?) {
+        let metrics = watchConnection.liveMetrics.latest.flatMap { $0.workoutID == workout.uuid ? $0 : nil }
+        let heartRate = metrics?.currentHeartRate(at: date)
+            .map { $0.formatted(.number.precision(.fractionLength(0))) }
+        let energy = metrics?.currentActiveEnergy(at: date)
+            .map { $0.formatted(.number.precision(.fractionLength(0))) }
+        return (heartRate, energy)
     }
 
     private func collapsedSummaryRow(
@@ -1434,6 +1474,7 @@ struct CurrentWorkoutView: View {
             Text(durationTitle)
                 .font(.liteweightMetric(.subheadline, weight: .semibold))
                 .foregroundStyle(LiteweightTheme.metricTime)
+                .contentTransition(.identity)
                 .summaryMorph(morphs ? "duration" : nil, in: summaryMorph)
             if showsDots { collapsedSummaryDot }
             volume
@@ -2290,30 +2331,39 @@ struct CurrentWorkoutView: View {
         }
     }
 
+    @ViewBuilder
     private var activeRestTimerStrip: some View {
-        TimelineView(.periodic(from: .now, by: 1)) { _ in
-            let remaining = restTimerStore.restTimerRemainingTime ?? 0
-            let duration = restTimerStore.restTimerDuration ?? 0
-            let countdown = restTimerCountdownText(remaining)
-
-            ViewThatFits(in: .horizontal) {
-                HStack(spacing: 8) {
-                    activeRestTimerReadout(remaining: remaining, duration: duration, countdown: countdown)
-                    activeRestTimerControls
-                }
-                VStack(alignment: .leading, spacing: 8) {
-                    activeRestTimerReadout(remaining: remaining, duration: duration, countdown: countdown)
-                    activeRestTimerControls
-                }
+        if restTimerIsCounting {
+            TimelineView(.periodic(from: .now, by: 1)) { _ in
+                activeRestTimerStripContent
             }
-            .padding(8)
-            .frame(maxWidth: .infinity)
-            .background(
-                restTimerStore.isPaused ? LiteweightTheme.warning.opacity(0.18) : LiteweightTheme.metricTimeContainer,
-                in: RoundedRectangle(cornerRadius: LiteweightTheme.heroCornerRadius, style: .continuous)
-            )
-            .animation(LiteweightMotion.preferred(LiteweightMotion.fade, reduceMotion: reduceMotion), value: restTimerStore.isPaused)
+        } else {
+            activeRestTimerStripContent
         }
+    }
+
+    private var activeRestTimerStripContent: some View {
+        let remaining = restTimerStore.restTimerRemainingTime ?? 0
+        let duration = restTimerStore.restTimerDuration ?? 0
+        let countdown = restTimerCountdownText(remaining)
+
+        return ViewThatFits(in: .horizontal) {
+            HStack(spacing: 8) {
+                activeRestTimerReadout(remaining: remaining, duration: duration, countdown: countdown)
+                activeRestTimerControls
+            }
+            VStack(alignment: .leading, spacing: 8) {
+                activeRestTimerReadout(remaining: remaining, duration: duration, countdown: countdown)
+                activeRestTimerControls
+            }
+        }
+        .padding(8)
+        .frame(maxWidth: .infinity)
+        .background(
+            restTimerStore.isPaused ? LiteweightTheme.warning.opacity(0.18) : LiteweightTheme.metricTimeContainer,
+            in: RoundedRectangle(cornerRadius: LiteweightTheme.heroCornerRadius, style: .continuous)
+        )
+        .animation(LiteweightMotion.preferred(LiteweightMotion.fade, reduceMotion: reduceMotion), value: restTimerStore.isPaused)
     }
 
     private func activeRestTimerReadout(remaining: TimeInterval, duration: TimeInterval, countdown: String) -> some View {
@@ -2430,7 +2480,7 @@ struct CurrentWorkoutView: View {
     /// label is static, so idle exercises don't re-evaluate on the clock (build 130).
     @ViewBuilder
     private func exerciseRestButton(for workoutExercise: WorkoutExercise, idleTint: Color) -> some View {
-        if activeRestTimerExercise?.objectID == workoutExercise.objectID, restTimerStore.restTimerRemainingTime != nil {
+        if activeRestTimerExercise?.objectID == workoutExercise.objectID, restTimerIsCounting {
             TimelineView(.periodic(from: .now, by: 1)) { _ in
                 exerciseRestButtonContent(for: workoutExercise, idleTint: idleTint)
             }
@@ -4108,22 +4158,12 @@ private struct FinishPlateConfetti: View {
 
     var body: some View {
         if !isDone {
-            TimelineView(.animation) { timeline in
-                Canvas { context, size in
-                    let elapsed = Self.heldElapsed ?? timeline.date.timeIntervalSince(start)
-                    let fall = size.height * 0.4
-                    for piece in Self.pieces {
-                        let t = elapsed - piece.delay
-                        let progress = t / (Self.duration - piece.delay)
-                        guard t > 0, progress < 1 else { continue }
-                        var plate = context
-                        plate.opacity = progress > 0.7 ? (1 - progress) / 0.3 : 1
-                        plate.translateBy(x: CGFloat(piece.x) * size.width + CGFloat(sin(t * piece.sway) * piece.drift),
-                                          y: -16 + CGFloat(progress * piece.travel) * fall)
-                        plate.rotate(by: .radians(t * piece.spin))
-                        let rect = CGRect(x: -piece.size.width / 2, y: -piece.size.height / 2,
-                                          width: piece.size.width, height: piece.size.height)
-                        plate.fill(Path(roundedRect: rect, cornerRadius: 1.5), with: .color(piece.color))
+            Group {
+                if let elapsed = Self.heldElapsed {
+                    confettiCanvas(elapsed: elapsed)
+                } else {
+                    TimelineView(.animation) { timeline in
+                        confettiCanvas(elapsed: timeline.date.timeIntervalSince(start))
                     }
                 }
             }
@@ -4133,6 +4173,25 @@ private struct FinishPlateConfetti: View {
                 guard Self.heldElapsed == nil else { return }
                 try? await Task.sleep(for: .seconds(Self.duration + 0.1))
                 isDone = true
+            }
+        }
+    }
+
+    private func confettiCanvas(elapsed: TimeInterval) -> some View {
+        Canvas { context, size in
+            let fall = size.height * 0.4
+            for piece in Self.pieces {
+                let t = elapsed - piece.delay
+                let progress = t / (Self.duration - piece.delay)
+                guard t > 0, progress < 1 else { continue }
+                var plate = context
+                plate.opacity = progress > 0.7 ? (1 - progress) / 0.3 : 1
+                plate.translateBy(x: CGFloat(piece.x) * size.width + CGFloat(sin(t * piece.sway) * piece.drift),
+                                  y: -16 + CGFloat(progress * piece.travel) * fall)
+                plate.rotate(by: .radians(t * piece.spin))
+                let rect = CGRect(x: -piece.size.width / 2, y: -piece.size.height / 2,
+                                  width: piece.size.width, height: piece.size.height)
+                plate.fill(Path(roundedRect: rect, cornerRadius: 1.5), with: .color(piece.color))
             }
         }
     }
@@ -4615,19 +4674,14 @@ struct InlineWorkoutSetRow: View {
     @ViewBuilder
     private var durationControl: some View {
         if settingsStore.inlineSetTimer, !set.isCompleted {
-            TimelineView(.periodic(from: Date(), by: 0.5)) { context in
-                Button {
-                    stepFeedback += 1
-                    toggleInlineTimer()
-                } label: {
-                    durationLabel(
-                        text: inlineTimerText(now: context.date),
-                        isRunning: inlineTimerStart != nil
-                    )
+            Group {
+                if let start = inlineTimerStart {
+                    TimelineView(.periodic(from: start, by: 1)) { context in
+                        inlineTimerButton(now: context.date)
+                    }
+                } else {
+                    inlineTimerButton(now: .now)
                 }
-                .buttonStyle(.plain)
-                .accessibilityLabel(inlineTimerStart == nil ? "Start set timer" : "Stop set timer")
-                .accessibilityValue(inlineTimerText(now: context.date))
             }
             .contextMenu {
                 Button("Enter Duration", systemImage: "keyboard") { showingDurationPicker = true }
@@ -4645,6 +4699,18 @@ struct InlineWorkoutSetRow: View {
         }
     }
 
+    private func inlineTimerButton(now: Date) -> some View {
+        Button {
+            stepFeedback += 1
+            toggleInlineTimer()
+        } label: {
+            durationLabel(text: inlineTimerText(now: now), isRunning: inlineTimerStart != nil)
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(inlineTimerStart == nil ? "Start set timer" : "Stop set timer")
+        .accessibilityValue(inlineTimerText(now: now))
+    }
+
     private func durationLabel(text: String, isRunning: Bool) -> some View {
         HStack(spacing: InlineWorkoutSetLayout.spacing) {
             if trackingType.columns.count == 1 || isRunning {
@@ -4659,8 +4725,8 @@ struct InlineWorkoutSetRow: View {
                 .foregroundColor(valueColor)
                 .lineLimit(1)
                 .minimumScaleFactor(0.85)
-                .contentTransition(reduceMotion ? .opacity : .numericText())
-                .animation(LiteweightMotion.preferred(LiteweightMotion.snappy, reduceMotion: reduceMotion), value: text)
+                .contentTransition(isRunning ? .identity : reduceMotion ? .opacity : .numericText())
+                .animation(isRunning ? nil : LiteweightMotion.preferred(LiteweightMotion.snappy, reduceMotion: reduceMotion), value: text)
         }
         .frame(maxWidth: .infinity, minHeight: InlineWorkoutSetLayout.visualHeight)
     }

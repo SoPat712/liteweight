@@ -1,4 +1,5 @@
 import XCTest
+import Dispatch
 @testable import liteweight
 
 final class LoggerAssistTests: XCTestCase {
@@ -136,6 +137,108 @@ final class LoggerAssistTests: XCTestCase {
             XCTAssertFalse(formatter.usesGroupingSeparator)
             XCTAssertEqual(formatter.string(from: NSNumber(value: 1005)), "1005")
         }
+    }
+
+    func testCachedWeightFormattersMatchFreshFormattersAcrossUnitsAndLocales() {
+        let values: [Double] = [-1234.5678, -0.0, 0, 1.005, 2.5, 1005, 1_234_567.89, .infinity, -.infinity, .nan]
+        for identifier in ["en_US", "de_DE", "fr_FR", "ar_EG", "hi_IN"] {
+            let locale = Locale(identifier: identifier)
+            for unit in WeightUnit.allCases {
+                for grouped in [false, true] {
+                    let expected = freshNumberFormatter(unit: unit, locale: locale, grouped: grouped)
+                    let actual = unit.numberFormatter(locale: locale, grouped: grouped)
+                    for value in values {
+                        let number = NSNumber(value: value)
+                        XCTAssertEqual(actual.string(from: number), expected.string(from: number), identifier)
+                    }
+                    let input = expected.string(from: NSNumber(value: 1234.567)) ?? ""
+                    XCTAssertEqual(actual.number(from: input), expected.number(from: input), identifier)
+                }
+                let expected = freshMeasurementFormatter(unit: unit, locale: locale)
+                let actual = unit.formatter(locale: locale)
+                for source in WeightUnit.allCases {
+                    for value in values {
+                        let measurement = Measurement(value: value, unit: source.unit).converted(to: unit.unit)
+                        let text = expected.string(from: measurement)
+                        XCTAssertEqual(actual.string(from: measurement), text, identifier)
+                        for _ in 0..<2 {
+                            XCTAssertEqual(WeightUnit.format(weight: value, from: source, to: unit, locale: locale),
+                                           text, identifier)
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    func testCallerFormatterChangesDoNotAffectOtherReads() {
+        for unit in WeightUnit.allCases {
+            let entry = unit.numberFormatter
+            let display = unit.displayNumberFormatter
+            let measurement = unit.formatter
+            entry.locale = Locale(identifier: "de_DE")
+            entry.minimumFractionDigits = 5
+            entry.maximumFractionDigits = 5
+            display.numberStyle = .scientific
+            display.usesGroupingSeparator = false
+            measurement.unitOptions = .naturalScale
+            measurement.unitStyle = .long
+            measurement.numberFormatter.maximumFractionDigits = 1
+
+            let number = NSNumber(value: 1234.567)
+            let expectedEntry = freshNumberFormatter(unit: unit, locale: .current, grouped: false)
+            let expectedDisplay = freshNumberFormatter(unit: unit, locale: .current, grouped: true)
+            let expectedMeasurement = freshMeasurementFormatter(unit: unit, locale: .current)
+            XCTAssertEqual(unit.numberFormatter.string(from: number), expectedEntry.string(from: number))
+            XCTAssertEqual(unit.displayNumberFormatter.string(from: number), expectedDisplay.string(from: number))
+            let value = Measurement(value: number.doubleValue, unit: unit.unit)
+            XCTAssertEqual(unit.formatter.string(from: value), expectedMeasurement.string(from: value))
+            XCTAssertEqual(WeightUnit.format(weight: number.doubleValue, from: unit, to: unit),
+                           expectedMeasurement.string(from: value))
+            XCTAssertEqual(entry.minimumFractionDigits, 5)
+            XCTAssertEqual(display.numberStyle, .scientific)
+            XCTAssertEqual(measurement.numberFormatter.maximumFractionDigits, 1)
+        }
+    }
+
+    func testWeightFormattersSupportConcurrentReadsAndLocaleInvalidation() {
+        let locales = [Locale(identifier: "en_US"), Locale(identifier: "de_DE"), Locale(identifier: "fr_FR")]
+        DispatchQueue.concurrentPerform(iterations: 24) { index in
+            let unit = WeightUnit.allCases[index % WeightUnit.allCases.count]
+            let locale = locales[index % locales.count]
+            let value = Measurement(value: Double(index) + 1234.567, unit: UnitMass.kilograms).converted(to: unit.unit)
+            let expected = self.freshMeasurementFormatter(unit: unit, locale: locale).string(from: value)
+            XCTAssertEqual(WeightUnit.format(weight: value.value, from: unit, to: unit, locale: locale), expected)
+            let copy = unit.formatter(locale: locale)
+            XCTAssertEqual(copy.string(from: value), expected)
+            copy.numberFormatter.maximumFractionDigits = 0
+            if index.isMultiple(of: 4) {
+                NotificationCenter.default.post(name: NSLocale.currentLocaleDidChangeNotification, object: nil)
+            }
+            XCTAssertEqual(WeightUnit.format(weight: value.value, from: unit, to: unit, locale: locale), expected)
+        }
+    }
+
+    private func freshNumberFormatter(unit: WeightUnit, locale: Locale, grouped: Bool) -> NumberFormatter {
+        let formatter = NumberFormatter()
+        formatter.locale = locale
+        formatter.allowsFloats = true
+        formatter.usesGroupingSeparator = false
+        formatter.minimumFractionDigits = unit.minimumFractionDigits
+        formatter.maximumFractionDigits = unit.maximumFractionDigits
+        if grouped {
+            formatter.numberStyle = .decimal
+            formatter.usesGroupingSeparator = true
+        }
+        return formatter
+    }
+
+    private func freshMeasurementFormatter(unit: WeightUnit, locale: Locale) -> MeasurementFormatter {
+        let formatter = MeasurementFormatter()
+        formatter.locale = locale
+        formatter.unitOptions = .providedUnit
+        formatter.numberFormatter = freshNumberFormatter(unit: unit, locale: locale, grouped: true)
+        return formatter
     }
 
     private typealias Values = SetValuePrefill.Values
