@@ -14,6 +14,12 @@ Builds are installed with `~/.local/share/liteweight/tools/install-NN.sh`. Lane 
 
 ## 2026-11-12
 
+### Home sections no longer clip at rounded corners (build 133)
+- **Why:** the owner saw rounded clipping at the top left of Muscle Week and on the "D" of "Dot size shows sets". Build 130 made the cards clear but kept `.insetGrouped`, which still clips each section's rows to rounded corners. The 8 pt top inset from build 130 only hid it on This Week.
+- **What:** Home's `List` is `.grouped`, which has square, full-width sections. Rows set only vertical insets through `homeRowInsets` and keep the list's side margins, which match the large title; before iOS 26 they use 16 pt.
+- **Where:** `liteweight/UI/Feed/FeedView.swift`, DESIGN_SYSTEM §15.2.
+- **Roll back:** revert this build's commit.
+
 ### Nothing ticks unless it's counting (build 132)
 - **Asked:** "This app needs to be promotion supporting and not hitch!" and "just want it 120fps with no hitching!"
 - **Found:** the Workout tab summary still rolled elapsed digits, stopped set stopwatches ticked twice a second, and paused/finished rest controls kept timelines alive. Collapsed pills and tab accessories refreshed whole surfaces every second; a DEBUG metrics timer accumulated across appearances, and held confetti kept an animation timeline running.

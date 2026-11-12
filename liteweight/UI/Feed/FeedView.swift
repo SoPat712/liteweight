@@ -138,8 +138,7 @@ struct FeedView : View {
             .modifier(HomeCardAccessibilitySummary(title: title,
                 value: weekCardAccessibilityValue(card, summary: summary, isFirstWeekCard: isFirstWeekCard),
                 isSummary: card == .rings, edit: cardEdit(card)))
-            // The list still clips a section's rounded corners; 8 pt keeps the title out of them.
-            .listRowInsets(EdgeInsets(top: 8, leading: 0, bottom: 8, trailing: 0))
+            .homeRowInsets()
             .listRowBackground(Color.clear)
             .listRowSeparator(.hidden)
             if card == .bars {
@@ -597,7 +596,7 @@ struct FeedView : View {
                         points: chart.points, selectedDate: Binding(
                             get: { selectedPinnedDates[chart.pin] },
                             set: { selectedPinnedDates[chart.pin] = $0 }))
-                        .listRowInsets(EdgeInsets(top: 12, leading: 0, bottom: 12, trailing: 0))
+                        .homeRowInsets(12)
                         .accessibilityHidden(true)
                 }
                 Button { showingChartSelector = true } label: {
@@ -1059,7 +1058,8 @@ struct FeedView : View {
         }
         .modifier(HomeCardAccessibilityContainer())
         .listRowBackground(Color.clear)
-        .listRowInsets(EdgeInsets(top: 8, leading: 0, bottom: 8, trailing: 0))
+        .homeRowInsets()
+        .listSectionSeparator(.hidden)
     }
 
     private func updateCards(_ change: (inout [HomeSection]) -> Void) {
@@ -1134,12 +1134,14 @@ struct FeedView : View {
                 if historyStore.isLoading && completedWorkouts.isEmpty {
                     Section { ProgressView("Loading Training…") }
                         .listRowBackground(Color.clear)
-                        .listRowInsets(EdgeInsets(top: 8, leading: 0, bottom: 8, trailing: 0))
+                        .homeRowInsets()
+                        .listSectionSeparator(.hidden)
                 }
                 if let error = historyStore.error {
                     Section { Button("Retry Loading Training") { historyStore.refresh() } } footer: { Text(error) }
                         .listRowBackground(Color.clear)
-                        .listRowInsets(EdgeInsets(top: 8, leading: 0, bottom: 8, trailing: 0))
+                        .homeRowInsets()
+                        .listSectionSeparator(.hidden)
                 }
                 // Pinned Charts waits for a pin (made from an exercise's chart) instead of showing empty.
                 let cards = homeCards.filter { $0 != .pinned || !pinnedChartsStore.pinnedCharts.isEmpty }
@@ -1150,7 +1152,8 @@ struct FeedView : View {
                         groupSets: summary.weekGroupSets, workouts: summary.workouts,
                         ringsClosed: summary.ringsClosed(goals: ringGoals), streak: trainingStreak)))
                         .listRowBackground(Color.clear)
-                        .listRowInsets(EdgeInsets(top: 8, leading: 0, bottom: 8, trailing: 0))
+                        .homeRowInsets()
+                        .listSectionSeparator(.hidden)
                 }
                 if let week = lastWeekRecapWeek(summary) {
                     lastWeekRecapSection(summary, week: week)
@@ -1160,19 +1163,24 @@ struct FeedView : View {
                     Section {
                         TipView(EditHomeTip(generation: tipGeneration))
                             .tipBackground(Color.clear)
-                            .listRowInsets(EdgeInsets())
+                            .homeRowInsets(0)
                     }
                     .listRowBackground(Color.clear)
+                    .listSectionSeparator(.hidden)
                 }
                 ForEach(cards) { section in
                     homeSection(section, summary: summary, isFirstWeekCard: section == firstWeekCard)
                         .modifier(HomeCardAccessibilityContainer(isSingleElement: section == .muscles))
                         .contextMenu { cardActions(section) }
                         .listRowBackground(Color.clear)
-                        .listRowInsets(EdgeInsets(top: 8, leading: 0, bottom: 8, trailing: 0))
+                        .homeRowInsets()
+                        // A grouped list draws edge-to-edge lines above and below each section.
+                        .listSectionSeparator(.hidden)
                 }
             }
-            .listStyle(.insetGrouped)
+            // Grouped, not inset grouped: inset sections clip their rows to rounded corners, which
+            // cut into titles and footnotes once the cards were gone (build 133).
+            .listStyle(.grouped)
             .scrollContentBackground(.hidden)
             .background(LiteweightTheme.homeBackground)
             .listSectionSpacing(28)
@@ -1229,6 +1237,19 @@ private struct OptionalStaggeredEntrance: ViewModifier {
 
     @ViewBuilder func body(content: Content) -> some View {
         if let index { content.liteweightStaggeredEntrance(index: index) } else { content }
+    }
+}
+
+private extension View {
+    /// Home's rows keep the list's own side margins, which line up with the large title, and set
+    /// only the space above and below. Before iOS 26 they can't, so they use 16 pt, most iPhones' margin.
+    @ViewBuilder
+    func homeRowInsets(_ vertical: CGFloat = 8) -> some View {
+        if #available(iOS 26.0, *) {
+            listRowInsets(.vertical, vertical)
+        } else {
+            listRowInsets(EdgeInsets(top: vertical, leading: 16, bottom: vertical, trailing: 16))
+        }
     }
 }
 

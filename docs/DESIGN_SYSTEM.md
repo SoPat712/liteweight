@@ -766,12 +766,14 @@ buttons on the right.
 Board: *Round 3 → Home*, revised 2026-11-02 to read like Fitness and Health, then made
 customizable like Fitness's Edit Summary. Build 130 opens the page: sections sit directly on
 `homeBackground` (`systemBackground`, white in light and black in dark), without card containers.
-Home keeps its `.insetGrouped` `List` for section spacing, swipe actions and context menus, but
+Home uses a `.grouped` `List` (build 133) for section spacing, swipe actions and context menus,
 hides the scroll background and makes every row background clear, including Last Week, the
-voice line, tips, loading and errors. Tips also have a clear TipKit background. Every Home row
-has zero leading/trailing insets so content aligns with the large Home title and its matching
-trailing margin; existing vertical insets stay (8 pt when unset, 12 pt for pinned charts, zero
-for week views and tips). Week views have no outer 16 pt padding or rounded surface.
+voice line, tips, loading and errors. Not `.insetGrouped`: inset sections clip their rows to
+rounded corners even with clear backgrounds, which cut into titles and footnotes. Tips also have
+a clear TipKit background. Home rows set only vertical insets (`homeRowInsets`: 8 pt, 12 pt for
+pinned charts, zero for tips) and keep the list's own side margins, which line up with the large
+Home title; before iOS 26 they fall back to 16 pt. Week views have no outer 16 pt padding or
+rounded surface.
 Sections have 28 pt spacing; titles use `.title2.bold()`, `primaryText` and no text case.
 Multi-row sections keep native hairline separators aligned to content, with header separators
 hidden and no trailing separator after the last row. No Home section draws a `surface` or
