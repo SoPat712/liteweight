@@ -41,6 +41,12 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
         LiteweightSegmentedAppearance.apply()
 
         #if DEBUG
+        if ProcessInfo.processInfo.arguments.contains("-liteweightFrameMeterReset") {
+            LiteweightFrameMeter.shared.reset()
+        }
+        if ProcessInfo.processInfo.arguments.contains("-liteweightFrameMeter") {
+            LiteweightFrameMeter.shared.start()
+        }
         seedSampleDataIfRequested()
         if ProcessInfo.processInfo.arguments.contains("-liteweightRunImportedDataSmokeCheck") {
             Task { await LiteweightImportedDataSmokeCheck.run() }

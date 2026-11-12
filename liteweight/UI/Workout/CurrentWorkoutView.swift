@@ -27,6 +27,19 @@ private struct PersonalRecordBanner: Identifiable, Equatable {
 private enum LoggerAssistDemoState {
     static var preparedWorkouts = Set<NSManagedObjectID>()
 }
+
+@MainActor
+private enum LoggerAnimationTourState {
+    static var startedWorkouts = Set<NSManagedObjectID>()
+}
+
+private let loggerAnimationTourCommand = Notification.Name("liteweightTourCommand")
+
+@MainActor
+private final class LoggerAnimationTourReply {
+    var action: (@MainActor () -> Void)?
+    var skipReason = "target row is unavailable"
+}
 #endif
 
 /// Sensor ticks invalidate only this row, not the sets, charts or muscle paths.
@@ -318,6 +331,9 @@ struct CurrentWorkoutView: View {
         enum Target: Equatable {
             case object(NSManagedObjectID)
             case restStrip
+            #if DEBUG
+            case tourTop
+            #endif
         }
 
         let id = UUID()
@@ -509,6 +525,9 @@ struct CurrentWorkoutView: View {
                                         // group required a second, competing materialization scroll.
                                         VStack(spacing: 0) {
                                             workoutMetadata
+                                                #if DEBUG
+                                                .id("liteweight-tour-top")
+                                                #endif
 
                                             if workoutExercises.isEmpty {
                                                 emptyWorkoutState
@@ -706,6 +725,9 @@ struct CurrentWorkoutView: View {
             #endif
             applyIdleTimerPreference()
         }
+        #if DEBUG
+        .task { await runAnimationTourIfRequested() }
+        #endif
         .onDisappear {
             #if DEBUG
             inspectionMetricsTimer?.invalidate()
@@ -771,6 +793,166 @@ struct CurrentWorkoutView: View {
     }
 
     #if DEBUG
+    @MainActor
+    private func runAnimationTourIfRequested() async {
+        let arguments = ProcessInfo.processInfo.arguments
+        guard arguments.contains("-liteweightAnimationTour"),
+              !LoggerAnimationTourState.startedWorkouts.contains(workout.objectID) else { return }
+        LoggerAnimationTourState.startedWorkouts.insert(workout.objectID)
+        var repeats = 4
+        if let index = arguments.firstIndex(of: "-liteweightAnimationTourRepeats"),
+           arguments.indices.contains(index + 1) {
+            if let value = Int(arguments[index + 1]), value > 0 {
+                repeats = value
+            } else {
+                print("FRAMEMETER TOUR invalid repeat count; using 4")
+            }
+        }
+
+        do {
+            try await Task.sleep(for: .seconds(3))
+            for index in 0..<repeats {
+                try Task.checkCancellation()
+                guard !workout.isDeleted, workout.isCurrentWorkout else {
+                    print("FRAMEMETER TOUR SKIP remaining steps: workout is no longer active")
+                    break
+                }
+                print("FRAMEMETER TOUR repeat \(index + 1)/\(repeats)")
+                try await runAnimationTourSetSteps()
+                try await runAnimationTourSheetSteps()
+            }
+            LiteweightFrameMeter.shared.flush()
+            print("FRAMEMETER TOUR DONE")
+        } catch {
+            LiteweightFrameMeter.shared.end()
+            LiteweightFrameMeter.shared.flush()
+            print("FRAMEMETER TOUR CANCELLED")
+        }
+    }
+
+    @MainActor
+    private func runAnimationTourStep(
+        _ label: String, milliseconds: Double, action: @MainActor () -> Void
+    ) async throws {
+        try Task.checkCancellation()
+        LiteweightFrameMeter.shared.begin(label)
+        action()
+        do {
+            try await Task.sleep(for: LiteweightMotion.duration(milliseconds: milliseconds + 350))
+        } catch {
+            LiteweightFrameMeter.shared.end()
+            throw error
+        }
+        LiteweightFrameMeter.shared.end()
+        try await Task.sleep(for: .milliseconds(600))
+    }
+
+    @MainActor
+    @discardableResult
+    private func runAnimationTourRowStep(_ label: String, set: WorkoutSet, milliseconds: Double) async throws -> Bool {
+        let reply = LoggerAnimationTourReply()
+        NotificationCenter.default.post(
+            name: loggerAnimationTourCommand, object: nil,
+            userInfo: ["command": label, "setID": set.objectID.uriRepresentation().absoluteString, "reply": reply]
+        )
+        guard let action = reply.action else {
+            print("FRAMEMETER TOUR SKIP \(label): \(reply.skipReason)")
+            return false
+        }
+        try await runAnimationTourStep(label, milliseconds: milliseconds, action: action)
+        return true
+    }
+
+    @MainActor
+    private func runAnimationTourSetSteps() async throws {
+        // Use the logger's ordering, including alternating superset rounds.
+        guard let focus = WorkoutSetFocus.next(in: workout),
+              let set = workoutExercises.flatMap({ workoutSets(for: $0) }).first(where: { $0.objectID == focus.setID }) else {
+            print("FRAMEMETER TOUR SKIP openSet, closeSet, logSet, rpeSheetIn, rpeSheetOut, restStripOut, unlog: no incomplete set")
+            return
+        }
+        scrollRequest = LoggerScrollRequest(target: .object(set.objectID))
+        try await Task.sleep(for: LiteweightMotion.duration(milliseconds: 1_000))
+        try await runAnimationTourRowStep("openSet", set: set, milliseconds: 420)
+        try await runAnimationTourRowStep("closeSet", set: set, milliseconds: 420)
+
+        let requestsRPE = settingsStore.logRPE && set.rpeValue == nil && set.tagValue != .warmUp
+        // The row splits this window into rpeSheetIn when it requests the sheet.
+        // Without RPE, include the 530ms close and the 650ms guided scroll.
+        let logged = try await runAnimationTourRowStep("logSet", set: set, milliseconds: requestsRPE ? 950 : 1_180)
+        guard logged, set.isCompleted else {
+            print("FRAMEMETER TOUR SKIP rpeSheetIn, rpeSheetOut, restStripOut, unlog: Log Set was unavailable or did not complete")
+            return
+        }
+        if !requestsRPE {
+            print("FRAMEMETER TOUR SKIP rpeSheetIn: RPE is disabled, already rated, or a warm-up")
+        }
+        try await runAnimationTourRowStep("rpeSheetOut", set: set, milliseconds: 1_070)
+
+        // Undo cancels rest itself. Exercise the strip's actual Skip path first
+        // so restStripOut measures a visible removal rather than an empty window.
+        if isRestPillVisible {
+            try await runAnimationTourStep("restStripOut", milliseconds: 420) {
+                actionFeedback += 1
+                stopActiveRestTimer()
+            }
+        } else {
+            if restTimerStore.restTimerRemainingTime != nil { stopActiveRestTimer() }
+            print("FRAMEMETER TOUR SKIP restStripOut: no visible rest strip (auto-start disabled or rest expired)")
+        }
+        try await runAnimationTourRowStep("unlog", set: set, milliseconds: 650)
+    }
+
+    @MainActor
+    private func runAnimationTourSheetSteps() async throws {
+        guard activeSheet == nil, !showsSetEditorSheet, !showingExerciseSelector, !showingFinishEditor,
+              noteEditor == nil, persistenceError == nil else {
+            print("FRAMEMETER TOUR SKIP sheets, header and scroll: another presentation is still active")
+            return
+        }
+        try await runAnimationTourStep("restSheetIn", milliseconds: 420) {
+            actionFeedback += 1
+            activeSheet = .restTimer
+        }
+        try await runAnimationTourStep("restSheetOut", milliseconds: 420) { activeSheet = nil }
+
+        scrollRequest = LoggerScrollRequest(target: .tourTop)
+        try await Task.sleep(for: LiteweightMotion.duration(milliseconds: 1_000))
+        if isSessionHeaderCollapsed {
+            setSessionHeaderCollapsed(false)
+            try await Task.sleep(for: LiteweightMotion.duration(milliseconds: 770))
+        }
+        try await runAnimationTourStep("headerCollapse", milliseconds: 420) { setSessionHeaderCollapsed(true) }
+        try await runAnimationTourStep("headerExpand", milliseconds: 420) { setSessionHeaderCollapsed(false) }
+
+        try await runAnimationTourStep("addExercisesIn", milliseconds: 420) { showingExerciseSelector = true }
+        try await runAnimationTourStep("addExercisesOut", milliseconds: 420) {
+            showingExerciseSelector = false
+            exercisePendingReplacement = nil
+        }
+        if !workoutExercises.isEmpty {
+            // Include the finish sheet's 2.5s confetti and staggered entrances.
+            try await runAnimationTourStep("finishIn", milliseconds: 2_600) { showingFinishEditor = true }
+            try await runAnimationTourStep("finishOut", milliseconds: 420) { showingFinishEditor = false }
+        } else {
+            print("FRAMEMETER TOUR SKIP finishIn, finishOut: Finish is disabled without exercises")
+        }
+
+        let exercises = workoutExercises.filter { !$0.isDeleted }
+        let focusedExerciseID = WorkoutSetFocus.next(in: workout)?.exerciseID
+        let currentIndex = exercises.firstIndex(where: { $0.objectID == focusedExerciseID }) ?? 0
+        if let next = exercises.dropFirst(currentIndex + 1).first {
+            try await runAnimationTourStep("scrollNextExercise", milliseconds: 650) {
+                scrollRequest = LoggerScrollRequest(target: .object(next.objectID))
+            }
+            try await runAnimationTourStep("scrollTop", milliseconds: 650) {
+                scrollRequest = LoggerScrollRequest(target: .tourTop)
+            }
+        } else {
+            print("FRAMEMETER TOUR SKIP scrollNextExercise, scrollTop: no following exercise")
+        }
+    }
+
     /// Launch with the sample-data flags, then open the active workout. Only
     /// sample sets are changed; production workouts and preferences stay intact.
     @MainActor
@@ -3332,6 +3514,9 @@ struct CurrentWorkoutView: View {
             switch request.target {
             case .object(let id): proxy.scrollTo(id, anchor: .top)
             case .restStrip: proxy.scrollTo("active-rest-strip", anchor: .center)
+            #if DEBUG
+            case .tourTop: proxy.scrollTo("liteweight-tour-top", anchor: .top)
+            #endif
             case nil: break
             }
         }
@@ -4920,6 +5105,18 @@ struct InlineWorkoutSetRow: View {
         .onChange(of: openSwipeSetID.wrappedValue) { _, id in
             if id != set.objectID, !isPerformingSwipeDelete { closeSwipe() }
         }
+        #if DEBUG
+        .onReceive(NotificationCenter.default.publisher(for: loggerAnimationTourCommand)) { notification in
+            prepareAnimationTourCommand(notification)
+        }
+        .onChange(of: showingRPEPicker) { _, presented in
+            if presented, LiteweightFrameMeter.shared.activeLabel == "logSet",
+               ProcessInfo.processInfo.arguments.contains("-liteweightAnimationTour") {
+                LiteweightFrameMeter.shared.end()
+                LiteweightFrameMeter.shared.begin("rpeSheetIn")
+            }
+        }
+        #endif
         .sensoryFeedback(.selection, trigger: stepFeedback) { _, _ in settingsStore.workoutHaptics }
         .sensoryFeedback(.impact(weight: .light), trigger: suggestionFeedback) { _, _ in settingsStore.workoutHaptics }
         .sensoryFeedback(.success, trigger: completionFeedback) { _, _ in settingsStore.workoutHaptics }
@@ -5429,6 +5626,50 @@ struct InlineWorkoutSetRow: View {
         }
         return weights.joined(separator: " + ") + (loadout.loadedSides == .both ? " per side" : " on one side")
     }
+
+    #if DEBUG
+    @MainActor
+    private func prepareAnimationTourCommand(_ notification: Notification) {
+        guard notification.userInfo?["setID"] as? String == set.objectID.uriRepresentation().absoluteString,
+              let command = notification.userInfo?["command"] as? String,
+              let reply = notification.userInfo?["reply"] as? LoggerAnimationTourReply else { return }
+        guard !set.isDeleted else {
+            reply.skipReason = "set was deleted"
+            return
+        }
+        switch command {
+        case "openSet":
+            reply.skipReason = "the current set's focused editor opens automatically; there is no tap-to-open action"
+        case "closeSet":
+            reply.skipReason = "the focused editor has no close/tap-away action; Log Set closes it"
+        case "logSet":
+            guard showsFocusedEditor, !isClosingToLogged, !hidesEditorContents else {
+                reply.skipReason = "this row has no available focused Log Set button"
+                return
+            }
+            reply.action = {
+                LogSetTip(generation: tipGeneration).invalidate(reason: .actionPerformed)
+                toggleCompletion()
+            }
+        case "rpeSheetOut":
+            guard showingRPEPicker else {
+                reply.skipReason = "RPE sheet is not presented"
+                return
+            }
+            // The same binding dismissal as a sheet swipe; onDismiss advances
+            // completion without assigning an RPE or bypassing the guided scroll.
+            reply.action = { showingRPEPicker = false }
+        case "unlog":
+            guard set.isCompleted, !isClosingToLogged, !hidesEditorContents else {
+                reply.skipReason = "set is not completed or its editor is still closing"
+                return
+            }
+            reply.action = toggleCompletion
+        default:
+            reply.skipReason = "unknown row command \(command)"
+        }
+    }
+    #endif
 
     private func toggleCompletion() {
         // A second tap while the row closes would log the set twice.
