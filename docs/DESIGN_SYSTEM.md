@@ -522,6 +522,10 @@ Selected text is `onAccent`; unselected text is `secondaryText`. Both use
 Segments fill the container equally, each with a full 44 pt rectangular tap target. Settings
 rows use 104 pt width at standard text sizes. Use menus at accessibility sizes where segments
 cannot fit. A value matching no segment shows no thumb, as when a rest wheel chooses a custom time.
+In a list row the picker leaves the row separator alone, so a trailing picker (Weight Unit) keeps
+the separator under the row title. Only a picker that fills its row by itself (plate equipment,
+ring goals) adds `.alignmentGuide(.listRowSeparatorLeading) { $0[.leading] }` at the call site, so
+the line starts at the track instead of under the first segment's title (build 128).
 
 The thumb slides with `matchedGeometryEffect` and
 `LiteweightMotion.preferred(LiteweightMotion.snappy, reduceMotion:)`. The component owns the

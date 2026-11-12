@@ -2,20 +2,17 @@ import SwiftUI
 import Charts
 import UIKit
 
-/// Heart rate and active energy from Apple Health for a finished workout.
-/// The section stays hidden when Health has nothing for the workout's window.
+/// Heart rate and active energy from Apple Health for a finished workout, loaded as soon as
+/// the workout opens. The section stays hidden when Health has nothing for the workout's window.
 struct WorkoutVitalsSection: View {
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    @AppStorage("workoutVitals.autoLoad") private var autoLoad = false
 
     let start: Date
     let end: Date
 
     private enum LoadState: Equatable {
-        case notLoaded
         case loading
-        case needsAccess
         case empty
         case loaded(HealthManager.WorkoutVitals)
     }
@@ -26,40 +23,22 @@ struct WorkoutVitalsSection: View {
         let bpm: Double
     }
 
-    @State private var state = LoadState.notLoaded
+    @State private var state = LoadState.loading
     @State private var selectedPointID: Int?
 
     var body: some View {
         Group {
             switch state {
-            case .notLoaded:
-                if autoLoad {
-                    Color.clear.frame(height: 0)
-                } else {
-                    accessPrompt
-                }
             case .loading, .empty:
                 // A real (zero-height) view, so `.task` still runs.
                 Color.clear.frame(height: 0)
-            case .needsAccess:
-                accessPrompt
             case .loaded(let vitals):
                 section { content(vitals) }
             }
         }
         .task(id: [start, end]) {
             selectedPointID = nil
-            #if DEBUG
-            if ProcessInfo.processInfo.arguments.contains("-liteweightDemoVitals") {
-                await load()
-                return
-            }
-            #endif
-            if autoLoad {
-                await load()
-            } else {
-                state = .notLoaded
-            }
+            await load()
         }
     }
 
@@ -69,21 +48,6 @@ struct WorkoutVitalsSection: View {
             .frame(maxWidth: .infinity, alignment: .leading)
             .background(LiteweightTheme.surface, in: RoundedRectangle(cornerRadius: 24, style: .continuous))
             .padding(.top, 12)
-    }
-
-    // MARK: Access
-
-    private var accessPrompt: some View {
-        Button(action: requestAccess) {
-            Label("Show Heart Rate", systemImage: "heart.fill")
-                .font(.subheadline.weight(.semibold))
-                .frame(minHeight: LiteweightTheme.controlHeight)
-        }
-        .buttonStyle(.bordered)
-        .tint(LiteweightTheme.accent)
-        .accessibilityLabel("Show Heart Rate")
-        .accessibilityHint("Reads heart rate and active calories from Apple Health for this workout")
-        .padding(.top, 12)
     }
 
     // MARK: Content
@@ -304,8 +268,10 @@ struct WorkoutVitalsSection: View {
 
     // MARK: Loading
 
+    /// If Apple Health setup never asked for heart rate and energy, asks once here, where they're
+    /// used. A denied or failed request reads as no data, so the section stays hidden.
     @MainActor
-    private func load(requestAccessIfNeeded: Bool = false) async {
+    private func load() async {
         state = .loading
         #if DEBUG
         if ProcessInfo.processInfo.arguments.contains("-liteweightDemoVitals") {
@@ -318,16 +284,12 @@ struct WorkoutVitalsSection: View {
         }
         guard !Task.isCancelled else { return }
         if needsRequest {
-            guard requestAccessIfNeeded else {
-                state = .needsAccess
-                return
-            }
             let result = await withCheckedContinuation { continuation in
                 HealthManager.shared.requestVitalsReadPermission { continuation.resume(returning: $0) }
             }
             guard !Task.isCancelled else { return }
             guard case .success = result else {
-                state = .needsAccess
+                state = .empty
                 return
             }
         }
@@ -335,16 +297,7 @@ struct WorkoutVitalsSection: View {
             HealthManager.shared.fetchWorkoutVitals(start: start, end: end) { continuation.resume(returning: $0) }
         }
         guard !Task.isCancelled else { return }
-        if vitals.isEmpty {
-            state = .empty
-        } else {
-            autoLoad = true
-            state = .loaded(vitals)
-        }
-    }
-
-    private func requestAccess() {
-        Task { await load(requestAccessIfNeeded: true) }
+        state = vitals.isEmpty ? .empty : .loaded(vitals)
     }
 
     #if DEBUG

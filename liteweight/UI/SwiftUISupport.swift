@@ -1656,8 +1656,6 @@ struct LiteweightSegmentedPicker<Value: Hashable>: View {
                 .fill(LiteweightTheme.tertiaryFill)
                 .padding(.vertical, 6)
         }
-        // In a list, the row separator starts at the track, not under the first segment's title.
-        .alignmentGuide(.listRowSeparatorLeading) { $0[.leading] }
         .sensoryFeedback(.selection, trigger: taps) { _, _ in SettingsStore.shared.workoutHaptics }
         .accessibilityRepresentation {
             Picker(title, selection: Binding(get: { selection }, set: { select($0) })) {

@@ -74,7 +74,7 @@
 	<key>LiteweightAppGroupIdentifier</key>
 	<string>$(LITEWEIGHT_APP_GROUP)</string>
 	<key>NSHealthShareUsageDescription</key>
-	<string>liteweight reads your body weight, height, body fat, waist, heart rate, and workout data to keep your training history and measurements in sync.</string>
+	<string>liteweight reads your body weight, height, body fat, waist, heart rate, active calories, and workout data to keep your training history and measurements in sync.</string>
 	<key>NSHealthUpdateUsageDescription</key>
 	<string>liteweight saves completed strength workouts and supported body measurements to Apple Health.</string>
 	<key>NSSupportsLiveActivities</key>

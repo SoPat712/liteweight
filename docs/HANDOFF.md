@@ -172,7 +172,7 @@ band, and hide/reorder for sections. Since then, uncommitted and not yet on a de
 - Add Exercise sheet: the bottom-bar filters are icon-only again (`figure.arms.open`, `dumbbell`, `plus`), tinted accent when a filter is active, matching the Exercises tab.
 - Superset sheet: one-line rows (letter badge + name, then "N sets · Equipment"), a legend plus a wrapping A1 · B1 · A2 chip sequence showing every round, and Save in the toolbar instead of a full-width button.
 - Workout pill: live Watch heart rate and active kcal on the title row (`ActiveWorkoutPillVitals` observes `liveMetrics` on its own); the inline accessory shows heart rate only.
-- Workout detail: a new "Heart Rate" card (`liteweight/UI/History/WorkoutVitalsSection.swift`) reads heart rate samples and summed active energy from Apple Health for the workout's time window: Average, Maximum, Active kcal, plus a line chart with an average rule. It asks for read access the first time and hides itself when Health has no data. In DEBUG, `-liteweightDemoVitals` draws synthetic data.
+- Workout detail: a new "Heart Rate" card (`liteweight/UI/History/WorkoutVitalsSection.swift`) reads heart rate samples and summed active energy from Apple Health for the workout's time window: Average, Maximum, Active kcal, plus a line chart with an average rule. It loads as soon as the workout opens (no Show Heart Rate button since build 128): Apple Health setup asks for heart rate and energy, the card asks once in context if setup never did, and it hides itself when Health has no data. In DEBUG, `-liteweightDemoVitals` draws synthetic data.
 
 ### Round 10, build 48 (2026-10-28, uncommitted)
 

@@ -191,8 +191,9 @@ extension HealthManager {
     }
 
     /// Requests every category liteweight currently exchanges with Apple Health in a
-    /// single, intentional setup step. HealthKit does not reveal read access,
-    /// so the connection state below reflects the categories liteweight can write.
+    /// single, intentional setup step, including heart rate and energy for workout details.
+    /// HealthKit does not reveal read access, so the connection state below reflects the
+    /// categories liteweight can write.
     func requestWorkoutAndBodyMeasurementPermission(
         completion: @escaping (Result<Void, Error>) -> Void
     ) {
@@ -202,7 +203,7 @@ extension HealthManager {
         let readTypes: [HKObjectType] = [workoutType] + quantityTypes.map { $0 as HKObjectType }
         requestPermissions(
             toShare: Set(shareTypes),
-            read: Set(readTypes),
+            read: Set(readTypes).union(vitalsReadTypes),
             completion: completion
         )
     }

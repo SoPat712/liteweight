@@ -1384,6 +1384,8 @@ private struct RingGoalSection: View {
                     .init(value: true, title: "Custom")
                 ])
             .labelsHidden()
+            // The picker fills the row, so the separator starts at its track, not under "Last Week".
+            .alignmentGuide(.listRowSeparatorLeading) { $0[.leading] }
             if goal > 0 {
                 LiteweightStepper.init(value: $goal, in: range, step: step) {
                     LabeledContent("Goal") {

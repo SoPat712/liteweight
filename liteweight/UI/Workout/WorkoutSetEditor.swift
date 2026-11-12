@@ -863,6 +863,8 @@ struct PlateCalculatorView: View {
                 } else {
                     LiteweightSegmentedPicker(title: "Equipment", selection: modeBinding,
                                               segments: PlateCalculatorMode.allCases.map { .init(value: $0, title: $0.title) })
+                    // The picker fills the row, so the separator starts at its track, not under "Bar".
+                    .alignmentGuide(.listRowSeparatorLeading) { $0[.leading] }
                 }
                 if mode != .noBar {
                     weightRow(mode == .bar ? "Bar" : "Starting Weight",

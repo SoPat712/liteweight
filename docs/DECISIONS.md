@@ -14,6 +14,18 @@ Builds are installed with `~/.local/share/liteweight/tools/install-NN.sh`. Lane 
 
 ## 2026-11-12
 
+### Workout heart rate shows without a button (build 128)
+- **Asked:** "Why is there a button for show heart rate, show by default!"
+- **Found:** a workout's Heart Rate card waited behind a Show Heart Rate button until one workout had loaded data, so every workout asked again until then.
+- **Decided:** the card always loads when a workout opens. Apple Health setup (welcome guide and Settings) now asks for heart rate and active energy with everything else; if it never did, the card asks once in context. A denied read or a workout without Health data hides the card. The Health usage text now names active calories.
+- **Roll back:** revert this entry's commit.
+
+### Weight Unit separator back under the title (build 128)
+- **Asked:** a screenshot of Settings › General with "The line?": the separator under Weight Unit started at the switch, not under the title like the rows below.
+- **Found:** build 127 put the separator alignment inside `LiteweightSegmentedPicker`, which is right only when the picker fills its row.
+- **Decided:** the picker no longer sets the separator; the two rows it fills by itself (plate equipment, ring goals) set it at the call site.
+- **Roll back:** revert this entry's commit.
+
 ### One segmented control and one stepper across the app (build 127)
 - **Asked:** "i really dont think that fits the theme! can you please think deeply about this kinda stuff?" After approving the solid blue, switch-height thumb: "restyle eveyrthign to be uniform! over the entire app it is uniform i'm hoping?"
 - **Found:** the large stock Weight Unit picker was taller than its row title, gray selection contradicted blue meaning selection, and stock segments and custom range pills left two selection looks across the app.
