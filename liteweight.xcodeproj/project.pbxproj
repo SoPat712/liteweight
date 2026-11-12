@@ -2616,7 +2616,7 @@
 				CODE_SIGN_ENTITLEMENTS = liteweightIntents/liteweightIntents.entitlements;
 				CODE_SIGN_IDENTITY = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 134;
+				CURRENT_PROJECT_VERSION = 135;
 				DEVELOPMENT_TEAM = CSNM446KVY;
 				INFOPLIST_FILE = liteweightIntents/Info.plist;
 				IPHONEOS_DEPLOYMENT_TARGET = 15.1;
@@ -2643,7 +2643,7 @@
 				CODE_SIGN_ENTITLEMENTS = liteweightIntents/liteweightIntents.entitlements;
 				CODE_SIGN_IDENTITY = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 134;
+				CURRENT_PROJECT_VERSION = 135;
 				DEVELOPMENT_TEAM = CSNM446KVY;
 				INFOPLIST_FILE = liteweightIntents/Info.plist;
 				IPHONEOS_DEPLOYMENT_TARGET = 15.1;
@@ -2671,7 +2671,7 @@
 				CODE_SIGN_ENTITLEMENTS = liteweightIntentsUI/liteweightIntentsUI.entitlements;
 				CODE_SIGN_IDENTITY = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 134;
+				CURRENT_PROJECT_VERSION = 135;
 				DEVELOPMENT_TEAM = CSNM446KVY;
 				INFOPLIST_FILE = liteweightIntentsUI/Info.plist;
 				IPHONEOS_DEPLOYMENT_TARGET = 15.1;
@@ -2698,7 +2698,7 @@
 				CODE_SIGN_ENTITLEMENTS = liteweightIntentsUI/liteweightIntentsUI.entitlements;
 				CODE_SIGN_IDENTITY = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 134;
+				CURRENT_PROJECT_VERSION = 135;
 				DEVELOPMENT_TEAM = CSNM446KVY;
 				INFOPLIST_FILE = liteweightIntentsUI/Info.plist;
 				IPHONEOS_DEPLOYMENT_TARGET = 15.1;
@@ -2844,7 +2844,7 @@
 				"CODE_SIGN_ENTITLEMENTS[sdk=iphonesimulator*]" = liteweight/liteweightSimulator.entitlements;
 				CODE_SIGN_IDENTITY = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 134;
+				CURRENT_PROJECT_VERSION = 135;
 				DEVELOPMENT_TEAM = CSNM446KVY;
 				INFOPLIST_FILE = liteweight/Info.plist;
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
@@ -2869,7 +2869,7 @@
 				CODE_SIGN_ENTITLEMENTS = liteweight/liteweight.entitlements;
 				CODE_SIGN_IDENTITY = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 134;
+				CURRENT_PROJECT_VERSION = 135;
 				DEVELOPMENT_TEAM = CSNM446KVY;
 				INFOPLIST_FILE = liteweight/Info.plist;
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
@@ -2943,7 +2943,7 @@
 				CODE_SIGN_ENTITLEMENTS = "liteweight Watch Extension/liteweight Watch Extension.entitlements";
 				CODE_SIGN_IDENTITY = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 134;
+				CURRENT_PROJECT_VERSION = 135;
 				DEVELOPMENT_TEAM = CSNM446KVY;
 				DEVELOPMENT_ASSET_PATHS = "\"liteweight Watch Extension/Preview Content\"";
 				ENABLE_PREVIEWS = YES;
@@ -2980,7 +2980,7 @@
 				CODE_SIGN_ENTITLEMENTS = "liteweight Watch Extension/liteweight Watch Extension.entitlements";
 				CODE_SIGN_IDENTITY = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 134;
+				CURRENT_PROJECT_VERSION = 135;
 				DEVELOPMENT_TEAM = CSNM446KVY;
 				DEVELOPMENT_ASSET_PATHS = "\"liteweight Watch Extension/Preview Content\"";
 				ENABLE_PREVIEWS = YES;
@@ -3012,7 +3012,7 @@
 				CLANG_ENABLE_OBJC_WEAK = YES;
 				CODE_SIGN_ENTITLEMENTS = "liteweight Watch Extension/liteweight Watch Extension.entitlements";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 134;
+				CURRENT_PROJECT_VERSION = 135;
 				DEVELOPMENT_ASSET_PATHS = "\"liteweight Watch Extension/Preview Content\"";
 				DEVELOPMENT_TEAM = CSNM446KVY;
 				ENABLE_PREVIEWS = YES;
@@ -3049,7 +3049,7 @@
 				CLANG_ENABLE_OBJC_WEAK = YES;
 				CODE_SIGN_ENTITLEMENTS = "liteweight Watch Extension/liteweight Watch Extension.entitlements";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 134;
+				CURRENT_PROJECT_VERSION = 135;
 				DEVELOPMENT_ASSET_PATHS = "\"liteweight Watch Extension/Preview Content\"";
 				DEVELOPMENT_TEAM = CSNM446KVY;
 				ENABLE_PREVIEWS = YES;
@@ -3089,7 +3089,7 @@
 				"CODE_SIGN_ENTITLEMENTS[sdk=iphonesimulator*]" = liteweightWidget/liteweightWidgetSimulator.entitlements;
 				CODE_SIGN_IDENTITY = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 134;
+				CURRENT_PROJECT_VERSION = 135;
 				DEVELOPMENT_TEAM = CSNM446KVY;
 				INFOPLIST_FILE = liteweightWidget/Info.plist;
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
@@ -3119,7 +3119,7 @@
 				CODE_SIGN_ENTITLEMENTS = liteweightWidget/liteweightWidget.entitlements;
 				CODE_SIGN_IDENTITY = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 134;
+				CURRENT_PROJECT_VERSION = 135;
 				DEVELOPMENT_TEAM = CSNM446KVY;
 				INFOPLIST_FILE = liteweightWidget/Info.plist;
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;

@@ -14,6 +14,12 @@ Builds are installed with `~/.local/share/liteweight/tools/install-NN.sh`. Lane 
 
 ## 2026-11-12
 
+### Header morph both ways, idle number boxes, Log Set without Watch rebuilds (build 135)
+- **Asked:** "these 3 animate into the glass pill, but the hr and kcal don't? also none of them animate out! to the big position!" plus the build 134 request for smooth workout animations.
+- **Decided:** heart rate and energy carry `summaryMorph` IDs in the header row and the pill (only when the pill shows that reading), and the header draws above the logger while it expands, so the numbers no longer rise from the pill hidden under the cards. Idle weight/reps/distance boxes in every set row and the open set's big fields draw as text until tapped (30–40 live text fields were re-measured on every layout); tapping mounts the real field with the same keyboard and select-all. Logging sets in the workout in progress no longer rebuilds the Watch's saved-workout library, and the Watch exercise picks are built off the main thread. Add Exercises gives its list at most 40 rows while it slides in and the rest 0.45 s later (not for search, filters or VoiceOver).
+- **Where:** `liteweight/UI/Workout/CurrentWorkoutView.swift`, `liteweight/WatchConnectivity/WatchConnectionManager.swift`, `liteweight/UI/Exercises/AddExercisesSheet.swift`.
+- **Roll back:** revert this build's commit.
+
 ### Workout animations: the logger stops re-laying out everything (build 134)
 - **Asked:** "can you please optimize every animation during the workout itself? like coreanimation if need be? 120 fps? smooth? the animation of opening/closing the active set, timer rolling in, modals coming in, everything?"
 - **Found:** a DEBUG frame meter and animation tour (commit 56fb80a) showed 150–640 ms stalls on almost every logger animation. The logger was one ~3,900-line view: any state change, even a sheet flag, re-evaluated and re-measured every exercise card, set row and text field. A fresh swipe binding made every set row re-evaluate about 2,000 times in two short tours. Idle UIKit text fields (one per exercise) were re-measured and updated on nearly every layout.

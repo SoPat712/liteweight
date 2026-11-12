@@ -278,6 +278,24 @@ class WatchConnectionManager: NSObject, ObservableObject {
         try session.updateApplicationContext(context)
     }
 
+    /// The library holds saved workouts, the catalog and finished workouts. The workout in progress
+    /// reaches the Watch through its live snapshot, so logging its sets doesn't rebuild the library:
+    /// that rebuild blocked the main thread ~100 ms after every Log Set, mid-animation (build 135).
+    private static func affectsLibrary(_ object: NSManagedObject, deleted: Bool) -> Bool {
+        switch object {
+        case let workout as Workout:
+            return deleted || !workout.isCurrentWorkout
+        case let exercise as WorkoutExercise:
+            return deleted || exercise.workout?.isCurrentWorkout != true
+        case let set as WorkoutSet:
+            return deleted || set.workoutExercise?.workout?.isCurrentWorkout != true
+        case is WorkoutPlan, is WorkoutRoutine, is WorkoutRoutineExercise, is WorkoutRoutineSet:
+            return true
+        default:
+            return false
+        }
+    }
+
     private func observeLibraryChanges() {
         librarySaveObserver = NotificationCenter.default.publisher(for: .NSManagedObjectContextDidSave)
             .filter { notification in
@@ -287,9 +305,7 @@ class WatchConnectionManager: NSObject, ObservableObject {
                 }
                 return [NSInsertedObjectsKey, NSUpdatedObjectsKey, NSDeletedObjectsKey].contains { key in
                     (notification.userInfo?[key] as? Set<NSManagedObject>)?.contains {
-                        $0 is Workout || $0 is WorkoutExercise || $0 is WorkoutSet ||
-                        $0 is WorkoutPlan || $0 is WorkoutRoutine ||
-                        $0 is WorkoutRoutineExercise || $0 is WorkoutRoutineSet
+                        Self.affectsLibrary($0, deleted: key == NSDeletedObjectsKey)
                     } == true
                 }
             }
@@ -2076,16 +2092,21 @@ extension WatchConnectionManager {
         let appUnit = SettingsStore.shared.weightUnit
         let wireUnit: WatchWorkoutWeightUnit = appUnit == .imperial ? .pound : .kilogram
         let exerciseCatalog = ExerciseStore.shared.exercises
-        let picks = ExerciseStore.shared.shownExercises.map {
-            WatchExercisePick(id: $0.uuid, name: $0.title, muscle: $0.muscleGroup,
-                              imageURL: $0.imageURL?.absoluteString,
-                              listed: ExerciseStore.shared.isBrowsable($0) ? nil : false,
-                              aliases: Array(Set($0.alias + [$0.originalTitle])).sorted())
-        }
+        // Read the store here; build the picks with the rest of the library off the main thread.
+        // Logging a set updates last-performed dates, which reschedules this, and building ~900
+        // picks here blocked the main thread mid-animation (build 135).
+        let shown = ExerciseStore.shared.shownExercises
+        let unlisted = Set(shown.lazy.filter { !ExerciseStore.shared.isBrowsable($0) }.map(\.uuid))
         let context = WorkoutDataStorage.shared.persistentContainer.newBackgroundContext()
         context.undoManager = nil
         context.perform { [weak self] in
             guard let self else { return }
+            let picks = shown.map {
+                WatchExercisePick(id: $0.uuid, name: $0.title, muscle: $0.muscleGroup,
+                                  imageURL: $0.imageURL?.absoluteString,
+                                  listed: unlisted.contains($0.uuid) ? false : nil,
+                                  aliases: Array(Set($0.alias + [$0.originalTitle])).sorted())
+            }
             do {
                 let routineRequest: NSFetchRequest<WorkoutRoutine> = WorkoutRoutine.fetchRequest()
                 let routines = try context.fetch(routineRequest)

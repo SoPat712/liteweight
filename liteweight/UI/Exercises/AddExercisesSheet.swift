@@ -619,6 +619,7 @@ final class ExerciseCatalogSearch: ObservableObject {
 struct AddExercisesSheet: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+    @Environment(\.accessibilityVoiceOverEnabled) private var voiceOverEnabled
     @EnvironmentObject private var exerciseStore: ExerciseStore
     @ScaledMetric(relativeTo: .subheadline) private var selectionIndicatorSize: CGFloat = 26
 
@@ -635,6 +636,7 @@ struct AddExercisesSheet: View {
     @State private var selectedMuscleGroup: String?
     @State private var selectedEquipment: String?
     @State private var showingAllExercises = false
+    @State private var hasExpandedBrowseList = false
     @State private var detailExercise: Exercise?
     @State private var mediaExercise: Exercise?
     @State private var mediaFeedback = 0
@@ -718,6 +720,12 @@ struct AddExercisesSheet: View {
         let matches = listing.exercises
         let showsRecents = search.isEmpty && selectedMuscleGroup == nil && selectedEquipment == nil
             && !listing.recent.isEmpty
+        let limitsBrowseRows = !hasExpandedBrowseList && !voiceOverEnabled && !UIAccessibility.isVoiceOverRunning
+            && search.isEmpty && selectedMuscleGroup == nil && selectedEquipment == nil && !showingAllExercises
+        let rowLimit = limitsBrowseRows ? min(40, matches.count) : matches.count
+        let recentRows = listing.recentRows.prefix(rowLimit)
+        let remainingRows = listing.remainingRows.prefix(max(0, rowLimit - recentRows.count))
+        let hasDeferredRows = rowLimit < matches.count
         ExercisePickerNavigation {
             List {
                 if selectedMuscleGroup != nil || selectedEquipment != nil {
@@ -731,25 +739,33 @@ struct AddExercisesSheet: View {
                     emptyState
                 } else if showsRecents {
                     Section("Recent") {
-                        ForEach(listing.recentRows) { row in
+                        ForEach(recentRows) { row in
                             exerciseRow(row)
                         }
                     }
 
-                    Section("All Exercises") {
-                        ForEach(listing.remainingRows) { row in
-                            exerciseRow(row)
+                    if !remainingRows.isEmpty || !hasDeferredRows {
+                        Section("All Exercises") {
+                            ForEach(remainingRows) { row in
+                                exerciseRow(row)
+                            }
+                            if !hasDeferredRows {
+                                showMoreRow(count: listing.moreCount)
+                            }
                         }
-                        showMoreRow(count: listing.moreCount)
                     }
                 } else {
                     Section {
-                        ForEach(listing.rows) { row in
+                        ForEach(listing.rows.prefix(rowLimit)) { row in
                             exerciseRow(row)
                         }
-                        showMoreRow(count: listing.moreCount)
+                        if !hasDeferredRows {
+                            showMoreRow(count: listing.moreCount)
+                        }
                     } footer: {
-                        Text("^[\(matches.count) exercise](inflect: true)")
+                        if !hasDeferredRows {
+                            Text("^[\(matches.count) exercise](inflect: true)")
+                        }
                     }
                 }
             }
@@ -791,6 +807,21 @@ struct AddExercisesSheet: View {
             }
         }
         .onAppear { refreshCatalog() }
+        .task {
+            // Keep the full List update past the slide-in on every presentation,
+            // including warm catalog opens. SwiftUI cancels this on dismissal.
+            do {
+                try await Task.sleep(nanoseconds: 450_000_000)
+            } catch {
+                return
+            }
+            guard !Task.isCancelled else { return }
+            var transaction = Transaction(animation: nil)
+            transaction.disablesAnimations = true
+            withTransaction(transaction) {
+                hasExpandedBrowseList = true
+            }
+        }
         .onReceive(NotificationCenter.default.publisher(for: .NSCalendarDayChanged).receive(on: RunLoop.main)) { _ in
             catalogSearch.expireCaptions()
             refreshCatalog()

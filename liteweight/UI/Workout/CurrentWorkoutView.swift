@@ -48,6 +48,8 @@ private struct WorkoutWatchMetricsView: View {
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     let workoutID: UUID?
+    /// Heart rate and energy fly between this row and the collapsed pill like the summary numbers.
+    var morphNamespace: Namespace.ID?
 
     var body: some View {
         TimelineView(.periodic(from: .now, by: 5)) { context in
@@ -66,12 +68,19 @@ private struct WorkoutWatchMetricsView: View {
                     HStack(spacing: 12) {
                         reading(heartRate, unit: "bpm", symbol: "heart.fill", tint: LiteweightTheme.metricHeartRate,
                                 name: "Heart rate", spokenUnit: "beats per minute")
+                            .summaryMorph(morphID("heartRate", when: heartRate), in: morphNamespace)
                         reading(energy, unit: "active kcal", symbol: "flame.fill", tint: LiteweightTheme.metricEnergy,
                                 name: "Estimated active energy", spokenUnit: "active kilocalories")
+                            .summaryMorph(morphID("energy", when: energy), in: morphNamespace)
                     }
                 }
             }
         }
+    }
+
+    /// The pill shows a vital only when it has a reading, so only then is there a partner to fly to.
+    private func morphID(_ id: String, when value: Double?) -> String? {
+        morphNamespace != nil && value != nil ? id : nil
     }
 
     private func reading(_ value: Double?, unit: String, symbol: String, tint: Color,
@@ -605,8 +614,16 @@ struct CurrentWorkoutView: View {
     }
 
     /// Live heart rate and energy while the Watch is in reach.
+    #if DEBUG
+    /// DEBUG `-liteweightSeedWatchVitals` shows made-up Watch heart rate and energy, for screenshots.
+    private static let seedsWatchVitals = ProcessInfo.processInfo.arguments.contains("-liteweightSeedWatchVitals")
+    #endif
+
     private var showsWatchMetrics: Bool {
-        usesWatchForWorkout && watchConnection.isWatchAppInstalled && watchConnection.isReachable
+        #if DEBUG
+        if Self.seedsWatchVitals { return true }
+        #endif
+        return usesWatchForWorkout && watchConnection.isWatchAppInstalled && watchConnection.isReachable
     }
 
     /// Only after 30 s of queued changes for a Watch that's in this workout.
@@ -747,6 +764,9 @@ struct CurrentWorkoutView: View {
                         }
                     }
                     .background(.bar)
+                    // Whichever side the numbers fly to draws on top: the header while it expands
+                    // (otherwise they rose from the pill under the cards), the pill while it collapses.
+                    .zIndex(isSessionHeaderCollapsed ? 0 : 1)
                     ZStack(alignment: .top) {
                         VStack(spacing: 0) {
                             ZStack(alignment: .top) {
@@ -949,6 +969,11 @@ struct CurrentWorkoutView: View {
             WorkoutLiveActivityManager.shared.startOrUpdate(for: workout)
             refreshRecentExerciseSuggestions()
             #if DEBUG
+            if Self.seedsWatchVitals, let id = workout.uuid {
+                watchConnection.liveMetrics.receive(WatchWorkoutMetrics(
+                    workoutID: id, state: .running, heartRate: 128, heartRateDate: Date(),
+                    activeEnergyKilocalories: 212), workoutID: id)
+            }
             if ProcessInfo.processInfo.arguments.contains("-liteweightDemoLoggerAssist") {
                 prepareLoggerAssistDemo()
             }
@@ -1067,11 +1092,14 @@ struct CurrentWorkoutView: View {
                     break
                 }
                 print("FRAMEMETER TOUR repeat \(index + 1)/\(repeats)")
-                // `-liteweightAnimationTourSheetsOnly` repeats just the sheets, header and scrolls for profiling.
+                // `-liteweightAnimationTourSheetsOnly` repeats just the sheets, header and scrolls, and
+                // `-liteweightAnimationTourSetsOnly` just Log Set, RPE, rest and unlog, for profiling.
                 if !arguments.contains("-liteweightAnimationTourSheetsOnly") {
                     try await runAnimationTourSetSteps()
                 }
-                try await runAnimationTourSheetSteps()
+                if !arguments.contains("-liteweightAnimationTourSetsOnly") {
+                    try await runAnimationTourSheetSteps()
+                }
             }
             LiteweightFrameMeter.shared.flush()
             print("FRAMEMETER TOUR DONE")
@@ -1657,7 +1685,8 @@ struct CurrentWorkoutView: View {
                 .frame(width: 9, height: 9)
                 .accessibilityLabel(showsMetrics ? "Watch connected" : watchSyncTitle)
             if showsMetrics {
-                WorkoutWatchMetricsView(store: watchConnection.liveMetrics, workoutID: workout.uuid)
+                WorkoutWatchMetricsView(store: watchConnection.liveMetrics, workoutID: workout.uuid,
+                                        morphNamespace: summaryMorph)
             } else {
                 Text(watchSyncTitle)
                     .font(.subheadline)
@@ -1859,7 +1888,7 @@ struct CurrentWorkoutView: View {
                         volume
                         sets
                         if hasVitals {
-                            collapsedVitals(heartRate: heartRate, energy: energy)
+                            collapsedVitals(heartRate: heartRate, energy: energy, morphs: false)
                         }
                     }
                     .lineLimit(1)
@@ -1919,7 +1948,7 @@ struct CurrentWorkoutView: View {
             sets
                 .summaryMorph(morphs ? "sets" : nil, in: summaryMorph)
             if heartRate != nil || energy != nil {
-                collapsedVitals(heartRate: heartRate, energy: energy)
+                collapsedVitals(heartRate: heartRate, energy: energy, morphs: morphs)
             }
         }
         .fixedSize(horizontal: true, vertical: false)
@@ -1930,13 +1959,15 @@ struct CurrentWorkoutView: View {
             .foregroundStyle(.tertiary)
     }
 
-    private func collapsedVitals(heartRate: String?, energy: String?) -> some View {
+    private func collapsedVitals(heartRate: String?, energy: String?, morphs: Bool) -> some View {
         HStack(spacing: 6) {
             if let heartRate {
                 collapsedVital(heartRate, symbol: "heart.fill", tint: LiteweightTheme.metricHeartRate)
+                    .summaryMorph(morphs ? "heartRate" : nil, in: summaryMorph)
             }
             if let energy {
                 collapsedVital(energy, symbol: "flame.fill", tint: LiteweightTheme.metricEnergy)
+                    .summaryMorph(morphs ? "energy" : nil, in: summaryMorph)
             }
         }
     }
@@ -5316,6 +5347,8 @@ struct InlineWorkoutSetRow: View, Equatable {
     @State private var isPerformingSwipeDelete = false
     @State private var measuredRowWidth: CGFloat = 0
     @State private var measuredRowHeight: CGFloat = 52
+    @State private var editingField: EntryField?
+    @State private var pendingFieldFocus: EntryField?
     @FocusState private var focusedField: EntryField?
 
     private let deleteActionWidth: CGFloat = 76
@@ -5517,6 +5550,7 @@ struct InlineWorkoutSetRow: View, Equatable {
             onEditorSheetChanged?(presented)
         }
         .onDisappear {
+            setFocusedField(nil)
             if showingRPEPicker || showingDurationPicker { onEditorSheetChanged?(false) }
         }
         .onChange(of: showsFocusedEditor) { _, _ in
@@ -5565,7 +5599,7 @@ struct InlineWorkoutSetRow: View, Equatable {
         }
         .onChange(of: trackingType) { _, _ in
             inlineTimerStart = nil
-            focusedField = nil
+            setFocusedField(nil)
             synchronizeEntryText()
         }
         .onChange(of: set.repetitionsValue) { _, _ in
@@ -5578,10 +5612,15 @@ struct InlineWorkoutSetRow: View, Equatable {
             if focusedField != .distance { distanceText = formattedDistance }
         }
         .onChange(of: settingsStore.weightUnit) { _, _ in
-            focusedField = nil
+            setFocusedField(nil)
             synchronizeEntryText()
         }
-        .onChange(of: focusedField) { _, newValue in
+        .onChange(of: focusedField) { oldValue, newValue in
+            if let newValue {
+                editingField = newValue
+            } else if focusedField == nil, pendingFieldFocus == nil, editingField == oldValue {
+                editingField = nil
+            }
             if newValue != .distance { distanceText = formattedDistance }
             weightText = formattedWeight
             if newValue != .repetitions {
@@ -5599,7 +5638,7 @@ struct InlineWorkoutSetRow: View, Equatable {
 
                     Spacer()
 
-                    Button("Done") { focusedField = nil }
+                    Button("Done") { setFocusedField(nil) }
                         .fontWeight(.semibold)
                         .accessibilityLabel("Dismiss number pad")
                 }
@@ -5862,24 +5901,20 @@ struct InlineWorkoutSetRow: View, Equatable {
 
     private func focusedTile(_ field: EntryField) -> some View {
         let isWeight = field == .weight
-        let placeholder = "—"
         return VStack(alignment: .leading, spacing: InlineWorkoutSetLayout.spacing) {
             Text(isWeight ? weightAccessibilityTitle : "Reps")
                 .font(.subheadline)
                 .foregroundStyle(LiteweightTheme.secondaryText)
             HStack(alignment: .firstTextBaseline, spacing: 3) {
-                TextField(placeholder, text: isWeight ? weightTextBinding : repetitionsTextBinding)
+                numberField(
+                    field, text: isWeight ? weightTextBinding : repetitionsTextBinding,
+                    label: isWeight ? "\(weightAccessibilityTitle) in \(settingsStore.weightUnit.unit.symbol)" : "Repetitions",
+                    alignment: .leading, minHeight: 48
+                )
                     .font(.liteweightMetric(.largeTitle))
                     .foregroundStyle(LiteweightTheme.primaryText)
-                    .keyboardType(isWeight ? .decimalPad : .numberPad)
-                    .focused($focusedField, equals: field)
-                    .textInputAutocapitalization(.never)
-                    .autocorrectionDisabled()
                     .lineLimit(1)
                     .minimumScaleFactor(0.85)
-                    .frame(minWidth: 0, minHeight: 48)
-                    .accessibilityLabel(isWeight ? "\(weightAccessibilityTitle) in \(settingsStore.weightUnit.unit.symbol)" : "Repetitions")
-                    .accessibilityHint("Double tap to type")
                 if isWeight {
                     Text(trackingType.weightPrefix + settingsStore.weightUnit.unit.symbol)
                         .font(.subheadline.weight(.semibold))
@@ -6051,7 +6086,7 @@ struct InlineWorkoutSetRow: View, Equatable {
         let animation = showsFocusedEditor ? LiteweightMotion.collapse : LiteweightMotion.snappy
         // Log Set: the editor closes, turning blue as it lands, then RPE.
         let closesEditorFirst = onCompletionFlow != nil && showsFocusedEditor && !reduceMotion
-        if showsFocusedEditor { focusedField = nil }
+        if showsFocusedEditor { setFocusedField(nil) }
         if closesEditorFirst {
             closeEditorThenLog()
             return
@@ -6067,7 +6102,7 @@ struct InlineWorkoutSetRow: View, Equatable {
         }
         if !wasCompleted, set.isCompleted {
             completionFeedback += 1
-            focusedField = nil
+            setFocusedField(nil)
             // This callback is supplied only by the active logger. Historical
             // editing keeps its existing presentation and completion behavior.
             if let onCompletionFlow {
@@ -6121,7 +6156,7 @@ struct InlineWorkoutSetRow: View, Equatable {
                 }
                 return
             }
-            focusedField = nil
+            setFocusedField(nil)
             // A sheet takes a moment to start moving, so it rises as the fade ends.
             try? await Task.sleep(for: LiteweightMotion.duration(milliseconds: 150))
             guard id == completionRevealID, set.isCompleted else { return }
@@ -6165,31 +6200,68 @@ struct InlineWorkoutSetRow: View, Equatable {
         trackingType == .assistedBodyweight ? "Assistance" : (trackingType == .weightedBodyweight ? "Added weight" : "Weight")
     }
 
+    private func setFocusedField(_ field: EntryField?) {
+        pendingFieldFocus = field
+        editingField = field
+        if field == nil { focusedField = nil }
+    }
+
+    /// Idle numbers keep the field's font and full-width box without a live UITextField.
+    private func numberField(
+        _ field: EntryField, text: Binding<String>, label: String,
+        alignment: Alignment = .center, minHeight: CGFloat = InlineWorkoutSetLayout.visualHeight
+    ) -> some View {
+        Group {
+            if editingField == field {
+                TextField("—", text: text)
+                    .keyboardType(field == .repetitions ? .numberPad : .decimalPad)
+                    .focused($focusedField, equals: field)
+                    .textInputAutocapitalization(.never)
+                    .autocorrectionDisabled()
+                    .frame(minWidth: 0, maxWidth: .infinity, minHeight: minHeight, alignment: alignment)
+                    .onAppear {
+                        guard editingField == field else { return }
+                        pendingFieldFocus = field
+                        DispatchQueue.main.async {
+                            guard editingField == field, pendingFieldFocus == field else { return }
+                            focusedField = field
+                            pendingFieldFocus = nil
+                        }
+                    }
+                    .accessibilityHint("Double tap to type")
+            } else {
+                Text(text.wrappedValue.isEmpty ? "—" : text.wrappedValue)
+                    .foregroundStyle(text.wrappedValue.isEmpty ? AnyShapeStyle(Color(uiColor: .placeholderText)) : AnyShapeStyle(.foreground))
+                    .frame(minWidth: 0, maxWidth: .infinity, minHeight: minHeight, alignment: alignment)
+                    .contentShape(Rectangle())
+                    .onTapGesture { setFocusedField(field) }
+                    .accessibilityValue(text.wrappedValue.isEmpty ? "empty" : text.wrappedValue)
+                    .accessibilityHint("Double tap to edit")
+                    .accessibilityAddTraits(.isButton)
+                    .accessibilityAction { setFocusedField(field) }
+            }
+        }
+        .accessibilityLabel(label)
+    }
+
     @ViewBuilder
     private func measurementField(_ column: SetTrackingType.Column) -> some View {
         switch column {
         case .weight:
             setField(isFocused: focusedField == .weight, isChanged: weightIsChanged) {
-                TextField("—", text: weightTextBinding)
-                    .keyboardType(.decimalPad).focused($focusedField, equals: .weight)
-                    .textInputAutocapitalization(.never).autocorrectionDisabled()
-                    .accessibilityLabel("\(weightAccessibilityTitle) in \(settingsStore.weightUnit.unit.symbol)")
+                numberField(.weight, text: weightTextBinding,
+                            label: "\(weightAccessibilityTitle) in \(settingsStore.weightUnit.unit.symbol)")
             }
         case .reps:
             setField(isFocused: focusedField == .repetitions, isChanged: repetitionsAreChanged) {
-                TextField("—", text: repetitionsTextBinding)
-                    .keyboardType(.numberPad).focused($focusedField, equals: .repetitions)
-                    .textInputAutocapitalization(.never).autocorrectionDisabled()
-                    .accessibilityLabel("Repetitions")
+                numberField(.repetitions, text: repetitionsTextBinding, label: "Repetitions")
             }
         case .duration:
             setField { durationControl }
         case .distance:
             setField(isFocused: focusedField == .distance) {
-                TextField("—", text: distanceTextBinding)
-                    .keyboardType(.decimalPad).focused($focusedField, equals: .distance)
-                    .textInputAutocapitalization(.never).autocorrectionDisabled()
-                    .accessibilityLabel("Distance in \(WorkoutSet.distanceUnit(settingsStore.weightUnit))")
+                numberField(.distance, text: distanceTextBinding,
+                            label: "Distance in \(WorkoutSet.distanceUnit(settingsStore.weightUnit))")
             }
         }
     }
@@ -6460,7 +6532,7 @@ struct InlineWorkoutSetRow: View, Equatable {
     }
 
     private func openPlateCalculator() {
-        focusedField = nil
+        setFocusedField(nil)
         let initialMode: PlateLoadout.Mode? = plateHintPresentation == .setUpChip ? .machine(0) : nil
         DispatchQueue.main.async { onOpenPlateCalculator(initialMode) }
     }
@@ -6560,7 +6632,7 @@ struct InlineWorkoutSetRow: View, Equatable {
             isSwipingSet = true
             swipeStartOffset = swipeOffset
             actions.setOpenSwipeID(set.objectID)
-            focusedField = nil
+            setFocusedField(nil)
         }
 
         swipeOffset = min(
@@ -6589,7 +6661,7 @@ struct InlineWorkoutSetRow: View, Equatable {
     private func performSwipeDelete() {
         guard !isPerformingSwipeDelete else { return }
         isPerformingSwipeDelete = true
-        focusedField = nil
+        setFocusedField(nil)
 
         withAnimation(LiteweightMotion.preferred(LiteweightMotion.snappy, reduceMotion: reduceMotion)) {
             swipeOffset = -effectiveRowWidth
@@ -6893,8 +6965,8 @@ private extension View {
     /// Moves a summary number between the big header and the pill. Position only, so
     /// neither side is resized mid-flight and the pill's measured height stays put.
     @ViewBuilder
-    func summaryMorph(_ id: String?, in namespace: Namespace.ID) -> some View {
-        if let id {
+    func summaryMorph(_ id: String?, in namespace: Namespace.ID?) -> some View {
+        if let id, let namespace {
             matchedGeometryEffect(id: id, in: namespace, properties: .position, anchor: .leading)
         } else {
             self
