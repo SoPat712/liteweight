@@ -135,12 +135,11 @@ struct FeedView : View {
                     EmptyView()
                 }
             }
-            .padding(16)
-            .background(LiteweightTheme.surface, in: RoundedRectangle(cornerRadius: LiteweightTheme.heroCornerRadius, style: .continuous))
             .modifier(HomeCardAccessibilitySummary(title: title,
                 value: weekCardAccessibilityValue(card, summary: summary, isFirstWeekCard: isFirstWeekCard),
                 isSummary: card == .rings, edit: cardEdit(card)))
-            .listRowInsets(EdgeInsets(top: 0, leading: 0, bottom: 0, trailing: 0))
+            // The list still clips a section's rounded corners; 8 pt keeps the title out of them.
+            .listRowInsets(EdgeInsets(top: 8, leading: 0, bottom: 8, trailing: 0))
             .listRowBackground(Color.clear)
             .listRowSeparator(.hidden)
             if card == .bars {
@@ -235,7 +234,7 @@ struct FeedView : View {
 
     private func cardTitle(_ title: String) -> some View {
         Text(title)
-            .font(.title3.weight(.semibold))
+            .font(.title2.bold())
             .foregroundStyle(LiteweightTheme.primaryText)
             .textCase(nil)
     }
@@ -598,7 +597,7 @@ struct FeedView : View {
                         points: chart.points, selectedDate: Binding(
                             get: { selectedPinnedDates[chart.pin] },
                             set: { selectedPinnedDates[chart.pin] = $0 }))
-                        .listRowInsets(EdgeInsets(top: 12, leading: 16, bottom: 12, trailing: 16))
+                        .listRowInsets(EdgeInsets(top: 12, leading: 0, bottom: 12, trailing: 0))
                         .accessibilityHidden(true)
                 }
                 Button { showingChartSelector = true } label: {
@@ -1059,6 +1058,8 @@ struct FeedView : View {
             .modifier(HomeCardAccessibilitySummary(title: "Last Week", value: "\(range). \(spoken)"))
         }
         .modifier(HomeCardAccessibilityContainer())
+        .listRowBackground(Color.clear)
+        .listRowInsets(EdgeInsets(top: 8, leading: 0, bottom: 8, trailing: 0))
     }
 
     private func updateCards(_ change: (inout [HomeSection]) -> Void) {
@@ -1132,9 +1133,13 @@ struct FeedView : View {
             List {
                 if historyStore.isLoading && completedWorkouts.isEmpty {
                     Section { ProgressView("Loading Training…") }
+                        .listRowBackground(Color.clear)
+                        .listRowInsets(EdgeInsets(top: 8, leading: 0, bottom: 8, trailing: 0))
                 }
                 if let error = historyStore.error {
                     Section { Button("Retry Loading Training") { historyStore.refresh() } } footer: { Text(error) }
+                        .listRowBackground(Color.clear)
+                        .listRowInsets(EdgeInsets(top: 8, leading: 0, bottom: 8, trailing: 0))
                 }
                 // Pinned Charts waits for a pin (made from an exercise's chart) instead of showing empty.
                 let cards = homeCards.filter { $0 != .pinned || !pinnedChartsStore.pinnedCharts.isEmpty }
@@ -1144,21 +1149,33 @@ struct FeedView : View {
                     LiteweightVoiceSection(text: voiceText(HomeVoice.choose(
                         groupSets: summary.weekGroupSets, workouts: summary.workouts,
                         ringsClosed: summary.ringsClosed(goals: ringGoals), streak: trainingStreak)))
+                        .listRowBackground(Color.clear)
+                        .listRowInsets(EdgeInsets(top: 8, leading: 0, bottom: 8, trailing: 0))
                 }
                 if let week = lastWeekRecapWeek(summary) {
                     lastWeekRecapSection(summary, week: week)
                 }
                 // After the first finished workout, when Home has something worth arranging.
                 if !completedWorkouts.isEmpty, showsEditTip {
-                    LiteweightTipSection(tip: EditHomeTip(generation: tipGeneration))
+                    Section {
+                        TipView(EditHomeTip(generation: tipGeneration))
+                            .tipBackground(Color.clear)
+                            .listRowInsets(EdgeInsets())
+                    }
+                    .listRowBackground(Color.clear)
                 }
                 ForEach(cards) { section in
                     homeSection(section, summary: summary, isFirstWeekCard: section == firstWeekCard)
                         .modifier(HomeCardAccessibilityContainer(isSingleElement: section == .muscles))
                         .contextMenu { cardActions(section) }
+                        .listRowBackground(Color.clear)
+                        .listRowInsets(EdgeInsets(top: 8, leading: 0, bottom: 8, trailing: 0))
                 }
             }
             .listStyle(.insetGrouped)
+            .scrollContentBackground(.hidden)
+            .background(LiteweightTheme.homeBackground)
+            .listSectionSpacing(28)
             .liteweightTracksTip(EditHomeTip(generation: tipGeneration), isShowing: $showsEditTip)
             .contentMargins(.bottom, LiteweightTheme.floatingWorkoutBottomClearance, for: .scrollContent)
             // The voice line sits right under the large title (build 121).

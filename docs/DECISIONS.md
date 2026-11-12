@@ -14,6 +14,12 @@ Builds are installed with `~/.local/share/liteweight/tools/install-NN.sh`. Lane 
 
 ## 2026-11-12
 
+### Home without cards (build 130)
+- **Asked:** "the part i like most actually is not having the hideous cards everywhere on the home screen! not being contained is better! can you make the home screen without them?"
+- **Found:** every Home section sat in a white inset-grouped card, so the page read as a stack of equal boxes.
+- **Decided:** Home keeps its inset-grouped List but clears every row and the scroll background onto `homeBackground`, removes section containers and their horizontal padding, aligns content to the title with zero horizontal row insets, and uses 28 pt section spacing with bold title2 headings and native internal separators. At non-accessibility sizes, centered 188 pt rings sit above three equal metric columns with colored labels/values and separate target lines; the unchanged day strip follows after 18 pt without a divider, while accessibility sizes keep their previous layout and metric style. Other screens, Home content and interactions stay unchanged; inner chips and controls remain, and chart halos match the page.
+- **Roll back:** revert this entry's commit.
+
 ### The real segmented control, with a blue thumb (build 129)
 - **Asked:** "the kg to lb is not a native slider? right? why aren't we doing things thatway? is it mandataoyr?" then "go back to real then?"
 - **Found:** builds 127–128 drew a custom control to get a blue selection, which lost the native drag between segments, the Liquid Glass thumb and future system changes. The stock control only looked off because of its gray thumb and the large control size.

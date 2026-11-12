@@ -63,6 +63,7 @@ What makes liteweight recognisably liteweight:
    hard-code a hex value, `Color.black`, `.white` or `.gray` for chrome.
 3. **The system owns chrome.** Never set `toolbarBackground`, `presentationBackground`,
    `scrollContentBackground(.hidden)` with a custom fill, or a custom modal corner radius.
+   Exception: Home hides its list background and row fills so sections sit on the plain page (`homeBackground`, build 130).
 4. **Glass is depth, not decoration.** Liquid Glass is only for layers that float above
    changing content (see §6).
 5. **Tint carries meaning.** If a color does not mean "action", "this metric" or "this status",
@@ -104,6 +105,7 @@ screenshots and canvas boards; never write them in code.
 | `secondaryText` | `secondaryLabel` | rgba(60,60,67,.60) | rgba(235,235,245,.60) | Captions, units, metadata |
 | `tertiaryText` | `tertiaryLabel` | rgba(60,60,67,.30) | rgba(235,235,245,.30) | Placeholders, disabled text |
 | `background` | `systemGroupedBackground` | `#F2F2F7` | `#000000` | Full-screen editors that cannot be a `List` |
+| `homeBackground` | `systemBackground` | `#FFFFFF` | `#000000` | Home's page; sections sit on it without cards |
 | `surface` | `secondarySystemGroupedBackground` | `#FFFFFF` | `#1C1C1E` | Card surfaces where a `Section` is impossible |
 | `raisedSurface` | `tertiarySystemGroupedBackground` | `#F2F2F7` | `#2C2C2E` | Nested low-emphasis surfaces |
 | `field` | `secondarySystemFill` | rgba(120,120,128,.16) | rgba(120,120,128,.32) | Input and compact control backgrounds |
@@ -762,7 +764,23 @@ buttons on the right.
 
 ### 15.2 Home (`liteweight/UI/Feed/FeedView.swift`, `liteweight/UI/Components/HomeWeekViews.swift`)
 Board: *Round 3 → Home*, revised 2026-11-02 to read like Fitness and Health, then made
-customizable like Fitness's Edit Summary. Home is a list of cards the user adds, removes and
+customizable like Fitness's Edit Summary. Build 130 opens the page: sections sit directly on
+`homeBackground` (`systemBackground`, white in light and black in dark), without card containers.
+Home keeps its `.insetGrouped` `List` for section spacing, swipe actions and context menus, but
+hides the scroll background and makes every row background clear, including Last Week, the
+voice line, tips, loading and errors. Tips also have a clear TipKit background. Every Home row
+has zero leading/trailing insets so content aligns with the large Home title and its matching
+trailing margin; existing vertical insets stay (8 pt when unset, 12 pt for pinned charts, zero
+for week views and tips). Week views have no outer 16 pt padding or rounded surface.
+Sections have 28 pt spacing; titles use `.title2.bold()`, `primaryText` and no text case.
+Multi-row sections keep native hairline separators aligned to content, with header separators
+hidden and no trailing separator after the last row. No Home section draws a `surface` or
+`raisedSurface` container; inner chips, the streak capsule, pencil circles, progress tracks and
+chart marks stay. Chart punch-out halos use `homeBackground`. Other screens keep their cards
+and grouped lists. Content, order, voice copy, muscle colors, recap, tips, menus, editors,
+accessibility summaries/containers, animations, floating-workout clearance and toolbar stay.
+
+Home is a list of configurable sections (still called cards in Edit Home) the user adds, removes and
 reorders in Edit Home (the toolbar pencil, or Edit Home in any card's hold menu). Edit Home does
 only that (build 117): a card with settings of its own (Rings, Muscle Focus, Body, Pinned Charts)
 has a 30 pt gray pencil (`field` circle, `secondaryText` glyph, 44 pt hit area) at the trailing
@@ -771,7 +789,7 @@ and VoiceOver reaches it as an action on the card's summary. Cards live in `User
 (build 71's `home.weekStyle`, `home.sectionOrder` and `home.hiddenSections` carry over once);
 no Core Data change. Default cards, in order:
 1. Today's date as the navigation subtitle under "Home" (iOS 26 and later). No greeting.
-2. **Week cards** (opaque neutral `LiteweightTheme.surface`; no colored glass haze). Any of the four
+2. **Week views** (directly on `homeBackground`, without a card fill). Any of the four
    can be on Home at once, in any order. The first one is titled "This Week" with the date
    range, carries the Workouts/Sets/Volume row where its style has one, and ends with a
    full-width Resume or Start Workout button (native large `.borderedProminent` capsule).
@@ -783,8 +801,16 @@ no Core Data change. Default cards, in order:
      metric's container color. Edit Rings (build 117) gives each ring a Last Week | Custom
      segmented control; Last Week (the default) follows last week's total, Custom shows a
      stepper (volume by 1,000 lb or 500 kg, sets and workouts by 1), starting from last week's
-     total. Goals live in `home.ringGoal.volume` (kg), `.sets` and `.workouts`; 0 means last week. Beside them, each metric as "11.4k / 26.6k lb".
-     Below: a row of small daily volume rings scaled to the week's best day, and the best-day line.
+     total. Goals live in `home.ringGoal.volume` (kg), `.sets` and `.workouts`; 0 means last week.
+     At non-accessibility text sizes (build 130), the ring stack is centered above the metrics:
+     188 pt scaled relative to `.title2`, capped at 200 pt, with unchanged stroke/step proportions.
+     Metrics form three equal, leading-aligned columns with 8 pt gaps: a semibold subheadline
+     label in its metric color (no uppercase), a bold `liteweightMetric(.largeTitle)` value in
+     that color (one line, minimum scale 0.6, numeric transition), and only when a target exists
+     a secondary semibold subheadline such as "of 30k lb", "of 40" or "of 5". Each metric keeps
+     its accessibility element, label and value. There is no divider before the unchanged daily
+     volume ring strip; the gap is 18 pt. Accessibility sizes keep the previous ring + stacked
+     metrics layout, metric styling, divider and spacing.
    - **Pace**: running volume this week (solid 3 pt `metricVolume`) over last week's running
      line (dashed `tertiaryText`); the rest of the week is shaded; a translucent bar at today
      marks the gap. Header "VOLUME SO FAR" with "7,600 lb behind last Monday". As the first
@@ -1119,6 +1145,7 @@ Do not reintroduce any of these, or an equivalent under a new name.
 
 | Removed | Use instead |
 | --- | --- |
+| Card containers on Home (build 130) | Sections directly on `homeBackground` |
 | Direct `.pickerStyle(.segmented)` on iPhone (build 127) | `LiteweightSegmentedPicker`, which wraps the native picker with the accent thumb (build 129) |
 | System `Stepper` on iPhone (build 127) | `LiteweightStepper`; native stepper only in its accessibility representation |
 | `LiteweightCard`, `LiteweightScreenBackground`, `LiteweightModalBackground` | `List`/`Form` with `Section` |

@@ -209,6 +209,8 @@ enum LiteweightTheme {
     static let warning = LiteweightPalette.color(\.warning)
     static let danger = LiteweightPalette.color(\.danger)
     static let background = LiteweightPalette.color(\.canvas)
+    /// Exception to §2 principle 3: Home sits on the plain page, white in light and black in dark (build 130).
+    static let homeBackground = Color(UIColor.systemBackground)
     static let modalSurface = LiteweightPalette.color(\.modalSurface)
     static let surface = LiteweightPalette.color(\.surface)
     static let raisedSurface = LiteweightPalette.color(\.raisedSurface)

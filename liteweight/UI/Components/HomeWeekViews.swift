@@ -442,8 +442,8 @@ enum LastWeekRecap {
 struct WeekRingsView: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
-    /// Bigger hero numbers (build 121): rings 148 → 168 pt, values at title size.
-    @ScaledMetric(relativeTo: .title2) private var ringSize: CGFloat = 168
+    /// Centered rings above three metric columns on Home's open page (build 130).
+    @ScaledMetric(relativeTo: .title2) private var ringSize: CGFloat = 188
     @State private var hasAppeared = false
     let summary: HomeWeekSummary
     let unit: String
@@ -488,22 +488,30 @@ struct WeekRingsView: View {
     }
 
     var body: some View {
-        let layout = dynamicTypeSize.isAccessibilitySize
-            ? AnyLayout(VStackLayout(alignment: .leading, spacing: 16))
-            : AnyLayout(HStackLayout(alignment: .center, spacing: 16))
-        VStack(alignment: .leading, spacing: 14) {
-            layout {
+        VStack(alignment: .leading, spacing: dynamicTypeSize.isAccessibilitySize ? 14 : 18) {
+            if dynamicTypeSize.isAccessibilitySize {
+                VStack(alignment: .leading, spacing: 16) {
+                    ringStack
+                        .accessibilityHidden(true)
+                    VStack(alignment: .leading, spacing: 10) {
+                        ForEach(rings) { ring in
+                            ringMetric(ring)
+                        }
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                }
+                Divider()
+            } else {
                 ringStack
+                    .frame(maxWidth: .infinity)
                     .accessibilityHidden(true)
-                VStack(alignment: .leading, spacing: 10) {
+                HStack(alignment: .top, spacing: 8) {
                     ForEach(rings) { ring in
                         ringMetric(ring)
+                            .frame(maxWidth: .infinity, alignment: .leading)
                     }
                 }
-                .frame(maxWidth: .infinity, alignment: .leading)
             }
-
-            Divider()
 
             dayStrip
         }
@@ -554,16 +562,38 @@ struct WeekRingsView: View {
 
     private func ringMetric(_ ring: Ring) -> some View {
         let suffix = [ring.target.map { " / " + $0 }, ring.unit.map { " " + $0 }].compactMap { $0 }.joined()
-        return VStack(alignment: .leading, spacing: 1) {
-            Text(ring.label)
-                .font(.caption.weight(.semibold))
-                .foregroundStyle(ring.tint)
-                .textCase(.uppercase)
-            (Text(ring.value).font(.liteweightMetric(.title, weight: .bold)).foregroundColor(LiteweightTheme.primaryText)
-             + Text(suffix).font(.subheadline.weight(.medium)).foregroundColor(LiteweightTheme.secondaryText))
-                .lineLimit(1)
-                .minimumScaleFactor(0.7)
-                .contentTransition(reduceMotion ? .opacity : .numericText())
+        return Group {
+            if dynamicTypeSize.isAccessibilitySize {
+                VStack(alignment: .leading, spacing: 1) {
+                    Text(ring.label)
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(ring.tint)
+                        .textCase(.uppercase)
+                    (Text(ring.value).font(.liteweightMetric(.title, weight: .bold)).foregroundColor(LiteweightTheme.primaryText)
+                     + Text(suffix).font(.subheadline.weight(.medium)).foregroundColor(LiteweightTheme.secondaryText))
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.7)
+                        .contentTransition(reduceMotion ? .opacity : .numericText())
+                }
+            } else {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(ring.label)
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(ring.tint)
+                        .textCase(nil)
+                    Text(ring.value)
+                        .font(.liteweightMetric(.largeTitle, weight: .bold))
+                        .foregroundStyle(ring.tint)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.6)
+                        .contentTransition(reduceMotion ? .opacity : .numericText())
+                    if let target = ring.target {
+                        Text("of \(target)\(ring.unit.map { " " + $0 } ?? "")")
+                            .font(.subheadline.weight(.semibold))
+                            .foregroundStyle(LiteweightTheme.secondaryText)
+                    }
+                }
+            }
         }
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(ring.label)
@@ -706,7 +736,7 @@ struct WeekPaceView: View {
                     .foregroundStyle(LiteweightTheme.metricVolume.opacity(0.25))
                 PointMark(x: .value("Day", todayX), y: .value("Volume", thisWeek[todayEnd]))
                     .symbolSize(120)
-                    .foregroundStyle(LiteweightTheme.surface)
+                    .foregroundStyle(LiteweightTheme.homeBackground)
                 PointMark(x: .value("Day", todayX), y: .value("Volume", thisWeek[todayEnd]))
                     .symbolSize(56)
                     .foregroundStyle(LiteweightTheme.metricVolume)
