@@ -31,6 +31,7 @@ public struct BodyView: View {
     private var highlights: [Muscle: MuscleHighlight]
     private var selectedMuscles: Set<Muscle> = []
     private var onMuscleSelected: ((Muscle, MuscleSide) -> Void)?
+    private var isDecorative: Bool = false
 
     // Animation
     private var isAnimated: Bool = false
@@ -100,6 +101,17 @@ public struct BodyView: View {
 
     @ViewBuilder
     private var standardBody: some View {
+        if isDecorative {
+            Canvas { context, size in
+                makeRenderer(size: size).render(context: &context, size: size)
+            }
+            .accessibilityHidden(true)
+        } else {
+            interactiveBody
+        }
+    }
+
+    private var interactiveBody: some View {
         GeometryReader { geometry in
             Canvas { context, size in
                 makeRenderer(size: size).render(context: &context, size: size)
@@ -180,7 +192,7 @@ public struct BodyView: View {
                     hideSubGroups: hideSubGroups
                 )
             } else {
-                standardBody
+                interactiveBody
             }
         }
     }
@@ -257,6 +269,13 @@ public struct BodyView: View {
 // MARK: - Modifiers
 
 extension BodyView {
+
+    /// Draws only the Canvas, hidden from accessibility; animated, pulse and zoom bodies ignore this flag.
+    public func decorative(_ isDecorative: Bool = true) -> BodyView {
+        var copy = self
+        copy.isDecorative = isDecorative
+        return copy
+    }
 
     /// Highlights a specific muscle with a color.
     public func highlight(_ muscle: Muscle, color: Color = .red, opacity: Double = 1.0) -> BodyView {

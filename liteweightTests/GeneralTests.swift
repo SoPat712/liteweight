@@ -1679,6 +1679,8 @@ final class TrainingHistorySnapshotTests: XCTestCase {
         XCTAssertEqual(snapshot.sessions.reduce(0) { $0 + $1.duration }, 7200)
         XCTAssertEqual(snapshot.exerciseTotals[id]?.sessions, 2)
         XCTAssertEqual(snapshot.exerciseTotals[id]?.sets, 4)
+        XCTAssertEqual(snapshot.recordCounts, [morning.objectID: 0, evening.objectID: 0])
+        XCTAssertNil(snapshot.recordCounts[active.objectID])
         XCTAssertFalse(context.hasChanges)
     }
 
@@ -1742,6 +1744,15 @@ final class TrainingHistorySnapshotTests: XCTestCase {
         try context.save()
         let snapshot = TrainingHistorySnapshot.build(from: Array(workouts.reversed()))
         XCTAssertEqual(snapshot.recordSetIDs, Set(sets[1].map(\.objectID)))
+        XCTAssertEqual(snapshot.recordCounts, [workouts[0].objectID: 0, workouts[1].objectID: 2, workouts[2].objectID: 0])
+        for workout in workouts {
+            let oldRowCount = (workout.workoutExercises?.array as? [WorkoutExercise] ?? []).reduce(0) { total, exercise in
+                total + (exercise.workoutSets?.array as? [WorkoutSet] ?? []).filter {
+                    $0.isCompleted && snapshot.recordSetIDs.contains($0.objectID)
+                }.count
+            }
+            XCTAssertEqual(snapshot.recordCounts[workout.objectID], oldRowCount)
+        }
         XCTAssertEqual(snapshot.sessions.reduce(0) { $0 + $1.volume }, 0)
     }
 
@@ -1790,10 +1801,12 @@ final class TrainingHistorySnapshotTests: XCTestCase {
         XCTAssertEqual(restored.exerciseTotals[exerciseID]?.sessions, 2)
         XCTAssertEqual(restored.byDay.count, built.byDay.count)
         XCTAssertEqual(restored.recordSetIDs, built.recordSetIDs)
+        XCTAssertEqual(built.recordCounts, [workouts[0].objectID: 0, workouts[1].objectID: 1])
+        XCTAssertEqual(restored.recordCounts, built.recordCounts)
         XCTAssertEqual(restored.recordEvents.map(\.id), built.recordEvents.map(\.id))
 
         let otherVersion = String(decoding: data, as: UTF8.self)
-            .replacingOccurrences(of: "\"version\":\(TrainingHistoryCache.version)", with: "\"version\":0")
+            .replacingOccurrences(of: "\"version\":\(TrainingHistoryCache.version)", with: "\"version\":1")
         XCTAssertNil(TrainingHistoryCache.decode(Data(otherVersion.utf8), in: context))
 
         // Screens open cached workout IDs directly, so a deleted one voids the cache.

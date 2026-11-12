@@ -59,7 +59,7 @@ struct BodyRenderer {
         )
     }
 
-    private let pathCache = PathCache()
+    private let pathCache = PathCache.shared
 
     func render(context: inout GraphicsContext, size: CGSize) {
         let viewBox = BodyPathProvider.viewBox(gender: gender, side: side)

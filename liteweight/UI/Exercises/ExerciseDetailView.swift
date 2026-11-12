@@ -868,6 +868,7 @@ private struct ExerciseTargetMuscleMap: View {
         )
         return GeometryReader { geometry in
             BodyView(gender: .male, side: side, style: style)
+                .decorative()
                 .highlight(secondary, color: LiteweightTheme.accent, opacity: 0.42)
                 .highlight(primary, color: LiteweightTheme.accent)
                 .selected(selectedSide == side ? selectedMuscle : nil)

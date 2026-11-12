@@ -1005,6 +1005,7 @@ struct LiteweightDurationPickerSheet: View {
     let onApply: (TimeInterval) -> Void
 
     @State private var selection: TimeInterval
+    @State private var wheelSteps = 0
 
     private let minimumDuration: TimeInterval
     private let maximumDuration: TimeInterval
@@ -1050,19 +1051,20 @@ struct LiteweightDurationPickerSheet: View {
         ) {
             VStack(spacing: 14) {
                 LiteweightDurationWheel(
-                    selection: $selection,
+                    selection: Binding(get: { selection }, set: {
+                        guard selection != $0 else { return }
+                        selection = $0
+                        wheelSteps += 1
+                    }),
                     minimumDuration: minimumDuration,
                     maximumDuration: maximumDuration,
                     secondsStep: durationStep
                 )
 
                 if !presets.isEmpty {
-                    Picker("Presets", selection: $selection) {
-                        ForEach(presets, id: \.self) { duration in
-                            Text(durationTitle(duration)).tag(duration)
-                        }
-                    }
-                    .pickerStyle(.segmented)
+                    LiteweightSegmentedPicker(title: "Presets", selection: $selection, segments: presets.map {
+                        .init(value: $0, title: durationTitle($0))
+                    })
                     .padding(.horizontal, LiteweightTheme.horizontalPadding)
                 }
 
@@ -1095,7 +1097,7 @@ struct LiteweightDurationPickerSheet: View {
         }
         .presentationDetents(presentationDetents)
         .presentationDragIndicator(.visible)
-        .sensoryFeedback(.selection, trigger: Int(selection))
+        .sensoryFeedback(.selection, trigger: wheelSteps) { _, _ in SettingsStore.shared.workoutHaptics }
     }
 
     private var presentationDetents: Set<PresentationDetent> {
@@ -1623,6 +1625,161 @@ struct LiteweightChipFlow: Layout {
     }
 }
 
+// MARK: - Segmented picker
+
+/// The app's segmented control: a solid blue thumb on a switch-height capsule track (§9.4).
+/// Segments share the width and have 44 pt tap targets; only selection taps give haptic feedback.
+/// VoiceOver gets a native picker, and unmatched values leave the track without a thumb.
+struct LiteweightSegmentedPicker<Value: Hashable>: View {
+    struct Segment {
+        let value: Value
+        let title: String
+        var accessibilityLabel: String?
+    }
+
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Namespace private var thumb
+    @State private var taps = 0
+    let title: String
+    @Binding var selection: Value
+    let segments: [Segment]
+
+    var body: some View {
+        HStack(spacing: 0) {
+            ForEach(segments.indices, id: \.self) { index in
+                segmentButton(segments[index])
+            }
+        }
+        .padding(.horizontal, 2)
+        .background {
+            Capsule()
+                .fill(LiteweightTheme.tertiaryFill)
+                .padding(.vertical, 6)
+        }
+        // In a list, the row separator starts at the track, not under the first segment's title.
+        .alignmentGuide(.listRowSeparatorLeading) { $0[.leading] }
+        .sensoryFeedback(.selection, trigger: taps) { _, _ in SettingsStore.shared.workoutHaptics }
+        .accessibilityRepresentation {
+            Picker(title, selection: Binding(get: { selection }, set: { select($0) })) {
+                ForEach(segments.indices, id: \.self) { index in
+                    Text(segments[index].accessibilityLabel ?? segments[index].title).tag(segments[index].value)
+                }
+            }
+            .pickerStyle(.segmented)
+        }
+    }
+
+    private func segmentButton(_ segment: Segment) -> some View {
+        let selected = segment.value == selection
+        return Button {
+            select(segment.value)
+        } label: {
+            Text(segment.title)
+                .font(.liteweightMetric(.subheadline, weight: selected ? .bold : .semibold))
+                .lineLimit(1)
+                .minimumScaleFactor(0.7)
+                .foregroundStyle(selected ? LiteweightTheme.onAccent : LiteweightTheme.secondaryText)
+                .padding(.horizontal, 10)
+                .frame(maxWidth: .infinity, minHeight: 28)
+                .background {
+                    if selected {
+                        Capsule()
+                            .fill(LiteweightTheme.accent)
+                            .matchedGeometryEffect(id: "thumb", in: thumb)
+                    }
+                }
+                .padding(.vertical, 8)
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(segment.accessibilityLabel ?? segment.title)
+    }
+
+    private func select(_ value: Value) {
+        guard value != selection else { return }
+        withAnimation(LiteweightMotion.preferred(LiteweightMotion.snappy, reduceMotion: reduceMotion)) {
+            selection = value
+        }
+        taps += 1
+    }
+}
+
+// MARK: - Stepper
+
+/// The logger's round −/+ controls, with repeat, bounds and a native stepper for VoiceOver (§9.4.1).
+struct LiteweightStepper<Label: View>: View {
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+    @State private var taps = 0
+    private let onIncrement: (() -> Void)?
+    private let onDecrement: (() -> Void)?
+    private let hidesLabel: Bool
+    private let label: Label
+
+    init(onIncrement: (() -> Void)?, onDecrement: (() -> Void)?, hidesLabel: Bool = false,
+         @ViewBuilder label: () -> Label) {
+        self.onIncrement = onIncrement
+        self.onDecrement = onDecrement
+        self.hidesLabel = hidesLabel
+        self.label = label()
+    }
+
+    init<V: Strideable>(value: Binding<V>, in range: ClosedRange<V>, step: V.Stride = 1,
+                       hidesLabel: Bool = false, @ViewBuilder label: () -> Label) {
+        self.init(
+            onIncrement: value.wrappedValue >= range.upperBound ? nil : {
+                value.wrappedValue = min(max(value.wrappedValue.advanced(by: step), range.lowerBound), range.upperBound)
+            },
+            onDecrement: value.wrappedValue <= range.lowerBound ? nil : {
+                value.wrappedValue = min(max(value.wrappedValue.advanced(by: -step), range.lowerBound), range.upperBound)
+            },
+            hidesLabel: hidesLabel, label: label
+        )
+    }
+
+    var body: some View {
+        let layout = dynamicTypeSize.isAccessibilitySize
+            ? AnyLayout(VStackLayout(alignment: .leading, spacing: 8))
+            : AnyLayout(HStackLayout(spacing: 8))
+        layout {
+            if !hidesLabel {
+                label.frame(maxWidth: .infinity, alignment: .leading)
+            }
+            HStack(spacing: 8) {
+                stepButton("minus", action: onDecrement, title: "Decrease")
+                stepButton("plus", action: onIncrement, title: "Increase")
+            }
+        }
+        .sensoryFeedback(.selection, trigger: taps) { _, _ in SettingsStore.shared.workoutHaptics }
+        .accessibilityRepresentation {
+            Stepper(onIncrement: onIncrement.map { action in { perform(action) } },
+                    onDecrement: onDecrement.map { action in { perform(action) } }) { label }
+        }
+    }
+
+    private func stepButton(_ symbol: String, action: (() -> Void)?, title: String) -> some View {
+        Button {
+            if let action { perform(action) }
+        } label: {
+            Image(systemName: symbol)
+                .font(.body.weight(.bold))
+                .foregroundStyle(LiteweightTheme.primaryText)
+                .frame(width: 40, height: 40)
+                .background(LiteweightTheme.field, in: Circle())
+                .frame(width: LiteweightTheme.controlHeight, height: LiteweightTheme.controlHeight)
+                .contentShape(Circle())
+        }
+        .buttonStyle(.plain)
+        .buttonRepeatBehavior(.enabled)
+        .disabled(action == nil)
+        .accessibilityLabel(title)
+    }
+
+    private func perform(_ action: () -> Void) {
+        action()
+        taps += 1
+    }
+}
+
 // MARK: - Zoom navigation
 
 /// The tapped row grows into the page it opens and shrinks back on close (iOS 18).
@@ -1671,6 +1828,8 @@ extension View {
 /// in place of the group chips and tile). Pass the exercises with completed sets.
 struct LiteweightMuscleFigure: View {
     @EnvironmentObject private var exerciseStore: ExerciseStore
+    @Environment(\.self) private var environment
+    @Environment(\.displayScale) private var displayScale
     let exerciseIDs: [UUID]
 
     static let height: CGFloat = 52
@@ -1680,6 +1839,21 @@ struct LiteweightMuscleFigure: View {
     private struct Highlights {
         var primary: [String: [Muscle]] = [:]
         var secondary: [String: [Muscle]] = [:]
+    }
+
+    private struct Key: Hashable {
+        let side: BodySide
+        let primary: [String: [Muscle]]
+        let secondary: [String: [Muscle]]
+        let colorScheme: ColorScheme
+        let colorSchemeContrast: ColorSchemeContrast
+        let displayScale: CGFloat
+        let width: CGFloat
+        let height: CGFloat
+    }
+
+    @MainActor private enum PictureCache {
+        static var images: [Key: UIImage] = [:]
     }
 
     private var highlights: Highlights {
@@ -1704,32 +1878,65 @@ struct LiteweightMuscleFigure: View {
     var body: some View {
         let highlights = highlights
         HStack(spacing: 1) {
-            figure(.front, highlights)
+            cachedFigure(.front, highlights)
                 .frame(width: Self.height * Self.aspect, height: Self.height)
-            figure(.back, highlights)
+            cachedFigure(.back, highlights)
                 .frame(width: Self.height * Self.aspect, height: Self.height)
         }
         .allowsHitTesting(false)
         .accessibilityHidden(true)
     }
 
+    @ViewBuilder private func cachedFigure(_ side: BodySide, _ highlights: Highlights) -> some View {
+        if let image = picture(side, highlights) {
+            Image(uiImage: image)
+                .resizable()
+                .interpolation(.high)
+        } else {
+            figure(side, highlights)
+        }
+    }
+
+    @MainActor private func picture(_ side: BodySide, _ highlights: Highlights) -> UIImage? {
+        let key = Key(
+            side: side,
+            primary: highlights.primary.mapValues { $0.sorted { $0.rawValue < $1.rawValue } },
+            secondary: highlights.secondary.mapValues { $0.sorted { $0.rawValue < $1.rawValue } },
+            colorScheme: environment.colorScheme,
+            colorSchemeContrast: environment.colorSchemeContrast,
+            displayScale: displayScale,
+            width: Self.height * Self.aspect,
+            height: Self.height
+        )
+        if let image = PictureCache.images[key] { return image }
+        let renderer = ImageRenderer(content: figure(side, highlights)
+            .frame(width: key.width, height: key.height))
+        renderer.scale = displayScale
+        renderer.isOpaque = false
+        guard let image = renderer.uiImage else { return nil }
+        if PictureCache.images.count >= 120 { PictureCache.images.removeAll(keepingCapacity: true) }
+        PictureCache.images[key] = image
+        return image
+    }
+
     private func figure(_ side: BodySide, _ highlights: Highlights) -> some View {
         let style = BodyViewStyle(
-            defaultFillColor: Color(.tertiaryLabel).opacity(0.35),
-            strokeColor: Color(.separator),
+            defaultFillColor: Color(Color(.tertiaryLabel).opacity(0.35).resolve(in: environment)),
+            strokeColor: Color(Color(.separator).resolve(in: environment)),
             strokeWidth: 0.5,
-            selectionColor: LiteweightTheme.accent,
-            selectionStrokeColor: LiteweightTheme.accent,
+            selectionColor: Color(LiteweightTheme.accent.resolve(in: environment)),
+            selectionStrokeColor: Color(LiteweightTheme.accent.resolve(in: environment)),
             selectionStrokeWidth: 1,
-            headColor: Color(.tertiaryLabel).opacity(0.45),
-            hairColor: Color(.quaternaryLabel)
+            headColor: Color(Color(.tertiaryLabel).opacity(0.45).resolve(in: environment)),
+            hairColor: Color(Color(.quaternaryLabel).resolve(in: environment))
         )
         var view = BodyView(gender: .male, side: side, style: style)
+            .decorative()
         for (group, muscles) in highlights.secondary {
-            view = view.highlight(muscles, color: LiteweightTheme.muscle(group), opacity: 0.42)
+            view = view.highlight(muscles, color: Color(LiteweightTheme.muscle(group).resolve(in: environment)), opacity: 0.42)
         }
         for (group, muscles) in highlights.primary {
-            view = view.highlight(muscles, color: LiteweightTheme.muscle(group))
+            view = view.highlight(muscles, color: Color(LiteweightTheme.muscle(group).resolve(in: environment)))
         }
         return view
     }

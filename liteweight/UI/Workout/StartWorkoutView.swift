@@ -1657,13 +1657,8 @@ private struct WorkoutPlanDetailView: View {
                 .listRowBackground(Color.clear)
             } else {
                 VStack(alignment: .leading, spacing: 12) {
-                    Picker("Metric", selection: $selectedMetric) {
-                        ForEach(WorkoutPlanTrendMetric.allCases) { metric in
-                            Text(metric.title).tag(metric)
-                        }
-                    }
-                    .pickerStyle(.segmented)
-                    .sensoryFeedback(.selection, trigger: selectedMetric) { _, _ in SettingsStore.shared.workoutHaptics }
+                    LiteweightSegmentedPicker(title: "Metric", selection: $selectedMetric,
+                                              segments: WorkoutPlanTrendMetric.allCases.map { .init(value: $0, title: $0.title) })
 
                     WorkoutPlanTrendChart(
                         points: trendPoints,

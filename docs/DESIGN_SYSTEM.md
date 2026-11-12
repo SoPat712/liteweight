@@ -57,7 +57,8 @@ What makes liteweight recognisably liteweight:
 
 1. **Native first.** Reach for the SwiftUI control before an liteweight-specific one. A custom control
    must beat the native one for a measurable reason. Today that means the set row, the rest
-   strip and ruler, the effort graph, the session strip and the muscle-map tooltip.
+   strip and ruler, the effort graph, the session strip, the muscle-map tooltip, the segmented
+   control and the stepper. The owner reads stock gray controls as off-theme; blue marks selection.
 2. **Semantic colors only.** Use `LiteweightTheme` roles, which map to adaptive UIKit colors. Never
    hard-code a hex value, `Color.black`, `.white` or `.gray` for chrome.
 3. **The system owns chrome.** Never set `toolbarBackground`, `presentationBackground`,
@@ -454,9 +455,10 @@ keep their sheets or alerts.
 The approved local package lives at `Packages/MuscleMap` (1.6.4, MIT; provenance in
 `LITEWEIGHT_CHANGES.md`). `MuscleHitTester.muscle(at:in:gender:side:)` exposes the renderer's existing
 hit testing for the app's hold-gated overlay. Do not duplicate the anatomical paths.
+Display-only figures use `BodyView.decorative()`, which draws the Canvas alone, and parsed paths are shared process-wide.
 - **Live workout:** a 54 pt tall pair, not interactive (`allowsHitTesting(false)`).
 - **History and Last Workout rows:** `LiteweightMuscleFigure`, a 52 pt pair leading the row, not
-  interactive, muscles in their group colors (§3.5).
+  interactive, muscles in their group colors (§3.5), drawn once per highlight set, color scheme and contrast into a cached bitmap, so scrolling only places pictures (build 126).
 - **Exercise detail:** a pair about 190 pt tall that is interactive (press-and-hold tooltip,
   §9.8).
 - Map names with `liteweightMapMuscle(_:)`. Never hand-draw bodies.
@@ -513,14 +515,41 @@ Show "205×5" on `tertiaryFill`; warm-up uses `metricSets` on its container, and
 gets a trophy and record colors.
 
 ### 9.4 Segmented control
-Use the system `Picker(...).pickerStyle(.segmented)` where possible. If you need custom styling
-(the exercise progress card), use a 32 pt capsule track on `tertiaryFill`, a selected segment on
-`systemBackground`/`card3` with a subtle shadow, 13 pt text (semibold when selected), and
-`LiteweightMotion.snappy` with `matchedGeometryEffect` for the thumb. Use four segments at most.
+`LiteweightSegmentedPicker` is the only segmented control on iPhone (build 127). A 32 pt
+`tertiaryFill` capsule track holds a solid `accent` capsule thumb, 28 pt tall with a 2 pt inset.
+Selected text is `onAccent`; unselected text is `secondaryText`. Both use
+`.liteweightMetric(.subheadline, weight: selected ? .bold : .semibold)`.
+Segments fill the container equally, each with a full 44 pt rectangular tap target. Settings
+rows use 104 pt width at standard text sizes. Use menus at accessibility sizes where segments
+cannot fit. A value matching no segment shows no thumb, as when a rest wheel chooses a custom time.
+
+The thumb slides with `matchedGeometryEffect` and
+`LiteweightMotion.preferred(LiteweightMotion.snappy, reduceMotion:)`. The component owns the
+selection haptic, guarded by `SettingsStore.shared.workoutHaptics`, only when a selection tap
+changes the value; programmatic changes never buzz. VoiceOver gets a native picker through
+`accessibilityRepresentation`. Never apply `.pickerStyle(.segmented)` directly outside that
+representation, and never add a second picker haptic at a call site.
+
+### 9.4.1 Stepper
+`LiteweightStepper` is the only stepper on iPhone (build 127). It uses the logger's round −/+
+buttons: bold body SF Symbols in `primaryText`, 40 pt `field` circles inside 44 pt circular
+tap targets, plain button style, and 8 pt between buttons. The label fills the leading space;
+buttons sit trailing. At accessibility text sizes, the label stacks above them. `hidesLabel`
+shows only the buttons while retaining the label for accessibility.
+
+Use either optional increment/decrement closures or a strideable value binding with a closed
+range and step (default 1). Values clamp to the range; decrement disables at the lower bound
+and increment at the upper bound. A nil action disables its button. Use `.disabled` for system
+dimming, with no custom disabled color. Hold repeats via `.buttonRepeatBehavior(.enabled)`.
+Each step gives a selection haptic guarded by `SettingsStore.shared.workoutHaptics`.
+VoiceOver gets a native stepper through `accessibilityRepresentation`; buttons also carry
+"Decrease" and "Increase" labels for Voice Control. Never use a system `Stepper` outside that
+representation. The logger's existing field-specific −/+ buttons stay as they are.
 
 ### 9.5 Time-range pills
-Five equal 30 pt capsules: **1M · 3M · 6M · 1Y · All**. The selected pill is `accentSoft` with
-accent bold text; the rest are clear with `secondaryText` semibold. Default is **3M**.
+Use `LiteweightSegmentedPicker` (§9.4) with **1M · 3M · 6M · 1Y · All** and the full range
+titles as accessibility labels. Default is **3M**. These share the same blue thumb and track
+as every other segmented control.
 
 ### 9.6 Empty states
 Use `ContentUnavailableView` with an SF Symbol, a title and one sentence that says what will
@@ -964,7 +993,7 @@ saved, waiting, imported, or not exported); notes and media; Save and Discard.
 ### 15.8 Settings
 Native grouped `Form`/`List` sections with designed row anatomy. The owner rejected plain-text
 native rows. Use `SettingsRowIcon` on every settings control/action row, with a wrapping title
-and its control on the row: kg | lb segmented picker, estimated 1RM stepper, rest-length ruler,
+and its control on the row: kg | lb `LiteweightSegmentedPicker`, estimated 1RM stepper, rest-length ruler,
 or sound-preview play button (sound waves while playing). `SettingsToggle` keeps the native
 switch beside its wrapping title. `SettingsActionLabel` adds a trailing action symbol,
 replaced by a spinner and "Preparing…" while working. `SettingsStatusBadge` pairs a status word
@@ -1029,7 +1058,7 @@ input, chart, badge, empty state, progress.
 | A primary button (filled) | `.liteweightProminentGlassButtonStyle()` floating over content, or `.borderedProminent` in a list; capsule shape; one per surface |
 | A secondary button | `.bordered` or `.liteweightGlassButtonStyle()` |
 | A delete button | `Button(role: .destructive)` plus a confirmation dialog |
-| A custom segmented control or tabs | `Picker(.segmented)`, or §9.4 if it needs styling |
+| A custom segmented control or tabs | `LiteweightSegmentedPicker` (§9.4) |
 | A custom slider or dial for a discrete scale | `EffortRatingGraph`-style rising bars (intensity) or a ruler (time) |
 | A wheel picker for RPE or effort | The rising bars (§8.6, backlog B5) |
 | A chart drawn with shapes or a third-party library | Swift Charts following §10 |
@@ -1088,6 +1117,8 @@ Do not reintroduce any of these, or an equivalent under a new name.
 
 | Removed | Use instead |
 | --- | --- |
+| Direct `.pickerStyle(.segmented)` on iPhone (build 127) | `LiteweightSegmentedPicker`; native style only in its accessibility representation |
+| System `Stepper` on iPhone (build 127) | `LiteweightStepper`; native stepper only in its accessibility representation |
 | `LiteweightCard`, `LiteweightScreenBackground`, `LiteweightModalBackground` | `List`/`Form` with `Section` |
 | `LiteweightSectionTitle` | `Section` header |
 | `LiteweightHairline` | `Divider` |

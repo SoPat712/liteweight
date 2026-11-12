@@ -12,6 +12,22 @@ Builds are installed with `~/.local/share/liteweight/tools/install-NN.sh`. Lane 
 
 ---
 
+## 2026-11-12
+
+### One segmented control and one stepper across the app (build 127)
+- **Asked:** "i really dont think that fits the theme! can you please think deeply about this kinda stuff?" After approving the solid blue, switch-height thumb: "restyle eveyrthign to be uniform! over the entire app it is uniform i'm hoping?"
+- **Found:** the large stock Weight Unit picker was taller than its row title, gray selection contradicted blue meaning selection, and stock segments and custom range pills left two selection looks across the app.
+- **Decided:** every iPhone segmented control, including exercise ranges and rest presets, uses `LiteweightSegmentedPicker`: one 32 pt tertiary-fill capsule track, solid blue 28 pt thumb, on-accent selected text, equal-width segments and full 44 pt tap targets. Remove the soft style. The thumb slides with matched geometry and the Reduce Motion-aware snappy token; unmatched values show no thumb. The component owns tap-only, settings-guarded haptics and a native accessibility picker. Weight Unit keeps its 104 pt standard-size width; equipment keeps a menu at accessibility sizes. Every system stepper becomes `LiteweightStepper`, using the logger's 40 pt round −/+ buttons in 44 pt targets, range clamping, disabled bounds/nil actions, hold-to-repeat, guarded step haptics and a native accessibility stepper. Labels stack above the buttons at accessibility sizes; label-hidden layouts remain available. The logger's own buttons stay unchanged. Native segmented styling and `Stepper` remain only in the two components' accessibility representations.
+- **Roll back:** revert this entry's commit.
+
+## 2026-11-11
+
+### History scrolls without hitches (build 126)
+- **Asked:** "Scrolling in history has massive jitters! This app needs to be promotion supporting and not hitch!"
+- **Causes:** each Canvas draw created a renderer with an empty SVG path cache; display-only figures built interactive, tooltip and accessibility overlays, including another full path parse; History rows faulted Core Data exercise/set relationships for trophy counts and routine/plan relationships for titles, then scanned the catalog. RenderBox redrew two figure Canvases per row as rows scrolled in (13–16% of main-thread time in the simulator).
+- **Decided:** share a locked, bounded path cache process-wide with keys containing the full SVG path and transform. Add `BodyView.decorative()` for Canvas-only rendering at all four display-only call sites, retaining their existing accessibility and hit-testing modifiers. Compute per-session trophy counts in the background history snapshot, persist them in cache version 2, and use snapshot display titles with the live workout title for renames. History and Last Workout figures render once per highlight set, scheme and contrast into a cached bitmap. Drawing math, SVG data and appearance stay unchanged; animated, pulse and zoom bodies keep their existing behavior. ProMotion is already enabled.
+- **Roll back:** revert this entry's commit.
+
 ## 2026-11-09
 
 ### Watch: wheel scrolls the page after tapping a tile off mid-turn (build 125)

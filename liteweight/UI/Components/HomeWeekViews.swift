@@ -1373,20 +1373,19 @@ private struct RingGoalSection: View {
 
     var body: some View {
         Section {
-            Picker("\(title) Goal", selection: Binding(
+            LiteweightSegmentedPicker(title: "\(title) Goal", selection: Binding(
                 get: { goal > 0 },
                 set: { custom in
                     withAnimation(LiteweightMotion.preferred(LiteweightMotion.snappy, reduceMotion: reduceMotion)) {
                         goal = custom ? min(max(start, range.lowerBound), range.upperBound) : 0
                     }
-                })) {
-                Text("Last Week").tag(false)
-                Text("Custom").tag(true)
-            }
-            .pickerStyle(.segmented)
+                }), segments: [
+                    .init(value: false, title: "Last Week"),
+                    .init(value: true, title: "Custom")
+                ])
             .labelsHidden()
             if goal > 0 {
-                Stepper(value: $goal, in: range, step: step) {
+                LiteweightStepper.init(value: $goal, in: range, step: step) {
                     LabeledContent("Goal") {
                         Text(format(goal))
                             .font(.liteweightMetric(.body, weight: .semibold))
@@ -1491,11 +1490,11 @@ private struct SetTargetEditor: View {
     var body: some View {
         List {
             Section {
-                Stepper(value: Binding(get: { range.lowerBound }, set: { store($0...max(range.upperBound, $0 + 1)) }),
+                LiteweightStepper.init(value: Binding(get: { range.lowerBound }, set: { store($0...max(range.upperBound, $0 + 1)) }),
                         in: 1...59) {
                     LabeledContent("At Least", value: "\(range.lowerBound) sets")
                 }
-                Stepper(value: Binding(get: { range.upperBound }, set: { store(min(range.lowerBound, $0 - 1)...$0) }),
+                LiteweightStepper.init(value: Binding(get: { range.upperBound }, set: { store(min(range.lowerBound, $0 - 1)...$0) }),
                         in: 2...60) {
                     LabeledContent("At Most", value: "\(range.upperBound) sets")
                 }

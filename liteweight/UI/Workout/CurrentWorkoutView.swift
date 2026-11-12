@@ -197,6 +197,7 @@ struct WorkoutSummaryMuscleFigure: View {
             hairColor: Color(.quaternaryLabel)
         )
         return BodyView(gender: .male, side: side, style: style)
+            .decorative()
             .highlight(muscles.secondary, color: LiteweightTheme.accent, opacity: 0.42)
             .highlight(muscles.primary, color: LiteweightTheme.accent)
     }

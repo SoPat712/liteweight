@@ -789,7 +789,7 @@ struct PlateCalculatorView: View {
             case .noBar: loadout.mode = .noBar
             case .machine: loadout.mode = .machine(0)
             }
-            selectionFeedback += 1
+            if dynamicTypeSize.isAccessibilitySize { selectionFeedback += 1 }
         })
     }
 
@@ -861,7 +861,8 @@ struct PlateCalculatorView: View {
                 if dynamicTypeSize.isAccessibilitySize {
                     equipmentPicker.pickerStyle(.menu)
                 } else {
-                    equipmentPicker.pickerStyle(.segmented)
+                    LiteweightSegmentedPicker(title: "Equipment", selection: modeBinding,
+                                              segments: PlateCalculatorMode.allCases.map { .init(value: $0, title: $0.title) })
                 }
                 if mode != .noBar {
                     weightRow(mode == .bar ? "Bar" : "Starting Weight",
@@ -943,8 +944,7 @@ struct PlateCalculatorView: View {
                 }
             Text(unit.unit.symbol).font(.footnote.weight(.semibold)).foregroundStyle(LiteweightTheme.secondaryText)
         }
-        let stepper = Stepper(onIncrement: onIncrement, onDecrement: onDecrement) { Text(title) }
-            .labelsHidden()
+        let stepper = LiteweightStepper.init(onIncrement: onIncrement, onDecrement: onDecrement, hidesLabel: true) { Text(title) }
             .accessibilityLabel(accessibilityLabel)
             .accessibilityValue("\(weightTitle(value)) \(unit.unit.symbol)")
         return Group {
@@ -1016,7 +1016,6 @@ struct PlateCalculatorView: View {
         switch loadout.mode { case .barbell: loadout.mode = .barbell(value); case .machine: loadout.mode = .machine(value); case .noBar: break }
     }
     private func stepFeedback() {
-        selectionFeedback += 1
         LiteweightSoundPlayer.shared.play(.tick)
     }
     private func weightTitle(_ value: Double) -> String { value.formatted(.number.precision(.fractionLength(0...3))) }

@@ -26,10 +26,8 @@ struct TrainingTrendCard: View {
     var body: some View {
         let points = trendPoints
         VStack(alignment: .leading, spacing: 12) {
-            Picker("Metric", selection: $trendMetric) {
-                ForEach(HistoryTrendMetric.allCases) { metric in Text(metric.title).tag(metric) }
-            }
-            .pickerStyle(.segmented)
+            LiteweightSegmentedPicker(title: "Training trend metric", selection: $trendMetric,
+                                      segments: HistoryTrendMetric.allCases.map { .init(value: $0, title: $0.title) })
             .accessibilityLabel("Training trend metric")
 
             VStack(alignment: .leading, spacing: 12) {
@@ -82,7 +80,6 @@ struct TrainingTrendCard: View {
         }
         .accessibilityElement(children: .contain)
         .animation(LiteweightMotion.preferred(LiteweightMotion.fade, reduceMotion: reduceMotion), value: trendMetric)
-        .onChange(of: trendMetric) { _ in selectionFeedback() }
         .onChange(of: selectedTimeFrame) { _ in
             selectedPointID = nil
             selectionFeedback()
@@ -341,6 +338,7 @@ struct MuscleLoadCard: View {
         )
         let scale = HeatmapColorScale(colors: [LiteweightTheme.accent.opacity(0.25), LiteweightTheme.accent.opacity(0.62), LiteweightTheme.accent])
         return BodyView(gender: .male, side: side, style: style)
+            .decorative()
             .heatmap(weeklyHeatmap, colorScale: scale)
             // This is a read-only visualization. MuscleMap's own gesture
             // handling otherwise steals vertical drags from the surrounding

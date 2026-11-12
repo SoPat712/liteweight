@@ -268,13 +268,10 @@ struct MuscleSelectionView: View {
     var body: some View {
         List {
             Section {
-                Picker("Adding As", selection: $activeRole) {
-                    ForEach(EditCustomExerciseView.ExerciseValues.ExerciseMuscle.MuscleType.allCases, id: \.self) { role in
-                        Text(role.title).tag(role)
-                    }
-                }
-                .pickerStyle(.segmented)
-                .sensoryFeedback(.selection, trigger: activeRole) { _, _ in SettingsStore.shared.workoutHaptics }
+                LiteweightSegmentedPicker(title: "Adding As", selection: $activeRole,
+                                          segments: EditCustomExerciseView.ExerciseValues.ExerciseMuscle.MuscleType.allCases.map {
+                    .init(value: $0, title: $0.title)
+                })
                 .listRowBackground(Color.clear)
                 .listRowInsets(EdgeInsets(top: 4, leading: 0, bottom: 4, trailing: 0))
             } footer: {

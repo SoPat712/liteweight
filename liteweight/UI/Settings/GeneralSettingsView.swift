@@ -218,7 +218,6 @@ struct AvailablePlatesSettingsView: View {
 struct WeightUnitSettingsRow<Icon: View>: View {
     @EnvironmentObject var settingsStore: SettingsStore
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
-    @State private var selectionFeedback = 0
     let icon: Icon
 
     var body: some View {
@@ -231,24 +230,22 @@ struct WeightUnitSettingsRow<Icon: View>: View {
                 Text("Weight Unit")
             }
             if !dynamicTypeSize.isAccessibilitySize { Spacer(minLength: 8) }
-            Picker("Weight Unit", selection: Binding(
+            // A switch-height blue thumb, like the switches beside it; the large system
+            // segmented control was taller than the row's title and gray when chosen.
+            LiteweightSegmentedPicker(title: "Weight Unit", selection: Binding(
                 get: { settingsStore.weightUnit },
                 set: {
                     guard settingsStore.weightUnit != $0 else { return }
                     settingsStore.weightUnit = $0
-                    selectionFeedback += 1
                 }
-            )) {
-                Text("kg").tag(WeightUnit.metric).accessibilityLabel("Kilograms")
-                Text("lb").tag(WeightUnit.imperial).accessibilityLabel("Pounds")
-            }
-            .pickerStyle(.segmented)
-            .controlSize(.large)
-            .frame(width: dynamicTypeSize.isAccessibilitySize ? nil : 128)
+            ), segments: [
+                .init(value: WeightUnit.metric, title: "kg", accessibilityLabel: "Kilograms"),
+                .init(value: WeightUnit.imperial, title: "lb", accessibilityLabel: "Pounds")
+            ])
+            .frame(width: dynamicTypeSize.isAccessibilitySize ? nil : 104)
         }
         .font(.body)
         .foregroundStyle(LiteweightTheme.primaryText)
-        .sensoryFeedback(.selection, trigger: selectionFeedback) { _, _ in settingsStore.workoutHaptics }
     }
 }
 

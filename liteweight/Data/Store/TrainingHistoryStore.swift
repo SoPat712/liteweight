@@ -38,6 +38,7 @@ struct TrainingHistorySnapshot {
     var trainedWeeks: Set<Date> = []
     var exerciseTotals: [UUID: TrainingExerciseTotals] = [:]
     var recordSetIDs: Set<NSManagedObjectID> = []
+    var recordCounts: [NSManagedObjectID: Int] = [:]
     var exerciseBests: [UUID: ExerciseBests] = [:]
     var recordEvents: [ExerciseBests.RecordEvent] = []
     var lastRoutineCompletion: [NSManagedObjectID: Date] = [:]
@@ -79,10 +80,12 @@ struct TrainingHistorySnapshot {
         var result = Self()
         let displayTitleExercises = titleExercises ?? Array(catalog.values)
         var bestsSets: [ExerciseBests.SetResult] = []
+        var completedSetIDs: [NSManagedObjectID: [NSManagedObjectID]] = [:]
         for workout in workouts where !workout.isCurrentWorkout {
             let exercises = (workout.workoutExercises?.array as? [WorkoutExercise] ?? []).compactMap { exercise -> TrainingExerciseSnapshot? in
                 let sets = (exercise.workoutSets?.array as? [WorkoutSet] ?? []).filter(\.isCompleted)
                 guard !sets.isEmpty else { return nil }
+                completedSetIDs[workout.objectID, default: []].append(contentsOf: sets.map(\.objectID))
                 let preferred = exercise.trackingType(catalogExercise: exercise.exerciseUuid.flatMap { catalog[$0] })
                 if let uuid = exercise.exerciseUuid, let date = workout.start {
                     bestsSets += sets.map { set in
@@ -126,6 +129,9 @@ struct TrainingHistorySnapshot {
         }
         result.sessions.sort { $0.date > $1.date }
         result.recordSetIDs = TrainingRecordIndex.recordSetIDs(in: workouts.filter { !$0.isCurrentWorkout })
+        result.recordCounts = completedSetIDs.mapValues { ids in
+            ids.filter { result.recordSetIDs.contains($0) }.count
+        }
         result.exerciseBests = Dictionary(grouping: bestsSets, by: \.exerciseID).mapValues { ExerciseBests(sets: $0) }
         result.recordEvents = ExerciseBests.recordEvents(in: bestsSets, historyRecordSetIDs: result.recordSetIDs)
         return result
@@ -240,7 +246,7 @@ struct TrainingHistorySnapshot {
 /// those IDs directly. Exercise bests aren't cached; the first refresh fills them.
 /// About 0.4 KB per workout (six exercises), so ~650 workouts load synchronously.
 enum TrainingHistoryCache {
-    static let version = 1
+    static let version = 2
     static let synchronousLoadLimit = 256 * 1024
     /// Home's records card only reads the last 30 days.
     private static let recordWindow: TimeInterval = 45 * 24 * 3600
@@ -272,9 +278,11 @@ enum TrainingHistoryCache {
         var volume: Double
         var effort: Double?
         var exercises: [Exercise]
+        var recordCount: Int
         enum CodingKeys: String, CodingKey {
             case id = "i", date = "d", title = "t", name = "n", duration = "u"
             case sets = "s", reps = "r", volume = "v", effort = "e", exercises = "x"
+            case recordCount = "k"
         }
     }
 
@@ -345,7 +353,8 @@ enum TrainingHistoryCache {
             }
             sessions.append(Session(id: id, date: session.date, title: session.title, name: session.displayTitle,
                                     duration: session.duration, sets: session.setCount, reps: session.repetitions,
-                                    volume: session.volume, effort: session.effort, exercises: exercises))
+                                    volume: session.volume, effort: session.effort, exercises: exercises,
+                                    recordCount: snapshot.recordCounts[session.id] ?? 0))
         }
         var routines: [String: Date] = [:]
         for (id, date) in snapshot.lastRoutineCompletion {
@@ -401,6 +410,7 @@ enum TrainingHistoryCache {
         sessions.reserveCapacity(payload.sessions.count)
         for session in payload.sessions {
             guard let id = resolve(session.id, Entity.workout), existing.contains(id) else { return nil }
+            snapshot.recordCounts[id] = session.recordCount
             var exercises: [TrainingExerciseSnapshot] = []
             for entry in session.exercises {
                 guard let entryID = resolve(entry.id, Entity.exercise) else { return nil }

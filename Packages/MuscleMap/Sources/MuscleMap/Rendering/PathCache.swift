@@ -11,7 +11,16 @@ import SwiftUI
 
 final class PathCache: @unchecked Sendable {
 
-    private var cache: [String: Path] = [:]
+    static let shared = PathCache()
+
+    struct Key: Hashable {
+        let svgPath: String
+        let scale: CGFloat
+        let offsetX: CGFloat
+        let offsetY: CGFloat
+    }
+
+    private var cache: [Key: Path] = [:]
     private let lock = NSLock()
 
     func path(
@@ -20,7 +29,7 @@ final class PathCache: @unchecked Sendable {
         offsetX: CGFloat,
         offsetY: CGFloat
     ) -> Path {
-        let key = "\(svgPath.hashValue)-\(scale)-\(offsetX)-\(offsetY)"
+        let key = Key(svgPath: svgPath, scale: scale, offsetX: offsetX, offsetY: offsetY)
 
         lock.lock()
         if let cached = cache[key] {
@@ -32,10 +41,17 @@ final class PathCache: @unchecked Sendable {
         let built = PathBuilder.buildPath(from: svgPath, scale: scale, offsetX: offsetX, offsetY: offsetY)
 
         lock.lock()
+        if cache.count > 6000 { cache.removeAll(keepingCapacity: true) }
         cache[key] = built
         lock.unlock()
 
         return built
+    }
+
+    func contains(_ key: Key) -> Bool {
+        lock.lock()
+        defer { lock.unlock() }
+        return cache[key] != nil
     }
 
     func invalidate() {

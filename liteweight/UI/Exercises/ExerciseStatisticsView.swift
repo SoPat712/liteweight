@@ -48,12 +48,10 @@ struct ExerciseStatisticsView: View {
     var body: some View {
         List {
             Section {
-                Picker("Time Frame", selection: $selectedTimeFrame) {
-                    ForEach(WorkoutExerciseChartData.TimeFrame.progressCases, id: \.title) { timeFrame in
-                        Text(timeFrame.compactTitle).tag(timeFrame)
-                    }
-                }
-                .pickerStyle(.segmented)
+                LiteweightSegmentedPicker(title: "Time Frame", selection: $selectedTimeFrame,
+                                          segments: WorkoutExerciseChartData.TimeFrame.progressCases.map {
+                    .init(value: $0, title: $0.compactTitle)
+                })
                 .listRowBackground(Color.clear)
                 .listRowInsets(EdgeInsets(top: 4, leading: 0, bottom: 4, trailing: 0))
             } footer: {
@@ -332,7 +330,6 @@ struct ExerciseInlineProgressView: View {
         .animation(LiteweightMotion.preferred(LiteweightMotion.snappy, reduceMotion: reduceMotion), value: selection)
         .animation(LiteweightMotion.preferred(LiteweightMotion.snappy, reduceMotion: reduceMotion), value: selectedTimeFrame)
         .sensoryFeedback(.selection, trigger: selection)
-        .sensoryFeedback(.selection, trigger: selectedTimeFrame)
         .onChange(of: selection) { _, _ in selectedPoint = nil }
         .onChange(of: selectedTimeFrame) { _, _ in selectedPoint = nil }
     }
@@ -453,26 +450,10 @@ struct ExerciseInlineProgressView: View {
     }
 
     private var rangePills: some View {
-        HStack(spacing: 4) {
-            ForEach(WorkoutExerciseChartData.TimeFrame.progressCases, id: \.self) { range in
-                let selected = selectedTimeFrame == range
-                Button { storedRange = range.compactTitle } label: {
-                    Text(range.compactTitle)
-                        .font(.liteweightMetric(.footnote, weight: selected ? .bold : .semibold))
-                        .lineLimit(1)
-                        .minimumScaleFactor(0.7)
-                        .foregroundStyle(selected ? LiteweightTheme.accent : LiteweightTheme.secondaryText)
-                        .frame(maxWidth: .infinity)
-                        .frame(minHeight: 30)
-                        .background(selected ? LiteweightTheme.accentSoft : Color.clear, in: Capsule())
-                        .frame(minHeight: LiteweightTheme.controlHeight)
-                        .contentShape(Rectangle())
-                }
-                .buttonStyle(.plain)
-                .accessibilityLabel(range.title)
-                .accessibilityAddTraits(selected ? .isSelected : [])
-            }
-        }
+        LiteweightSegmentedPicker(title: "Time Frame", selection: $storedRange,
+                                  segments: WorkoutExerciseChartData.TimeFrame.progressCases.map {
+            .init(value: $0.compactTitle, title: $0.compactTitle, accessibilityLabel: $0.title)
+        })
     }
 }
 

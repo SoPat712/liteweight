@@ -122,7 +122,6 @@ struct HistoryView: View {
     @ViewBuilder
     private var workoutHistoryContent: some View {
         let completed = visibleSessions
-        let records = historyStore.snapshot.recordSetIDs
         if searchText.isEmpty {
             // The tab's voice: last week's count and how long since it was matched (build 121).
             LiteweightVoiceSection(text: TabVoiceLine.text(
@@ -134,7 +133,7 @@ struct HistoryView: View {
                 historyEmptyRow(title: "No Workouts Found", message: "Try an exercise name, like bench.")
             } else {
                 ForEach(matches) { session in
-                    workoutHistoryLink(session, recordSetIDs: records)
+                    workoutHistoryLink(session)
                 }
             }
         } else if completed.isEmpty {
@@ -150,7 +149,7 @@ struct HistoryView: View {
             ForEach(weeks) { week in
                 Section {
                     ForEach(week.workouts) { session in
-                        workoutHistoryLink(session, recordSetIDs: records)
+                        workoutHistoryLink(session)
                     }
                 } header: {
                     HStack(alignment: .firstTextBaseline, spacing: 8) {
@@ -183,8 +182,9 @@ struct HistoryView: View {
         .accessibilityElement(children: .combine)
     }
 
-    private func workoutHistoryLink(_ session: TrainingSessionSnapshot, recordSetIDs: Set<NSManagedObjectID>) -> some View {
+    private func workoutHistoryLink(_ session: TrainingSessionSnapshot) -> some View {
         let workout = managedObjectContext.object(with: session.id) as! Workout
+        let recordCount = historyStore.snapshot.recordCounts[session.id] ?? 0
         return NavigationLink {
             if #available(iOS 18.0, *), !reduceMotion {
                 WorkoutDetailView(workout: workout)
@@ -196,10 +196,10 @@ struct HistoryView: View {
             }
         } label: {
             if #available(iOS 18.0, *), !reduceMotion {
-                WorkoutHistoryRow(session: session, workout: workout, recordSetIDs: recordSetIDs)
+                WorkoutHistoryRow(session: session, workout: workout, recordCount: recordCount)
                     .matchedTransitionSource(id: workout.objectID, in: workoutDetailNamespace)
             } else {
-                WorkoutHistoryRow(session: session, workout: workout, recordSetIDs: recordSetIDs)
+                WorkoutHistoryRow(session: session, workout: workout, recordCount: recordCount)
             }
         }
         .swipeActions(edge: .leading) {
@@ -309,16 +309,7 @@ private struct WorkoutHistoryRow: View {
     @EnvironmentObject private var exerciseStore: ExerciseStore
     let session: TrainingSessionSnapshot
     @ObservedObject var workout: Workout
-    let recordSetIDs: Set<NSManagedObjectID>
-
-    private var recordCount: Int {
-        let exercises = workout.workoutExercises?.array as? [WorkoutExercise] ?? []
-        return exercises.reduce(0) { total, exercise in
-            total + (exercise.workoutSets?.array as? [WorkoutSet] ?? []).filter {
-                $0.isCompleted && recordSetIDs.contains($0.objectID)
-            }.count
-        }
-    }
+    let recordCount: Int
 
     private var volumeNumber: String {
         WeightUnit.convert(weight: session.volume, from: .metric, to: settingsStore.weightUnit)
@@ -371,7 +362,7 @@ private struct WorkoutHistoryRow: View {
     private func details(records: Int, groups: [String]) -> some View {
         VStack(alignment: .leading, spacing: 6) {
             HStack(alignment: .firstTextBaseline, spacing: 8) {
-                Text(workout.displayTitle(in: exerciseStore.exercises))
+                Text(workout.title ?? session.displayTitle)
                     .font(.headline)
                     .foregroundStyle(LiteweightTheme.primaryText)
                     .lineLimit(2)
