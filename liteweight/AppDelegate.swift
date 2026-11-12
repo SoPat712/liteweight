@@ -38,6 +38,8 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
             PlanWeightEdits.record((inserted + updated).compactMap(\.uuid), at: Date())
         }
         
+        LiteweightSegmentedAppearance.apply()
+
         #if DEBUG
         seedSampleDataIfRequested()
         if ProcessInfo.processInfo.arguments.contains("-liteweightRunImportedDataSmokeCheck") {

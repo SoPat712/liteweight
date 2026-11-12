@@ -57,8 +57,8 @@ What makes liteweight recognisably liteweight:
 
 1. **Native first.** Reach for the SwiftUI control before an liteweight-specific one. A custom control
    must beat the native one for a measurable reason. Today that means the set row, the rest
-   strip and ruler, the effort graph, the session strip, the muscle-map tooltip, the segmented
-   control and the stepper. The owner reads stock gray controls as off-theme; blue marks selection.
+   strip and ruler, the effort graph, the session strip, the muscle-map tooltip and the stepper.
+   The segmented control stays native with an accent thumb (build 129). The owner reads stock gray controls as off-theme; blue marks selection.
 2. **Semantic colors only.** Use `LiteweightTheme` roles, which map to adaptive UIKit colors. Never
    hard-code a hex value, `Color.black`, `.white` or `.gray` for chrome.
 3. **The system owns chrome.** Never set `toolbarBackground`, `presentationBackground`,
@@ -515,24 +515,22 @@ Show "205×5" on `tertiaryFill`; warm-up uses `metricSets` on its container, and
 gets a trophy and record colors.
 
 ### 9.4 Segmented control
-`LiteweightSegmentedPicker` is the only segmented control on iPhone (build 127). A 32 pt
-`tertiaryFill` capsule track holds a solid `accent` capsule thumb, 28 pt tall with a 2 pt inset.
-Selected text is `onAccent`; unselected text is `secondaryText`. Both use
-`.liteweightMetric(.subheadline, weight: selected ? .bold : .semibold)`.
-Segments fill the container equally, each with a full 44 pt rectangular tap target. Settings
-rows use 104 pt width at standard text sizes. Use menus at accessibility sizes where segments
-cannot fit. A value matching no segment shows no thumb, as when a rest wheel chooses a custom time.
-In a list row the picker leaves the row separator alone, so a trailing picker (Weight Unit) keeps
-the separator under the row title. Only a picker that fills its row by itself (plate equipment,
-ring goals) adds `.alignmentGuide(.listRowSeparatorLeading) { $0[.leading] }` at the call site, so
-the line starts at the track instead of under the first segment's title (build 128).
+`LiteweightSegmentedPicker` is the only segmented control on iPhone. Since build 129 it wraps the
+system segmented picker at its regular size, so it keeps native dragging, Liquid Glass and
+VoiceOver. `LiteweightSegmentedAppearance.apply()` runs once at launch and colors every
+segmented control: an `accent` thumb with `onAccent` selected text. SwiftUI can't color the
+thumb per control, which is why the stock gray thumb read as off-theme (builds 127–128 drew a
+custom control instead; the owner asked for the real one back).
+Settings rows use 104 pt width at standard text sizes. Use menus at accessibility sizes where
+segments cannot fit. A value matching no segment selects none, as when a rest wheel chooses a
+custom time. A picker that fills its list row by itself (plate equipment, ring goals) adds
+`.alignmentGuide(.listRowSeparatorLeading) { $0[.leading] }` at the call site; a trailing picker
+(Weight Unit) leaves the separator under the row title (build 128).
 
-The thumb slides with `matchedGeometryEffect` and
-`LiteweightMotion.preferred(LiteweightMotion.snappy, reduceMotion:)`. The component owns the
-selection haptic, guarded by `SettingsStore.shared.workoutHaptics`, only when a selection tap
-changes the value; programmatic changes never buzz. VoiceOver gets a native picker through
-`accessibilityRepresentation`. Never apply `.pickerStyle(.segmented)` directly outside that
-representation, and never add a second picker haptic at a call site.
+The component plays the selection haptic, guarded by `SettingsStore.shared.workoutHaptics`, only
+when a tap changes the value; programmatic changes never buzz. Its accessibility representation
+reads short titles as full words ("kg" as Kilograms). Never apply `.pickerStyle(.segmented)`
+directly, never `.controlSize(.large)` on it, and never add a second picker haptic at a call site.
 
 ### 9.4.1 Stepper
 `LiteweightStepper` is the only stepper on iPhone (build 127). It uses the logger's round −/+
@@ -552,8 +550,8 @@ representation. The logger's existing field-specific −/+ buttons stay as they 
 
 ### 9.5 Time-range pills
 Use `LiteweightSegmentedPicker` (§9.4) with **1M · 3M · 6M · 1Y · All** and the full range
-titles as accessibility labels. Default is **3M**. These share the same blue thumb and track
-as every other segmented control.
+titles as accessibility labels. Default is **3M**. These share the same blue thumb as every
+other segmented control.
 
 ### 9.6 Empty states
 Use `ContentUnavailableView` with an SF Symbol, a title and one sentence that says what will
@@ -1121,7 +1119,7 @@ Do not reintroduce any of these, or an equivalent under a new name.
 
 | Removed | Use instead |
 | --- | --- |
-| Direct `.pickerStyle(.segmented)` on iPhone (build 127) | `LiteweightSegmentedPicker`; native style only in its accessibility representation |
+| Direct `.pickerStyle(.segmented)` on iPhone (build 127) | `LiteweightSegmentedPicker`, which wraps the native picker with the accent thumb (build 129) |
 | System `Stepper` on iPhone (build 127) | `LiteweightStepper`; native stepper only in its accessibility representation |
 | `LiteweightCard`, `LiteweightScreenBackground`, `LiteweightModalBackground` | `List`/`Form` with `Section` |
 | `LiteweightSectionTitle` | `Section` header |

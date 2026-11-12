@@ -1627,9 +1627,9 @@ struct LiteweightChipFlow: Layout {
 
 // MARK: - Segmented picker
 
-/// The app's segmented control: a solid blue thumb on a switch-height capsule track (§9.4).
-/// Segments share the width and have 44 pt tap targets; only selection taps give haptic feedback.
-/// VoiceOver gets a native picker, and unmatched values leave the track without a thumb.
+/// The app's segmented control (§9.4): the system segmented picker, so it keeps native dragging,
+/// glass and VoiceOver, with the selected segment in the accent color (`applyAppearance()`).
+/// Only selection taps give haptic feedback; a value matching no segment selects none.
 struct LiteweightSegmentedPicker<Value: Hashable>: View {
     struct Segment {
         let value: Value
@@ -1637,28 +1637,27 @@ struct LiteweightSegmentedPicker<Value: Hashable>: View {
         var accessibilityLabel: String?
     }
 
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    @Namespace private var thumb
     @State private var taps = 0
     let title: String
     @Binding var selection: Value
     let segments: [Segment]
 
     var body: some View {
-        HStack(spacing: 0) {
+        Picker(title, selection: Binding(get: { selection }, set: { value in
+            guard value != selection else { return }
+            selection = value
+            taps += 1
+        })) {
             ForEach(segments.indices, id: \.self) { index in
-                segmentButton(segments[index])
+                Text(segments[index].title).tag(segments[index].value)
             }
         }
-        .padding(.horizontal, 2)
-        .background {
-            Capsule()
-                .fill(LiteweightTheme.tertiaryFill)
-                .padding(.vertical, 6)
-        }
+        .pickerStyle(.segmented)
+        .labelsHidden()
         .sensoryFeedback(.selection, trigger: taps) { _, _ in SettingsStore.shared.workoutHaptics }
+        // Short titles like "kg" read as full words.
         .accessibilityRepresentation {
-            Picker(title, selection: Binding(get: { selection }, set: { select($0) })) {
+            Picker(title, selection: $selection) {
                 ForEach(segments.indices, id: \.self) { index in
                     Text(segments[index].accessibilityLabel ?? segments[index].title).tag(segments[index].value)
                 }
@@ -1666,39 +1665,15 @@ struct LiteweightSegmentedPicker<Value: Hashable>: View {
             .pickerStyle(.segmented)
         }
     }
+}
 
-    private func segmentButton(_ segment: Segment) -> some View {
-        let selected = segment.value == selection
-        return Button {
-            select(segment.value)
-        } label: {
-            Text(segment.title)
-                .font(.liteweightMetric(.subheadline, weight: selected ? .bold : .semibold))
-                .lineLimit(1)
-                .minimumScaleFactor(0.7)
-                .foregroundStyle(selected ? LiteweightTheme.onAccent : LiteweightTheme.secondaryText)
-                .padding(.horizontal, 10)
-                .frame(maxWidth: .infinity, minHeight: 28)
-                .background {
-                    if selected {
-                        Capsule()
-                            .fill(LiteweightTheme.accent)
-                            .matchedGeometryEffect(id: "thumb", in: thumb)
-                    }
-                }
-                .padding(.vertical, 8)
-                .contentShape(Rectangle())
-        }
-        .buttonStyle(.plain)
-        .accessibilityLabel(segment.accessibilityLabel ?? segment.title)
-    }
-
-    private func select(_ value: Value) {
-        guard value != selection else { return }
-        withAnimation(LiteweightMotion.preferred(LiteweightMotion.snappy, reduceMotion: reduceMotion)) {
-            selection = value
-        }
-        taps += 1
+/// SwiftUI can't color a segmented picker's thumb, so every segmented control in the app gets the
+/// accent thumb and on-accent selected text once at launch.
+enum LiteweightSegmentedAppearance {
+    @MainActor static func apply() {
+        let control = UISegmentedControl.appearance()
+        control.selectedSegmentTintColor = LiteweightPalette.uiColor(\.accent)
+        control.setTitleTextAttributes([.foregroundColor: LiteweightPalette.uiColor(\.onAccent)], for: .selected)
     }
 }
 

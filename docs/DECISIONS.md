@@ -14,6 +14,12 @@ Builds are installed with `~/.local/share/liteweight/tools/install-NN.sh`. Lane 
 
 ## 2026-11-12
 
+### The real segmented control, with a blue thumb (build 129)
+- **Asked:** "the kg to lb is not a native slider? right? why aren't we doing things thatway? is it mandataoyr?" then "go back to real then?"
+- **Found:** builds 127–128 drew a custom control to get a blue selection, which lost the native drag between segments, the Liquid Glass thumb and future system changes. The stock control only looked off because of its gray thumb and the large control size.
+- **Decided:** `LiteweightSegmentedPicker` wraps the system segmented picker at regular size; `LiteweightSegmentedAppearance.apply()` at launch gives every segmented control an accent thumb with on-accent text. Call sites, haptics and accessibility labels are unchanged.
+- **Roll back:** revert this entry's commit.
+
 ### Workout heart rate shows without a button (build 128)
 - **Asked:** "Why is there a button for show heart rate, show by default!"
 - **Found:** a workout's Heart Rate card waited behind a Show Heart Rate button until one workout had loaded data, so every workout asked again until then.
