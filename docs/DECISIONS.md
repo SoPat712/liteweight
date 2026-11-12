@@ -14,6 +14,12 @@ Builds are installed with `~/.local/share/liteweight/tools/install-NN.sh`. Lane 
 
 ## 2026-11-12
 
+### The logger stops redrawing every second (build 131)
+- **Asked:** "I quite like our current workout view, just want it 120fps with no hitching! like promotion and no stutters!"
+- **Found:** with the logger open and untouched, the main thread was 44% busy (Home: 0%, logger collapsed: 2%), and scrolling was 39%/30% busy (down/up) in an optimized simulator build. `LiteweightMetricValue` rolled its digits on every value change, so the Duration clock's `ticks: true` couldn't stop a numeric-text animation every second, which kept SwiftUI's display link running. Every exercise card's "Rest 3:00" label also re-evaluated each second.
+- **Decided:** `LiteweightMetricValue(animatesChanges:)`; the running clock passes false and ticks plainly. Only the exercise whose rest timer is running wraps its rest label in a one-second `TimelineView`. Idle went 44% → 4%, scrolling 39%/30% → 23%/24%. Rest countdowns still roll by design.
+- **Roll back:** revert this entry's commit.
+
 ### Home without cards (build 130)
 - **Asked:** "the part i like most actually is not having the hideous cards everywhere on the home screen! not being contained is better! can you make the home screen without them?"
 - **Found:** every Home section sat in a white inset-grouped card, so the page read as a stack of equal boxes.

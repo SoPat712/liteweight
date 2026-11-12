@@ -113,8 +113,8 @@ struct WorkoutSummaryMetric: View {
             .foregroundStyle(tint)
             .lineLimit(1)
             .minimumScaleFactor(0.85)
-            LiteweightMetricValue(value: value, unit: unit, tint: tint)
-                .contentTransition(reduceMotion ? .opacity : numericValue.map { ContentTransition.numericText(value: $0) } ?? .numericText())
+            LiteweightMetricValue(value: value, unit: unit, tint: tint, animatesChanges: !ticks)
+                .contentTransition(ticks ? .identity : reduceMotion ? .opacity : numericValue.map { ContentTransition.numericText(value: $0) } ?? .numericText())
                 .animation(ticks ? nil : LiteweightMotion.preferred(LiteweightMotion.snappy, reduceMotion: reduceMotion), value: value)
                 .lineLimit(1)
                 .minimumScaleFactor(0.85)
@@ -2426,11 +2426,24 @@ struct CurrentWorkoutView: View {
         WorkoutLiveActivityManager.shared.refreshRestTimer(for: workout)
     }
 
+    /// Only the exercise whose rest is running refreshes each second; every other card's
+    /// label is static, so idle exercises don't re-evaluate on the clock (build 130).
+    @ViewBuilder
     private func exerciseRestButton(for workoutExercise: WorkoutExercise, idleTint: Color) -> some View {
-        TimelineView(.periodic(from: .now, by: 1)) { _ in
-            let remaining = restTimerStore.restTimerRemainingTime ?? 0
-            let running = activeRestTimerExercise?.objectID == workoutExercise.objectID && remaining > 0
-            let time = running ? restTimerCountdownText(remaining) : restTimerTitle(for: workoutExercise)
+        if activeRestTimerExercise?.objectID == workoutExercise.objectID, restTimerStore.restTimerRemainingTime != nil {
+            TimelineView(.periodic(from: .now, by: 1)) { _ in
+                exerciseRestButtonContent(for: workoutExercise, idleTint: idleTint)
+            }
+        } else {
+            exerciseRestButtonContent(for: workoutExercise, idleTint: idleTint)
+        }
+    }
+
+    private func exerciseRestButtonContent(for workoutExercise: WorkoutExercise, idleTint: Color) -> some View {
+        let remaining = restTimerStore.restTimerRemainingTime ?? 0
+        let running = activeRestTimerExercise?.objectID == workoutExercise.objectID && remaining > 0
+        let time = running ? restTimerCountdownText(remaining) : restTimerTitle(for: workoutExercise)
+        return Group {
             Button {
                 if running {
                     actionFeedback += 1

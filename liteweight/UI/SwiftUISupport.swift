@@ -148,15 +148,23 @@ struct LiteweightMetricValue: View {
     var weight: Font.Weight = .bold
     var unitStyle: Font.TextStyle = .footnote
     var tint: Color = LiteweightTheme.primaryText
+    /// A running clock passes false: a roll every second kept the logger redrawing about
+    /// 40% of the time while idle (build 130).
+    var animatesChanges = true
 
     var body: some View {
-        // Every in-place number change rolls its digits; Reduce Motion fades.
-        (Text(value).font(.liteweightMetric(style, weight: weight)).foregroundColor(tint)
-         + Text(unit.map { " " + $0 } ?? "")
-            .font(.system(unitStyle).weight(.semibold)).foregroundColor(LiteweightTheme.secondaryText))
-            .contentTransition(reduceMotion ? .opacity : .numericText())
-            .animation(LiteweightMotion.preferred(LiteweightMotion.snappy, reduceMotion: reduceMotion), value: value)
-            .animation(LiteweightMotion.preferred(LiteweightMotion.snappy, reduceMotion: reduceMotion), value: unit)
+        let text = Text(value).font(.liteweightMetric(style, weight: weight)).foregroundColor(tint)
+            + Text(unit.map { " " + $0 } ?? "")
+                .font(.system(unitStyle).weight(.semibold)).foregroundColor(LiteweightTheme.secondaryText)
+        if animatesChanges {
+            // Every in-place number change rolls its digits; Reduce Motion fades.
+            text
+                .contentTransition(reduceMotion ? .opacity : .numericText())
+                .animation(LiteweightMotion.preferred(LiteweightMotion.snappy, reduceMotion: reduceMotion), value: value)
+                .animation(LiteweightMotion.preferred(LiteweightMotion.snappy, reduceMotion: reduceMotion), value: unit)
+        } else {
+            text.contentTransition(.identity)
+        }
     }
 }
 
