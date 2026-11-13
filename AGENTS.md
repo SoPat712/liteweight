@@ -2,6 +2,10 @@
 
 liteweight is a SwiftUI strength-training app for iPhone and Apple Watch (Core Data model in `WorkoutDataKit`).
 
+## Start here
+
+[`docs/CODEX_HANDOFF.md`](docs/CODEX_HANDOFF.md) is the current handoff (state after build 135, rules, scripts, open work). Read it first; it wins over older notes.
+
 ## Read before any UI work
 
 1. [`docs/DESIGN_SYSTEM.md`](docs/DESIGN_SYSTEM.md): colors, type, spacing, components, motion, haptics, sounds and copy. To restyle a screen from a screenshot, follow §16.
