@@ -493,7 +493,40 @@ struct ContentView : View {
             .shadow(color: LiteweightTheme.mediaBackdrop.opacity(0.14), radius: 18, x: 0, y: 8)
     }
 
-    /// The set that's up next, for the bar's two lines (build 136).
+    private func activeWorkoutVolumeTitle(_ workout: Workout) -> String {
+        let value: Double
+        if let snapshot = preferredDeferredWatchWorkout {
+            let volume = snapshot.exercises.reduce(0.0) { total, exercise in
+                let preferred = exercise.trackingType.flatMap(SetTrackingType.init(rawValue:))
+                    ?? SetTrackingPreferences.override(for: exercise.exerciseUuid)
+                    ?? SetTrackingType.defaultType(name: exercise.name, equipment: [])
+                return total + exercise.sets.filter(\.completed).reduce(0.0) { sum, set in
+                    let type = SetTrackingType.resolved(preferred, from: .init(weight: set.weight ?? 0,
+                        reps: set.reps ?? 0, duration: set.duration, distance: set.distance))
+                    return sum + type.volume(weight: set.weight ?? 0, reps: set.reps ?? 0)
+                }
+            }
+            value = WeightUnit.convert(weight: volume, from: snapshot.weightUnit == .pound ? .imperial : .metric,
+                                       to: settingsStore.weightUnit)
+        } else {
+            value = WeightUnit.convert(weight: workout.trackedCompletedVolume, from: .metric, to: settingsStore.weightUnit)
+        }
+        return settingsStore.weightUnit.displayNumberFormatter.string(from: value as NSNumber) ?? "0"
+    }
+
+    private func activeWorkoutCompletedSets(_ workout: Workout) -> Int {
+        preferredDeferredWatchWorkout.map { $0.exercises.flatMap(\.sets).filter(\.completed).count }
+            ?? workout.numberOfCompletedSets ?? 0
+    }
+
+    /// "12 sets · 7,960 lb" logged so far; nil before the first set.
+    private func activeWorkoutTotals(_ workout: Workout) -> String? {
+        let sets = activeWorkoutCompletedSets(workout)
+        guard sets > 0 else { return nil }
+        return "\(sets) \(sets == 1 ? "set" : "sets") · \(activeWorkoutVolumeTitle(workout)) \(settingsStore.weightUnit.unit.symbol)"
+    }
+
+    /// The set that's up next and the workout's totals, for the bar's two lines (builds 136–137).
     private func activeWorkoutBarStatus(_ workout: Workout) -> ActiveWorkoutBarStatus {
         let title = activeWorkoutTitle(workout)
         if let snapshot = preferredDeferredWatchWorkout {
@@ -501,17 +534,18 @@ struct ContentView : View {
                 if let index = exercise.sets.firstIndex(where: { !$0.completed }) {
                     return ActiveWorkoutBarStatus(
                         headline: exercise.name, position: "Set \(index + 1) of \(exercise.sets.count)",
-                        next: nil, detail: "On Apple Watch")
+                        next: nil, totals: activeWorkoutTotals(workout), detail: "On Apple Watch")
                 }
             }
-            return ActiveWorkoutBarStatus(headline: title, next: nil, detail: "On Apple Watch")
+            return ActiveWorkoutBarStatus(headline: title, next: nil, totals: activeWorkoutTotals(workout),
+                                          detail: "On Apple Watch")
         }
 
         guard let focus = WorkoutSetFocus.next(in: workout),
               let exercise = managedObjectContext.object(with: focus.exerciseID) as? WorkoutExercise,
               let set = managedObjectContext.object(with: focus.setID) as? WorkoutSet else {
             let isEmpty = (workout.workoutExercises?.count ?? 0) == 0
-            return ActiveWorkoutBarStatus(headline: title, next: nil,
+            return ActiveWorkoutBarStatus(headline: title, next: nil, totals: activeWorkoutTotals(workout),
                                           detail: isEmpty ? "No exercises yet" : "All sets logged")
         }
         let sets = (exercise.workoutSets?.array as? [WorkoutSet] ?? []).filter { !$0.isDeleted }
@@ -521,6 +555,7 @@ struct ContentView : View {
         return ActiveWorkoutBarStatus(
             headline: name, position: "Set \(number) of \(max(sets.count, number))",
             next: hasTarget ? set.resultTitle(weightUnit: settingsStore.weightUnit) : nil,
+            totals: activeWorkoutTotals(workout),
             detail: activeWorkoutIsOnWatch(workout) ? "Also on Apple Watch" : title)
     }
 
@@ -574,9 +609,11 @@ struct ContentView : View {
         let watchStart = preferredDeferredWatchWorkout?.startDate
         return TimelineView(.periodic(from: .now, by: 1)) { context in
             let duration = watchStart.map { max(0, context.date.timeIntervalSince($0)) } ?? workout.safeDuration
-            // "1:11:20", as the logger shows it; the formatter pads the hour.
-            let padded = activeWorkoutDurationFormatter.string(from: duration) ?? "0:00"
-            Text(padded.count > 5 && padded.hasPrefix("0") ? String(padded.dropFirst()) : padded)
+            // "1:03" under an hour, then "1:11:20" as the logger shows it.
+            let seconds = Int(duration)
+            Text(seconds >= 3600
+                 ? "\(seconds / 3600):" + String(format: "%02d:%02d", seconds / 60 % 60, seconds % 60)
+                 : "\(seconds / 60):" + String(format: "%02d", seconds % 60))
                 .contentTransition(.identity)
         }
     }
@@ -585,7 +622,7 @@ struct ContentView : View {
         let label = activeWorkoutOpenLabel(workout)
         let workoutID = preferredDeferredWatchWorkout?.workoutID ?? workout.uuid
         let status = activeWorkoutBarStatus(workout)
-        let upNext = [status.headline, status.position, status.next].compactMap { $0 }.joined(separator: ", ")
+        let upNext = [status.headline, status.position, status.next, status.totals].compactMap { $0 }.joined(separator: ", ")
         return TimelineView(.periodic(from: .now, by: 1)) { context in
             let vitals = activeWorkoutVitalsAccessibilityValue(workoutID: workoutID, at: context.date)
             Button(label, action: expandCurrentWorkout)
@@ -829,6 +866,8 @@ struct ActiveWorkoutBarStatus: Equatable {
     var position: String?
     /// The waiting set's target, such as "125 lb × 6".
     var next: String?
+    /// "12 sets · 7,960 lb" logged so far in the whole workout.
+    var totals: String?
     /// The second line when there's no rest running and no target.
     var detail: String
 }
@@ -845,7 +884,7 @@ private struct ActiveWorkoutBarLabel<Elapsed: View, Vitals: View>: View {
     let vitals: Vitals
     var compact = false
 
-    private var badgeSize: CGFloat { compact ? 32 : 44 }
+    private var badgeSize: CGFloat { compact ? 32 : 40 }
 
     var body: some View {
         // Only a running or paused rest needs the clock; otherwise nothing ticks here.
@@ -868,35 +907,43 @@ private struct ActiveWorkoutBarLabel<Elapsed: View, Vitals: View>: View {
         HStack(spacing: compact ? 8 : 12) {
             badge(rest: rest)
 
-            VStack(alignment: .leading, spacing: compact ? 0 : 2) {
-                Text(status.headline)
-                    .font((compact ? Font.caption : .subheadline).weight(.bold))
-                    .foregroundStyle(LiteweightTheme.primaryText)
-                    .lineLimit(1)
-                Text(secondLine(resting: rest != nil))
+            VStack(alignment: .leading, spacing: compact ? 0 : 3) {
+                HStack(alignment: .firstTextBaseline, spacing: 8) {
+                    Text(status.headline)
+                        .font((compact ? Font.caption : .subheadline).weight(.bold))
+                        .foregroundStyle(LiteweightTheme.primaryText)
+                        .lineLimit(1)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                    HStack(alignment: .firstTextBaseline, spacing: 8) {
+                        vitals
+                        elapsed
+                            .font(.liteweightMetric(compact ? .caption2 : .footnote, weight: .semibold))
+                            .foregroundStyle(LiteweightTheme.primaryText)
+                            .lineLimit(1)
+                    }
+                    .fixedSize()
+                }
+                secondLine(resting: rest != nil)
                     .font(compact ? .caption2 : .footnote)
-                    .foregroundStyle(LiteweightTheme.secondaryText)
                     .lineLimit(1)
+                    .minimumScaleFactor(0.85)
             }
             .frame(maxWidth: .infinity, alignment: .leading)
-
-            VStack(alignment: .trailing, spacing: compact ? 0 : 2) {
-                elapsed
-                    .font(.liteweightMetric(compact ? .caption2 : .footnote, weight: .semibold))
-                    .foregroundStyle(LiteweightTheme.primaryText)
-                    .lineLimit(1)
-                vitals
-            }
-            .fixedSize()
         }
         .frame(maxWidth: .infinity, minHeight: LiteweightTheme.controlHeight, alignment: .leading)
         .contentShape(Rectangle())
     }
 
-    private func secondLine(resting: Bool) -> String {
+    /// The waiting set first, then what's logged so far; the minimized bar has room for the set only.
+    private func secondLine(resting: Bool) -> Text {
         // The ring already says a rest is running; the line only names a pause.
-        let parts = [status.position, resting && restTimer.isPaused ? "Rest paused" : status.next].compactMap { $0 }
-        return parts.isEmpty ? status.detail : parts.joined(separator: " · ")
+        let upNext = [status.position, resting && restTimer.isPaused ? "Rest paused" : status.next]
+            .compactMap { $0 }.joined(separator: " · ")
+        let totals = compact ? nil : status.totals
+        let lead = upNext.isEmpty ? (totals == nil ? status.detail : "") : upNext
+        let trail = totals.map { lead.isEmpty ? $0 : " · " + $0 } ?? ""
+        return Text(lead).fontWeight(.semibold).foregroundColor(LiteweightTheme.primaryText)
+            + Text(trail).foregroundColor(LiteweightTheme.secondaryText)
     }
 
     @ViewBuilder

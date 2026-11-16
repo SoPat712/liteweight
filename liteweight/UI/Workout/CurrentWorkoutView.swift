@@ -1644,10 +1644,10 @@ struct CurrentWorkoutView: View {
         workoutSummaryState.collapsedWorkouts.contains(workoutSummaryKey)
     }
 
-    /// Big at the top, the pill once scrolled, unless the chevron says otherwise.
-    private var isSessionHeaderCollapsed: Bool {
-        isSummaryPinnedCollapsed || (isScrolledPastSummary && !keepsSummaryExpanded)
-    }
+    /// Always the pill since build 137: the owner asked to drop the big summary, and
+    /// swapping the two at the top of the scroll made the list jump. The expanded
+    /// header's code stays for now so the change is one line to undo.
+    private var isSessionHeaderCollapsed: Bool { true }
 
     private func setSessionHeaderCollapsed(_ collapsed: Bool) {
         guard collapsed != isSessionHeaderCollapsed else { return }
@@ -1668,6 +1668,8 @@ struct CurrentWorkoutView: View {
     /// Band 0 is the top, 2 is scrolled; 1 between them changes nothing, so the
     /// summary doesn't flicker at the threshold.
     private func updateSummaryForScroll(_ band: Int) {
+        // Nothing swaps at the top of the scroll any more (build 137), so no state changes here.
+        guard !isSessionHeaderCollapsed else { return }
         let scrolled: Bool
         switch band {
         case 0: scrolled = false
@@ -1836,23 +1838,17 @@ struct CurrentWorkoutView: View {
         let sets = collapsedSets
         let volumeTitle = workoutVolumeTitle
         let setCount = workout.numberOfCompletedSets ?? 0
-        return Button(action: { setSessionHeaderCollapsed(false) }) {
-            HStack(spacing: 8) {
-                Circle()
-                    .fill(.tint)
-                    .frame(width: 7, height: 7)
-
+        return Button(action: { activeSheet = .workoutTime }) {
+            HStack(spacing: 10) {
                 collapsedSummaryContent(volume: volume, sets: sets)
 
-                Image(systemName: "chevron.down")
-                    .font(.caption.weight(.semibold))
-                    .foregroundStyle(.tint)
+                pillWatchStatus
             }
             .font(.caption)
             .contentTransition(reduceMotion ? .opacity : .numericText())
             .animation(LiteweightMotion.preferred(LiteweightMotion.snappy, reduceMotion: reduceMotion), value: volumeTitle)
             .animation(LiteweightMotion.preferred(LiteweightMotion.snappy, reduceMotion: reduceMotion), value: setCount)
-            .padding(.horizontal, 14)
+            .padding(.horizontal, 18)
             .frame(maxWidth: .infinity, minHeight: 46)
             .contentShape(Capsule(style: .continuous))
         }
@@ -1865,7 +1861,7 @@ struct CurrentWorkoutView: View {
         .accessibilityRepresentation {
             TimelineView(.periodic(from: .now, by: 1)) { context in
                 let vitals = collapsedSummaryVitals(at: context.date)
-                Button("Expand workout summary", action: { setSessionHeaderCollapsed(false) })
+                Button("Edit workout duration", action: { activeSheet = .workoutTime })
                     .accessibilityValue(
                         ["\(workoutDurationTitle), \(volumeTitle), \(setCount) \(setCount == 1 ? "set" : "sets")",
                          vitals.heartRate.map { "\($0) beats per minute" },
@@ -1906,16 +1902,21 @@ struct CurrentWorkoutView: View {
                     // If the type is too large for them, they give way to the expanded header.
                     // Only the row meant to show carries the morph IDs, so the two
                     // candidates never both claim them.
+                    // Time and totals lead; the Watch's readings sit at the far edge. If the
+                    // type is too large for both, the readings give way.
                     ViewThatFits(in: .horizontal) {
                         if hasVitals {
-                            collapsedSummaryRow(durationTitle, volume: volume, sets: sets,
-                                                heartRate: heartRate, energy: energy, showsDots: false, morphs: true)
+                            HStack(spacing: 0) {
+                                collapsedSummaryRow(durationTitle, volume: volume, sets: sets,
+                                                    heartRate: nil, energy: nil, showsDots: false, morphs: false)
+                                Spacer(minLength: 12)
+                                collapsedVitals(heartRate: heartRate, energy: energy, morphs: false)
+                            }
                         }
                         collapsedSummaryRow(durationTitle, volume: volume, sets: sets,
-                                            heartRate: nil, energy: nil, showsDots: true, morphs: !hasVitals)
+                                            heartRate: nil, energy: nil, showsDots: false, morphs: false)
+                            .frame(maxWidth: .infinity, alignment: .leading)
                     }
-                    // A Spacer here would take half the row from the fit test.
-                    .frame(maxWidth: .infinity, alignment: .leading)
                 }
             }
             .animation(LiteweightMotion.preferred(LiteweightMotion.snappy, reduceMotion: reduceMotion), value: heartRate)
@@ -1941,12 +1942,18 @@ struct CurrentWorkoutView: View {
         showsDots: Bool,
         morphs: Bool
     ) -> some View {
-        HStack(spacing: 8) {
-            Text(durationTitle)
-                .font(.liteweightMetric(.subheadline, weight: .semibold))
-                .foregroundStyle(LiteweightTheme.metricTime)
-                .contentTransition(.identity)
-                .summaryMorph(morphs ? "duration" : nil, in: summaryMorph)
+        HStack(spacing: 12) {
+            HStack(alignment: .firstTextBaseline, spacing: 4) {
+                Text(durationTitle)
+                    .font(.liteweightMetric(.body, weight: .bold))
+                    .foregroundStyle(LiteweightTheme.metricTime)
+                    .contentTransition(.identity)
+                // Tapping the pill edits the duration, as the big summary's pencil did.
+                Image(systemName: "pencil")
+                    .font(.caption2.weight(.bold))
+                    .foregroundStyle(LiteweightTheme.metricTime.opacity(0.7))
+            }
+            .summaryMorph(morphs ? "duration" : nil, in: summaryMorph)
             if showsDots { collapsedSummaryDot }
             volume
                 .summaryMorph(morphs ? "volume" : nil, in: summaryMorph)
@@ -1958,6 +1965,19 @@ struct CurrentWorkoutView: View {
             }
         }
         .fixedSize(horizontal: true, vertical: false)
+    }
+
+    /// What the big summary's Watch line said, as one symbol at the pill's far edge.
+    @ViewBuilder
+    private var pillWatchStatus: some View {
+        if showsWatchSyncWarning && !showsWatchMetrics {
+            Image(systemName: "applewatch")
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(LiteweightTheme.warning)
+                .accessibilityLabel(watchSyncTitle)
+        } else {
+            watchStatusBadge
+        }
     }
 
     private var collapsedSummaryDot: some View {

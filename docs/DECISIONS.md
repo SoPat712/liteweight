@@ -14,6 +14,13 @@ Builds are installed with `~/.local/share/liteweight/tools/install-NN.sh`. Lane 
 
 ## 2026-11-16
 
+### The logger keeps only the glass pill; the live bar gets its totals back (build 137)
+- **Asked:** on build 136's bar: "whys it broken, and wheres the rest of the info?"; on the logger: "instead of jittering it while the big one comes out, maybe we allow smooth scrolling? Or you remove the big version like i asked for? and just keep glass pill".
+- **Decided, logger:** the big summary never shows; the pill is always there, so nothing swaps at the top of the scroll (`isSessionHeaderCollapsed` is always true; the expanded header's code is still in the file). The pill has a larger time, then volume and sets, with the Watch's heart rate and energy at the far edge. Tapping it opens Workout Duration, as the big summary's pencil did. The Watch out-of-sync warning and idle Watch symbol moved to the pill's far edge. The small live muscle figure is no longer on this screen.
+- **Decided, live bar:** elapsed time reads "1:03" under an hour (136 showed "0:01:03"). Line two is the waiting set, then the workout's totals: "Set 2 of 6 · 55 lb × 5 · 12 sets · 7,960 lb" (136 dropped the totals, which the owner wanted kept). Heart rate and time share line one with the exercise name; the badge is 40 pt.
+- **Where:** `liteweight/UI/Workout/CurrentWorkoutView.swift`, `liteweight/UI/ContentView.swift`.
+- **Roll back:** revert this build's commit.
+
 ### Add Exercises selects on the whole row; the live workout bar says what's next (build 136)
 - **Asked:** "Pressing add exercises feels so clunky, like I miss the checkmark by a little and it goes to the diagram. Maybe move it over? … maybe light up the entire row when selected?" and "The live workout little bar … should be optimized to look better, contain more info". The owner approved both mockups on the canvas (Add Exercises board, new live bar).
 - **Decided, Add Exercises:** the whole row selects, picture included; the picture no longer opens details or plays the demonstration on a hold. Details open from an info button at the row's far edge (the demonstration is inside details; VoiceOver keeps "Show Details" and "Play Demonstration"). Selected rows are filled with the accent container color. The Add button is solid accent.
