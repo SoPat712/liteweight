@@ -12,6 +12,16 @@ Builds are installed with `~/.local/share/liteweight/tools/install-NN.sh`. Lane 
 
 ---
 
+## 2026-11-16
+
+### Add Exercises selects on the whole row; the live workout bar says what's next (build 136)
+- **Asked:** "Pressing add exercises feels so clunky, like I miss the checkmark by a little and it goes to the diagram. Maybe move it over? … maybe light up the entire row when selected?" and "The live workout little bar … should be optimized to look better, contain more info". The owner approved both mockups on the canvas (Add Exercises board, new live bar).
+- **Decided, Add Exercises:** the whole row selects, picture included; the picture no longer opens details or plays the demonstration on a hold. Details open from an info button at the row's far edge (the demonstration is inside details; VoiceOver keeps "Show Details" and "Play Demonstration"). Selected rows are filled with the accent container color. The Add button is solid accent.
+- **Decided, live bar:** line one is the waiting set's exercise, line two is "Set 2 of 6 · 55 lb × 5"; elapsed time and Watch heart rate sit at the trailing edge in primary text. While a rest runs, the leading badge is the rest ring with the countdown inside. The expand and trash buttons are gone: tapping the bar opens the workout, and Discard stays inside the logger (the tab surface's own discard alert was removed with the button). Volume, set total and active energy left the bar; they are in the logger.
+- **Not done:** the owner also reported lag on Add Exercises. No cause was found by reading the code; it needs a measurement run.
+- **Where:** `liteweight/UI/Exercises/AddExercisesSheet.swift`, `liteweight/UI/ContentView.swift` (`ActiveWorkoutBarLabel`, `activeWorkoutBarStatus`).
+- **Roll back:** revert this build's commit.
+
 ## 2026-11-12
 
 ### Header morph both ways, idle number boxes, Log Set without Watch rebuilds (build 135)

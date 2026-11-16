@@ -786,6 +786,8 @@ struct AddExercisesSheet: View {
                 ToolbarItem(placement: .confirmationAction) {
                     Button(confirmationTitle, action: addSelectedExercises)
                         .fontWeight(.semibold)
+                        .buttonStyle(.borderedProminent)
+                        .tint(LiteweightTheme.accent)
                         .disabled(exerciseSelectorSelection.isEmpty)
                 }
                 ToolbarItemGroup(placement: .bottomBar) {
@@ -921,53 +923,56 @@ struct AddExercisesSheet: View {
         let selectionNumber = exerciseSelectorSelection.firstIndex(of: exercise).map { $0 + 1 }
         let metadata = prepared.display
 
-        let row = Button(action: { toggle(exercise) }) {
-            HStack(spacing: 12) {
-                selectionIndicator(number: selectionNumber)
+        // The whole row selects, picture included: the picture used to open details
+        // right beside the selection circle, so near misses landed on it (build 136).
+        // Details sit on their own button at the far edge.
+        let row = HStack(spacing: 0) {
+            Button(action: { toggle(exercise) }) {
+                HStack(spacing: 12) {
+                    selectionIndicator(number: selectionNumber)
 
-                ExerciseDiagramThumbnail(exercise: exercise, size: 44)
-                    .contentShape(Circle())
-                    // A hold consumes the touch; only a short tap opens details.
-                    // Movement cancels the hold so the List can scroll.
-                    .highPriorityGesture(
-                        LongPressGesture(minimumDuration: 0.4, maximumDistance: 10)
-                            .exclusively(before: TapGesture())
-                            .onEnded { result in
-                                switch result {
-                                case .first:
-                                    guard metadata.hasPlayableDemonstration else { return }
-                                    mediaExercise = exercise
-                                    mediaFeedback += 1
-                                case .second:
-                                    detailExercise = exercise
-                                }
-                            }
-                    )
+                    ExerciseDiagramThumbnail(exercise: exercise, size: 44)
 
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(exercise.title)
-                        .font(.body.weight(.semibold))
-                        .foregroundStyle(LiteweightTheme.primaryText)
-                        .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 2)
-                        .fixedSize(horizontal: false, vertical: true)
-                    Text(metadata.title)
-                        .font(.subheadline)
-                        .foregroundStyle(LiteweightTheme.secondaryText)
-                        .fixedSize(horizontal: false, vertical: true)
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(exercise.title)
+                            .font(.body.weight(.semibold))
+                            .foregroundStyle(LiteweightTheme.primaryText)
+                            .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 2)
+                            .fixedSize(horizontal: false, vertical: true)
+                        Text(metadata.title)
+                            .font(.subheadline)
+                            .foregroundStyle(LiteweightTheme.secondaryText)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.vertical, 10)
+                .contentShape(Rectangle())
             }
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(.vertical, 2)
-            .contentShape(Rectangle())
+            .buttonStyle(.plain)
+
+            Button {
+                detailExercise = exercise
+            } label: {
+                Image(systemName: "info.circle")
+                    .font(.title3)
+                    .foregroundStyle(LiteweightTheme.accent)
+                    .frame(width: LiteweightTheme.controlHeight)
+                    .frame(maxHeight: .infinity)
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
         }
-        .buttonStyle(.plain)
-        .listRowInsets(EdgeInsets(top: 8, leading: 14, bottom: 8, trailing: 14))
+        .listRowInsets(EdgeInsets(top: 0, leading: 14, bottom: 0, trailing: 4))
+        .listRowBackground(selectionNumber == nil ? nil : LiteweightTheme.accentSoft)
         .accessibilityElement(children: .ignore)
+        .accessibilityAddTraits(.isButton)
         .accessibilityLabel(metadata.accessibilityLabel)
         .accessibilityValue(selectionNumber.map {
             maximumSelectionCount == 1 ? "Selected" : "Selection \($0)"
         } ?? "Not selected")
+        .accessibilityAction { toggle(exercise) }
         .accessibilityAction(named: Text("Show Details")) {
             detailExercise = exercise
         }

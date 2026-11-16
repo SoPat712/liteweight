@@ -35,11 +35,9 @@ struct ContentView : View {
     @State private var restoreResult: IdentifiableHolder<Result<Void, Error>>?
     @State private var restoreBackupData: IdentifiableHolder<Data>?
     @State private var hevyImportOutcome: HevyCSVImportOutcome?
-    @State private var showingDiscardWorkoutConfirmation = false
     @State private var watchOpenError: String?
     @State private var openedWatchWorkoutID: UUID?
     @State private var workoutActionFeedback = 0
-    @State private var workoutDeleteFeedback = 0
     @Namespace private var activeWorkoutNamespace
 
     private let activeWorkoutDurationFormatter: DateComponentsFormatter = {
@@ -61,7 +59,6 @@ struct ContentView : View {
             .animation(LiteweightMotion.preferred(LiteweightMotion.fade, reduceMotion: reduceMotion), value: importController.phase)
             .liteweightScreen()
             .sensoryFeedback(.selection, trigger: workoutActionFeedback) { _, _ in settingsStore.workoutHaptics }
-            .sensoryFeedback(.impact(weight: .medium), trigger: workoutDeleteFeedback) { _, _ in settingsStore.workoutHaptics }
             .sensoryFeedback(.error, trigger: watchOpenError) { _, error in error != nil && settingsStore.workoutHaptics }
             .preferredColorScheme(settingsStore.appearance.colorScheme)
             .onChange(of: currentWorkouts.first?.objectID) { _, newWorkoutID in
@@ -119,17 +116,6 @@ struct ContentView : View {
             }
             .sheet(item: rootPresentationBinding($hevyImportOutcome)) { outcome in
                 HevyCSVImportResultSheet(outcome: outcome)
-            }
-            .alert(
-                "Discard the active workout?",
-                isPresented: $showingDiscardWorkoutConfirmation
-            ) {
-                Button("Discard Workout", role: .destructive, action: discardCurrentWorkout)
-                Button("Cancel", role: .cancel) {
-                    showingDiscardWorkoutConfirmation = false
-                }
-            } message: {
-                Text("The active workout, its notes, and every logged set will be permanently deleted.")
             }
             .alert("Workout Not Opened", isPresented: Binding(
                 get: { watchOpenError != nil },
@@ -507,126 +493,76 @@ struct ContentView : View {
             .shadow(color: LiteweightTheme.mediaBackdrop.opacity(0.14), radius: 18, x: 0, y: 8)
     }
 
-    private func collapsedActiveWorkoutAccessory(_ workout: Workout) -> some View {
-        ActiveWorkoutAccessoryContent(workout: workout) {
-            let title = activeWorkoutTitle(workout)
-            let volumeTitle = activeWorkoutVolumeTitle(workout)
-            let completedSets = activeWorkoutCompletedSets(workout)
-            let volume = workout.trackedCompletedVolume
-            let setCount = workout.numberOfCompletedSets
-            HStack(spacing: 5) {
-                Button(action: expandCurrentWorkout) {
-                    HStack(spacing: 9) {
-                        Image(systemName: activeWorkoutIsOnWatch(workout) ? "applewatch" : "dumbbell.fill")
-                            .font(.system(size: 15, weight: .bold))
-                            .foregroundColor(LiteweightTheme.onAccent)
-                            .frame(width: 36, height: 36)
-                            .background(Circle().fill(LiteweightTheme.accent))
-
-                        VStack(alignment: .leading, spacing: 1) {
-                            HStack(spacing: 8) {
-                                Text(title)
-                                    .font(.subheadline.weight(.bold))
-                                    .foregroundColor(LiteweightTheme.primaryText)
-                                    .lineLimit(1)
-                                    .frame(maxWidth: .infinity, alignment: .leading)
-                                ActiveWorkoutPillVitals(
-                                    store: WatchConnectionManager.shared.liveMetrics,
-                                    workoutID: preferredDeferredWatchWorkout?.workoutID ?? workout.uuid
-                                )
-                            }
-
-                            HStack(spacing: 4) {
-                                Circle()
-                                    .fill(LiteweightTheme.accent)
-                                    .frame(width: 5, height: 5)
-                                    .accessibilityHidden(true)
-                                activeWorkoutElapsedText(workout)
-                                    .foregroundStyle(LiteweightTheme.metricTime)
-                                Text("•").foregroundColor(LiteweightTheme.tertiaryText)
-                                (Text(volumeTitle)
-                                 + Text(" " + settingsStore.weightUnit.unit.symbol)
-                                    .font(.caption2).foregroundColor(LiteweightTheme.secondaryText))
-                                    .foregroundStyle(LiteweightTheme.metricVolume)
-                                    .contentTransition(reduceMotion ? .opacity : .numericText())
-                                    .animation(LiteweightMotion.preferred(LiteweightMotion.snappy, reduceMotion: reduceMotion), value: volume)
-                                Text("•").foregroundColor(LiteweightTheme.tertiaryText)
-                                Text("^[\(completedSets) set](inflect: true)")
-                                    .foregroundStyle(LiteweightTheme.metricSets)
-                                    .contentTransition(reduceMotion ? .opacity : .numericText())
-                                    .animation(LiteweightMotion.preferred(LiteweightMotion.snappy, reduceMotion: reduceMotion), value: setCount)
-                            }
-                            .font(.liteweightMetric(.caption2, weight: .semibold))
-                            .foregroundColor(LiteweightTheme.secondaryText)
-                            .lineLimit(1)
-                            .minimumScaleFactor(0.72)
-                        }
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                    }
-                    .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
-                    .contentShape(Rectangle())
-                }
-                .buttonStyle(.plain)
-                .accessibilityRepresentation { activeWorkoutAccessibility(workout) }
-
-                compactWorkoutActionButton(
-                    systemImage: "chevron.up",
-                    tint: LiteweightTheme.accent,
-                    fill: LiteweightTheme.accent.opacity(0.14),
-                    accessibilityLabel: "Expand active workout",
-                    action: expandCurrentWorkout
-                )
-
-                if preferredDeferredWatchWorkout == nil {
-                    compactWorkoutActionButton(
-                        systemImage: "trash.fill",
-                        tint: LiteweightTheme.danger,
-                        fill: LiteweightTheme.danger.opacity(0.13),
-                        accessibilityLabel: "Discard active workout"
-                    ) {
-                        workoutActionFeedback += 1
-                        showingDiscardWorkoutConfirmation = true
-                    }
+    /// The set that's up next, for the bar's two lines (build 136).
+    private func activeWorkoutBarStatus(_ workout: Workout) -> ActiveWorkoutBarStatus {
+        let title = activeWorkoutTitle(workout)
+        if let snapshot = preferredDeferredWatchWorkout {
+            for exercise in snapshot.exercises {
+                if let index = exercise.sets.firstIndex(where: { !$0.completed }) {
+                    return ActiveWorkoutBarStatus(
+                        headline: exercise.name, position: "Set \(index + 1) of \(exercise.sets.count)",
+                        next: nil, detail: "On Apple Watch")
                 }
             }
-            .padding(6)
+            return ActiveWorkoutBarStatus(headline: title, next: nil, detail: "On Apple Watch")
+        }
+
+        guard let focus = WorkoutSetFocus.next(in: workout),
+              let exercise = managedObjectContext.object(with: focus.exerciseID) as? WorkoutExercise,
+              let set = managedObjectContext.object(with: focus.setID) as? WorkoutSet else {
+            let isEmpty = (workout.workoutExercises?.count ?? 0) == 0
+            return ActiveWorkoutBarStatus(headline: title, next: nil,
+                                          detail: isEmpty ? "No exercises yet" : "All sets logged")
+        }
+        let sets = (exercise.workoutSets?.array as? [WorkoutSet] ?? []).filter { !$0.isDeleted }
+        let number = (sets.firstIndex { $0.objectID == set.objectID } ?? 0) + 1
+        let name = exercise.exercise(in: exerciseStore.exercises)?.title ?? "Exercise"
+        let hasTarget = set.weightValue > 0 || set.repetitionsValue > 0
+        return ActiveWorkoutBarStatus(
+            headline: name, position: "Set \(number) of \(max(sets.count, number))",
+            next: hasTarget ? set.resultTitle(weightUnit: settingsStore.weightUnit) : nil,
+            detail: activeWorkoutIsOnWatch(workout) ? "Also on Apple Watch" : title)
+    }
+
+    private func collapsedActiveWorkoutAccessory(_ workout: Workout) -> some View {
+        ActiveWorkoutAccessoryContent(workout: workout) {
+            Button(action: expandCurrentWorkout) {
+                ActiveWorkoutBarLabel(
+                    restTimer: RestTimerStore.shared,
+                    status: activeWorkoutBarStatus(workout),
+                    isOnWatch: activeWorkoutIsOnWatch(workout),
+                    elapsed: activeWorkoutElapsedText(workout),
+                    vitals: ActiveWorkoutPillVitals(
+                        store: WatchConnectionManager.shared.liveMetrics,
+                        workoutID: preferredDeferredWatchWorkout?.workoutID ?? workout.uuid,
+                        compact: true
+                    )
+                )
+            }
+            .buttonStyle(.plain)
+            .padding(.leading, 8)
+            .padding(.trailing, 16)
+            .padding(.vertical, 6)
             .frame(maxWidth: .infinity)
+            .accessibilityRepresentation { activeWorkoutAccessibility(workout) }
         }
     }
 
     private func inlineActiveWorkoutAccessory(_ workout: Workout) -> some View {
         ActiveWorkoutAccessoryContent(workout: workout) {
-            let title = activeWorkoutTitle(workout)
             Button(action: expandCurrentWorkout) {
-                HStack(spacing: 7) {
-                    Image(systemName: activeWorkoutIsOnWatch(workout) ? "applewatch" : "dumbbell.fill")
-                        .font(.system(size: 13, weight: .bold))
-                        .foregroundColor(LiteweightTheme.onAccent)
-                        .frame(width: 32, height: 32)
-                        .background(Circle().fill(LiteweightTheme.accent))
-
-                    VStack(alignment: .leading, spacing: 0) {
-                        Text(title)
-                            .font(.caption.weight(.semibold))
-                            .foregroundColor(LiteweightTheme.primaryText)
-                            .lineLimit(1)
-
-                        HStack(spacing: 6) {
-                            activeWorkoutElapsedText(workout)
-                                .font(.liteweightMetric(.caption2, weight: .semibold))
-                                .foregroundColor(LiteweightTheme.metricTime)
-                                .lineLimit(1)
-                            ActiveWorkoutPillVitals(
-                                store: WatchConnectionManager.shared.liveMetrics,
-                                workoutID: preferredDeferredWatchWorkout?.workoutID ?? workout.uuid,
-                                compact: true
-                            )
-                        }
-                    }
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                }
-                .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
-                .contentShape(Rectangle())
+                ActiveWorkoutBarLabel(
+                    restTimer: RestTimerStore.shared,
+                    status: activeWorkoutBarStatus(workout),
+                    isOnWatch: activeWorkoutIsOnWatch(workout),
+                    elapsed: activeWorkoutElapsedText(workout),
+                    vitals: ActiveWorkoutPillVitals(
+                        store: WatchConnectionManager.shared.liveMetrics,
+                        workoutID: preferredDeferredWatchWorkout?.workoutID ?? workout.uuid,
+                        compact: true
+                    ),
+                    compact: true
+                )
             }
             .buttonStyle(.plain)
             .padding(.horizontal, 5)
@@ -638,7 +574,9 @@ struct ContentView : View {
         let watchStart = preferredDeferredWatchWorkout?.startDate
         return TimelineView(.periodic(from: .now, by: 1)) { context in
             let duration = watchStart.map { max(0, context.date.timeIntervalSince($0)) } ?? workout.safeDuration
-            Text(activeWorkoutDurationFormatter.string(from: duration) ?? "0:00")
+            // "1:11:20", as the logger shows it; the formatter pads the hour.
+            let padded = activeWorkoutDurationFormatter.string(from: duration) ?? "0:00"
+            Text(padded.count > 5 && padded.hasPrefix("0") ? String(padded.dropFirst()) : padded)
                 .contentTransition(.identity)
         }
     }
@@ -646,9 +584,12 @@ struct ContentView : View {
     private func activeWorkoutAccessibility(_ workout: Workout) -> some View {
         let label = activeWorkoutOpenLabel(workout)
         let workoutID = preferredDeferredWatchWorkout?.workoutID ?? workout.uuid
+        let status = activeWorkoutBarStatus(workout)
+        let upNext = [status.headline, status.position, status.next].compactMap { $0 }.joined(separator: ", ")
         return TimelineView(.periodic(from: .now, by: 1)) { context in
+            let vitals = activeWorkoutVitalsAccessibilityValue(workoutID: workoutID, at: context.date)
             Button(label, action: expandCurrentWorkout)
-                .accessibilityValue(activeWorkoutVitalsAccessibilityValue(workoutID: workoutID, at: context.date))
+                .accessibilityValue([upNext, vitals].filter { !$0.isEmpty }.joined(separator: ", "))
         }
     }
 
@@ -657,29 +598,6 @@ struct ContentView : View {
         return activeWorkoutIsOnWatch(workout)
             ? "Open \(title) on iPhone. Also on Apple Watch."
             : "Resume \(title)"
-    }
-
-    private func compactWorkoutActionButton(
-        systemImage: String,
-        tint: Color,
-        fill: Color,
-        accessibilityLabel: String,
-        action: @escaping () -> Void
-    ) -> some View {
-        Button(action: action) {
-            Circle()
-                .fill(fill)
-                .frame(width: 40, height: 40)
-                .overlay {
-                    Image(systemName: systemImage)
-                        .font(.system(size: 13, weight: .bold))
-                        .foregroundColor(tint)
-                }
-        }
-        .buttonStyle(.plain)
-        .frame(width: 44, height: 44)
-        .contentShape(Circle())
-        .accessibilityLabel(accessibilityLabel)
     }
 
     private func minimizeCurrentWorkout() {
@@ -720,27 +638,6 @@ struct ContentView : View {
         ].compactMap { $0 }.joined(separator: ", ")
     }
 
-    private func activeWorkoutVolumeTitle(_ workout: Workout) -> String {
-        let value: Double
-        if let snapshot = preferredDeferredWatchWorkout {
-            let volume = snapshot.exercises.reduce(0.0) { total, exercise in
-                let preferred = exercise.trackingType.flatMap(SetTrackingType.init(rawValue:))
-                    ?? SetTrackingPreferences.override(for: exercise.exerciseUuid)
-                    ?? SetTrackingType.defaultType(name: exercise.name, equipment: [])
-                return total + exercise.sets.filter(\.completed).reduce(0.0) { sum, set in
-                    let type = SetTrackingType.resolved(preferred, from: .init(weight: set.weight ?? 0,
-                        reps: set.reps ?? 0, duration: set.duration, distance: set.distance))
-                    return sum + type.volume(weight: set.weight ?? 0, reps: set.reps ?? 0)
-                }
-            }
-            value = WeightUnit.convert(weight: volume, from: snapshot.weightUnit == .pound ? .imperial : .metric,
-                                       to: settingsStore.weightUnit)
-        } else {
-            value = WeightUnit.convert(weight: workout.trackedCompletedVolume, from: .metric, to: settingsStore.weightUnit)
-        }
-        return settingsStore.weightUnit.displayNumberFormatter.string(from: value as NSNumber) ?? "0"
-    }
-
     private var preferredDeferredWatchWorkout: WatchWorkoutSnapshot? {
         guard let snapshot = watchConnection.watchWorkoutAwaitingOpen,
               snapshot.workoutID != currentWorkouts.first?.uuid,
@@ -756,19 +653,6 @@ struct ContentView : View {
         preferredDeferredWatchWorkout?.title ?? workout.displayTitle(in: exerciseStore.exercises)
     }
 
-    private func activeWorkoutCompletedSets(_ workout: Workout) -> Int {
-        preferredDeferredWatchWorkout.map { $0.exercises.flatMap(\.sets).filter(\.completed).count }
-            ?? workout.numberOfCompletedSets ?? 0
-    }
-
-    private func discardCurrentWorkout() {
-        showingDiscardWorkoutConfirmation = false
-        guard let workout = currentWorkouts.first else { return }
-        workout.cancelOrCrash()
-        sceneState.isCurrentWorkoutExpanded = false
-
-        workoutDeleteFeedback += 1
-    }
 
     #if DEBUG
     private static var inspectionWorkoutExerciseFetchRequest: NSFetchRequest<WorkoutExercise> {
@@ -935,6 +819,112 @@ private struct ActiveWorkoutAccessoryContent<Content: View>: View {
                     workout.objectWillChange.send()
                 }
             }
+    }
+}
+
+struct ActiveWorkoutBarStatus: Equatable {
+    /// The waiting set's exercise, or the workout's title when no set is waiting.
+    var headline: String
+    /// "Set 3 of 5" for the waiting set.
+    var position: String?
+    /// The waiting set's target, such as "125 lb × 6".
+    var next: String?
+    /// The second line when there's no rest running and no target.
+    var detail: String
+}
+
+/// The live workout bar's content (build 136): what's up next and the rest
+/// countdown, so the workout can be followed from any tab. It observes the rest
+/// timer itself so a tick doesn't re-render the whole tab surface.
+private struct ActiveWorkoutBarLabel<Elapsed: View, Vitals: View>: View {
+    @ObservedObject var restTimer: RestTimerStore
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    let status: ActiveWorkoutBarStatus
+    let isOnWatch: Bool
+    let elapsed: Elapsed
+    let vitals: Vitals
+    var compact = false
+
+    private var badgeSize: CGFloat { compact ? 32 : 44 }
+
+    var body: some View {
+        // Only a running or paused rest needs the clock; otherwise nothing ticks here.
+        if restTimer.restTimerInterval != nil {
+            TimelineView(.periodic(from: .now, by: 1)) { _ in
+                content(rest: rest)
+            }
+        } else {
+            content(rest: nil)
+        }
+    }
+
+    private var rest: (remaining: TimeInterval, duration: TimeInterval)? {
+        guard let duration = restTimer.restTimerDuration, duration > 0,
+              let remaining = restTimer.restTimerRemainingTime else { return nil }
+        return (remaining, duration)
+    }
+
+    private func content(rest: (remaining: TimeInterval, duration: TimeInterval)?) -> some View {
+        HStack(spacing: compact ? 8 : 12) {
+            badge(rest: rest)
+
+            VStack(alignment: .leading, spacing: compact ? 0 : 2) {
+                Text(status.headline)
+                    .font((compact ? Font.caption : .subheadline).weight(.bold))
+                    .foregroundStyle(LiteweightTheme.primaryText)
+                    .lineLimit(1)
+                Text(secondLine(resting: rest != nil))
+                    .font(compact ? .caption2 : .footnote)
+                    .foregroundStyle(LiteweightTheme.secondaryText)
+                    .lineLimit(1)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+
+            VStack(alignment: .trailing, spacing: compact ? 0 : 2) {
+                elapsed
+                    .font(.liteweightMetric(compact ? .caption2 : .footnote, weight: .semibold))
+                    .foregroundStyle(LiteweightTheme.primaryText)
+                    .lineLimit(1)
+                vitals
+            }
+            .fixedSize()
+        }
+        .frame(maxWidth: .infinity, minHeight: LiteweightTheme.controlHeight, alignment: .leading)
+        .contentShape(Rectangle())
+    }
+
+    private func secondLine(resting: Bool) -> String {
+        // The ring already says a rest is running; the line only names a pause.
+        let parts = [status.position, resting && restTimer.isPaused ? "Rest paused" : status.next].compactMap { $0 }
+        return parts.isEmpty ? status.detail : parts.joined(separator: " · ")
+    }
+
+    @ViewBuilder
+    private func badge(rest: (remaining: TimeInterval, duration: TimeInterval)?) -> some View {
+        if let rest {
+            let seconds = Int(rest.remaining.rounded(.up))
+            ZStack {
+                LiteweightRestRing(progress: rest.remaining / rest.duration,
+                                   duration: restTimer.isPaused ? nil : rest.duration,
+                                   size: badgeSize, tint: LiteweightTheme.accent)
+                Text("\(seconds / 60):" + String(format: "%02d", seconds % 60))
+                    .font(.liteweightMetric(.caption2, weight: .semibold))
+                    .foregroundStyle(LiteweightTheme.primaryText)
+                    .minimumScaleFactor(0.5)
+                    .lineLimit(1)
+                    .contentTransition(.identity)
+                    .padding(.horizontal, compact ? 5 : 7)
+            }
+            .frame(width: badgeSize, height: badgeSize)
+            .accessibilityHidden(true)
+        } else {
+            Image(systemName: isOnWatch ? "applewatch" : "dumbbell.fill")
+                .font(.system(size: compact ? 13 : 16, weight: .bold))
+                .foregroundStyle(LiteweightTheme.onAccent)
+                .frame(width: badgeSize, height: badgeSize)
+                .background(Circle().fill(LiteweightTheme.accent))
+                .accessibilityHidden(true)
+        }
     }
 }
 
