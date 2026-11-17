@@ -14,6 +14,12 @@ Builds are installed with `~/.local/share/liteweight/tools/install-NN.sh`. Lane 
 
 ## 2026-11-16
 
+### Browse All Exercises matches the buttons under it (build 139)
+- **Asked:** "Isn't the browse all button too big?" (empty workout, above Options and Discard).
+- **Decided:** the button loses its extra 6 pt of vertical padding and its headline font, so it is the same height and type size as Options and Discard. It stays solid accent as the screen's main action.
+- **Where:** `liteweight/UI/Workout/CurrentWorkoutView.swift`.
+- **Roll back:** revert this build's commit.
+
 ### Live workout bar: two columns, badge concentric in the capsule (build 138)
 - **Asked:** "the live workout pill looks worse than before? also poorly designed? why is there space on the left of the circle?"
 - **Found:** the badge sat 12 pt from the bar's end but about 2 pt from its top and bottom, and line two was one run-on string in two weights.

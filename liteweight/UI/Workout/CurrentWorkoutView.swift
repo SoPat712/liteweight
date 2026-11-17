@@ -2124,10 +2124,9 @@ struct CurrentWorkoutView: View {
                 ))
 
                 Button { showingExerciseSelector = true } label: {
+                    // No extra padding: the same height as Options and Discard below it (build 139).
                     Text("Browse All Exercises")
-                        .font(.headline)
                         .frame(maxWidth: .infinity)
-                        .padding(.vertical, 6)
                 }
                 .buttonStyle(.borderedProminent)
                 .buttonBorderShape(.capsule)
