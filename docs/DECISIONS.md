@@ -14,6 +14,13 @@ Builds are installed with `~/.local/share/liteweight/tools/install-NN.sh`. Lane 
 
 ## 2026-11-16
 
+### Live workout bar: two columns, badge concentric in the capsule (build 138)
+- **Asked:** "the live workout pill looks worse than before? also poorly designed? why is there space on the left of the circle?"
+- **Found:** the badge sat 12 pt from the bar's end but about 2 pt from its top and bottom, and line two was one run-on string in two weights.
+- **Decided:** the badge is 36 pt and 6 pt from the end, top and bottom of the 48 pt bar. The content is two columns of two lines: leading, the exercise over "Set 2 of 6 · 55 lb × 5"; trailing, heart rate and time over "12 sets · 7,960 lb". The name and the time are semibold primary text; the second lines are footnote in secondary text. The pre-iOS 26.1 pill gets the same insets.
+- **Where:** `liteweight/UI/ContentView.swift` (`ActiveWorkoutBarLabel`).
+- **Roll back:** revert this build's commit.
+
 ### The logger keeps only the glass pill; the live bar gets its totals back (build 137)
 - **Asked:** on build 136's bar: "whys it broken, and wheres the rest of the info?"; on the logger: "instead of jittering it while the big one comes out, maybe we allow smooth scrolling? Or you remove the big version like i asked for? and just keep glass pill".
 - **Decided, logger:** the big summary never shows; the pill is always there, so nothing swaps at the top of the scroll (`isSessionHeaderCollapsed` is always true; the expanded header's code is still in the file). The pill has a larger time, then volume and sets, with the Watch's heart rate and energy at the far edge. Tapping it opens Workout Duration, as the big summary's pencil did. The Watch out-of-sync warning and idle Watch symbol moved to the pill's far edge. The small live muscle figure is no longer on this screen.

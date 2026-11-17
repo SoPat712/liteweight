@@ -489,6 +489,9 @@ struct ContentView : View {
 
     private func activeWorkoutPillChrome(_ workout: Workout) -> some View {
         collapsedActiveWorkoutAccessory(workout)
+            // Before iOS 26.1 this pill is ours: the same 48 pt bar and 6 pt badge inset.
+            .padding(.vertical, 2)
+            .padding(.leading, 4)
             .liteweightLiquidGlassPill(tint: .clear)
             .shadow(color: LiteweightTheme.mediaBackdrop.opacity(0.14), radius: 18, x: 0, y: 8)
     }
@@ -575,9 +578,10 @@ struct ContentView : View {
                 )
             }
             .buttonStyle(.plain)
-            .padding(.leading, 8)
-            .padding(.trailing, 16)
-            .padding(.vertical, 6)
+            // With the accessory's own 4 pt this puts the 36 pt badge 6 pt from the bar's end,
+            // matching its 6 pt from the top and bottom of the 48 pt bar.
+            .padding(.leading, 2)
+            .padding(.trailing, 14)
             .frame(maxWidth: .infinity)
             .accessibilityRepresentation { activeWorkoutAccessibility(workout) }
         }
@@ -884,7 +888,7 @@ private struct ActiveWorkoutBarLabel<Elapsed: View, Vitals: View>: View {
     let vitals: Vitals
     var compact = false
 
-    private var badgeSize: CGFloat { compact ? 32 : 40 }
+    private var badgeSize: CGFloat { compact ? 32 : 36 }
 
     var body: some View {
         // Only a running or paused rest needs the clock; otherwise nothing ticks here.
@@ -903,47 +907,54 @@ private struct ActiveWorkoutBarLabel<Elapsed: View, Vitals: View>: View {
         return (remaining, duration)
     }
 
+    /// Two columns, each two lines (build 138). Leading: what's up now, the exercise over its
+    /// set. Trailing: the session, time over totals. The badge is inset from the bar's end by
+    /// the same amount as from its top and bottom, so the circle sits concentric in the capsule.
     private func content(rest: (remaining: TimeInterval, duration: TimeInterval)?) -> some View {
-        HStack(spacing: compact ? 8 : 12) {
+        HStack(spacing: compact ? 8 : 10) {
             badge(rest: rest)
 
-            VStack(alignment: .leading, spacing: compact ? 0 : 3) {
-                HStack(alignment: .firstTextBaseline, spacing: 8) {
-                    Text(status.headline)
-                        .font((compact ? Font.caption : .subheadline).weight(.bold))
-                        .foregroundStyle(LiteweightTheme.primaryText)
-                        .lineLimit(1)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                    HStack(alignment: .firstTextBaseline, spacing: 8) {
-                        vitals
-                        elapsed
-                            .font(.liteweightMetric(compact ? .caption2 : .footnote, weight: .semibold))
-                            .foregroundStyle(LiteweightTheme.primaryText)
-                            .lineLimit(1)
-                    }
-                    .fixedSize()
-                }
-                secondLine(resting: rest != nil)
+            VStack(alignment: .leading, spacing: compact ? 0 : 2) {
+                Text(status.headline)
+                    .font((compact ? Font.caption : .subheadline).weight(.semibold))
+                    .foregroundStyle(LiteweightTheme.primaryText)
+                    .lineLimit(1)
+                Text(upNext(resting: rest != nil))
                     .font(compact ? .caption2 : .footnote)
+                    .foregroundStyle(LiteweightTheme.secondaryText)
                     .lineLimit(1)
                     .minimumScaleFactor(0.85)
             }
             .frame(maxWidth: .infinity, alignment: .leading)
+
+            VStack(alignment: .trailing, spacing: compact ? 0 : 2) {
+                HStack(alignment: .firstTextBaseline, spacing: 8) {
+                    if !compact { vitals }
+                    elapsed
+                        .font(.liteweightMetric(compact ? .caption : .subheadline, weight: .semibold))
+                        .foregroundStyle(LiteweightTheme.primaryText)
+                        .lineLimit(1)
+                }
+                if compact {
+                    vitals
+                } else if let totals = status.totals {
+                    Text(totals)
+                        .font(.footnote)
+                        .foregroundStyle(LiteweightTheme.secondaryText)
+                        .lineLimit(1)
+                }
+            }
+            .fixedSize()
         }
         .frame(maxWidth: .infinity, minHeight: LiteweightTheme.controlHeight, alignment: .leading)
         .contentShape(Rectangle())
     }
 
-    /// The waiting set first, then what's logged so far; the minimized bar has room for the set only.
-    private func secondLine(resting: Bool) -> Text {
+    /// "Set 2 of 6 · 55 lb × 5" for the waiting set.
+    private func upNext(resting: Bool) -> String {
         // The ring already says a rest is running; the line only names a pause.
-        let upNext = [status.position, resting && restTimer.isPaused ? "Rest paused" : status.next]
-            .compactMap { $0 }.joined(separator: " · ")
-        let totals = compact ? nil : status.totals
-        let lead = upNext.isEmpty ? (totals == nil ? status.detail : "") : upNext
-        let trail = totals.map { lead.isEmpty ? $0 : " · " + $0 } ?? ""
-        return Text(lead).fontWeight(.semibold).foregroundColor(LiteweightTheme.primaryText)
-            + Text(trail).foregroundColor(LiteweightTheme.secondaryText)
+        let parts = [status.position, resting && restTimer.isPaused ? "Rest paused" : status.next].compactMap { $0 }
+        return parts.isEmpty ? status.detail : parts.joined(separator: " · ")
     }
 
     @ViewBuilder
@@ -966,7 +977,7 @@ private struct ActiveWorkoutBarLabel<Elapsed: View, Vitals: View>: View {
             .accessibilityHidden(true)
         } else {
             Image(systemName: isOnWatch ? "applewatch" : "dumbbell.fill")
-                .font(.system(size: compact ? 13 : 16, weight: .bold))
+                .font(.system(size: compact ? 13 : 15, weight: .bold))
                 .foregroundStyle(LiteweightTheme.onAccent)
                 .frame(width: badgeSize, height: badgeSize)
                 .background(Circle().fill(LiteweightTheme.accent))
